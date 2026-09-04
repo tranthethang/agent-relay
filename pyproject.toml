@@ -1,0 +1,19 @@
+[project]
+name = "agent-relay"
+version = "0.1.0"
+description = "Reusable multi-agent coding skills pipeline (implement → self-review → cross-review)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mdformat>=0.7.22",
+    "mdformat-gfm>=1.0.0",
+    "mdformat-tables>=1.0.0",
+]
+
+[tool.mdformat]
+wrap = "keep"
+number = true
+end_of_line = "lf"
