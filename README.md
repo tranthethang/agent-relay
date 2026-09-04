@@ -6,6 +6,17 @@ Cursor + Antigravity. One neutral markdown source per stage under `skills/`,
 one installer that adapts and installs it globally into each tool's native
 rules/skills format. Extensible to Codex, Claude, and beyond.
 
+## Table of contents
+
+- [Why](#why)
+- [Pipeline](#pipeline)
+- [Install](#install)
+  - [Quick install](#quick-install)
+  - [Advanced](#advanced)
+- [Adding a new target tool](#adding-a-new-target-tool)
+- [Status](#status)
+- [License](#license)
+
 ## Why
 
 Running plan → implement → review across *different* tools/models catches
@@ -30,9 +41,17 @@ active run via user path/id, then `CURRENT`, then a single matching plan.
 A shape reference lives in [`examples/`](examples/). Re-run `./install.sh`
 after pulling skill changes so installed Cursor/Antigravity copies stay in sync.
 
-## Quick Start
+## Install
 
-Requires **bash ≥ 3.2** (macOS system `/bin/bash` is fine).
+Requires **bash ≥ 3.2** (macOS system `/bin/bash` is fine). Skills install
+**globally** into:
+
+- `~/.cursor/rules/*.mdc` for Cursor
+- `~/.gemini/config/skills/<name>/SKILL.md` for Antigravity
+
+### Quick install
+
+Pipe the scripts from `main` — no clone required.
 
 **Install:**
 
@@ -52,26 +71,21 @@ curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/verif
 curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/uninstall.sh | bash
 ```
 
-Pass flags after `--` when piping:
+### Advanced
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/install.sh | bash -s -- --only cursor
-```
-
-## Install
-
-Skills install **globally** into:
-
-- `~/.cursor/rules/*.mdc` for Cursor
-- `~/.gemini/config/skills/<name>/SKILL.md` for Antigravity
-
-From a local checkout:
+Clone the repo when you want a local checkout, flags, or smoke tests.
 
 ```bash
 git clone https://github.com/tranthethang/agent-relay.git
 cd agent-relay
 ./install.sh
 ./verify.sh
+```
+
+Pass flags after `--` when piping the one-liners:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/install.sh | bash -s -- --only cursor
 ```
 
 Options (install / uninstall / verify where noted):
