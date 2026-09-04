@@ -22,10 +22,13 @@ one source of truth per stage and adapts it to wherever it needs to run.
 | 3. Self-review  | [`skills/atry-self-review.md`](skills/atry-self-review.md)   | stronger model, same tool family |
 | 4. Cross-review | [`skills/atry-cross-review.md`](skills/atry-cross-review.md) | a *different* tool/model family  |
 
-All stages read/write a fixed set of files under `.agent-relay/` in the
-target project — see [`docs/file-conventions.md`](docs/file-conventions.md).
-This is what lets a skill run in any project without passing file paths by
-hand each time. A filled-in sample lives in [`examples/`](examples/).
+All stages read/write a **run-scoped** set of files under `.agent-relay/`
+(`plan-<id>.md`, `implement-*-<id>.md`, `review-*-<id>.md`, plus `CURRENT`) —
+see [`docs/file-conventions.md`](docs/file-conventions.md). A shared NanoID per
+run avoids collisions when several features are in flight; skills resolve the
+active run via user path/id, then `CURRENT`, then a single matching plan.
+A shape reference lives in [`examples/`](examples/). Re-run `./install.sh`
+after pulling skill changes so installed Cursor/Antigravity copies stay in sync.
 
 ## Quick Start
 

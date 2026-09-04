@@ -1,6 +1,6 @@
 ---
 name: atry-self-review
-description: Self-review code produced from .agent-relay/plan.md using implement-plan.md and implement-report.md; fix confirmed bugs; write dated sections in review-report.md and review-walkthrough.md. Use after an agent-relay implement step, or when the user asks to self-review that implementation — not for unrelated refactors.
+description: Self-review code produced from .agent-relay/plan-<id>.md using implement-plan-<id>.md and implement-report-<id>.md; fix confirmed bugs; write dated sections in review-report-<id>.md and review-walkthrough-<id>.md. Use after an agent-relay implement step, or when the user asks to self-review that implementation — not for unrelated refactors.
 ---
 
 # Self-Review
@@ -9,11 +9,26 @@ You are reviewing code that a (possibly different, possibly weaker) model just
 implemented from a plan. Treat the implementation report as a claim to verify,
 not a fact.
 
+## Run discovery
+
+Resolve the shared run `<id>` before reading or writing artifacts (see
+`docs/file-conventions.md`). Order:
+
+1. User gave a plan path or run id → use that id
+1. Else read `.agent-relay/CURRENT` (one trimmed line)
+1. Else if exactly one `plan-*.md` → extract id from `^plan-(.+)\.md$`
+1. Else ask the user — do not guess by mtime
+
+Legacy unsuffixed names (`plan.md`, etc.) are only allowed when no `plan-*.md`
+exists; after review, write suffixed review files and set `CURRENT`.
+
+After resolving an id, write/overwrite `.agent-relay/CURRENT` with that id.
+
 ## Inputs
 
-- Plan file: `.agent-relay/plan.md` (use its `base:` ref when present)
-- Implementation plan: `.agent-relay/implement-plan.md`
-- Implementation report: `.agent-relay/implement-report.md`
+- Plan file: `.agent-relay/plan-<id>.md` (use its `base:` ref when present)
+- Implementation plan: `.agent-relay/implement-plan-<id>.md`
+- Implementation report: `.agent-relay/implement-report-<id>.md`
 - Current uncommitted changes (`git status` / `git diff`). If the work was
   already committed, diff from the plan's `base:` ref (or ask the user) so you
   still see the full change — not only the latest unstaged hunk.
@@ -22,8 +37,9 @@ not a fact.
 
 ## Instructions
 
-1. Read the plan, implementation plan, and implementation report first — you need
-   the original intent, not just the diff.
+1. Resolve `<id>` (and update `CURRENT`) as above. Read the plan, implementation
+   plan, and implementation report first — you need the original intent, not just
+   the diff.
 
 1. Inspect the actual changes with git. The diff is the source of truth; the
    implementation report may be incomplete or wrong.
@@ -53,8 +69,9 @@ not a fact.
    - If a fix requires deviating from the original plan, say so explicitly and
      explain why — do not silently diverge.
 
-1. Write `.agent-relay/review-report.md` and `.agent-relay/review-walkthrough.md`.
-   Create or overwrite each file with a single dated section (use today's date):
+1. Write `.agent-relay/review-report-<id>.md` and
+   `.agent-relay/review-walkthrough-<id>.md`. Create or overwrite each file with
+   a single dated section (use today's date):
 
    ```markdown
    ## Self-Review — YYYY-MM-DD
