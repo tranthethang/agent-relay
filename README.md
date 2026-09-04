@@ -31,10 +31,21 @@ hand each time. A filled-in sample lives in [`examples/`](examples/).
 
 Requires **bash ≥ 3.2** (macOS system `/bin/bash` is fine).
 
+**Install:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/install.sh | bash
+```
+
+**Verify:**
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/verify.sh | bash
-# later, to remove:
+```
+
+**Uninstall:**
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/uninstall.sh | bash
 ```
 
