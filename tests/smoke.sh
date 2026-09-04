@@ -25,7 +25,12 @@ export HOME="$T"
 [[ -f "$HOME/.cursor/rules/atry-implement.mdc" ]] && pass "cursor mdc" || fail "cursor mdc"
 
 "$INSTALL" --only antigravity >/dev/null
-[[ -f "$HOME/.agents/skills/atry-implement/SKILL.md" ]] && pass ".agents/skills" || fail ".agents/skills"
+[[ -f "$HOME/.gemini/config/skills/atry-implement/SKILL.md" ]] && pass ".gemini/config/skills" || fail ".gemini/config/skills"
+
+# Legacy Antigravity paths should be cleaned by uninstall even after path change.
+mkdir -p "$HOME/.agents/skills/atry-implement" "$HOME/.agent/skills/atry-implement"
+echo legacy > "$HOME/.agents/skills/atry-implement/SKILL.md"
+echo legacy > "$HOME/.agent/skills/atry-implement/SKILL.md"
 
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
 
@@ -75,7 +80,9 @@ else
 fi
 
 "$UNINSTALL" >/dev/null
-[[ ! -f "$HOME/.agents/skills/atry-implement/SKILL.md" ]] && pass "uninstall all" || fail "uninstall all"
+[[ ! -f "$HOME/.gemini/config/skills/atry-implement/SKILL.md" ]] && pass "uninstall all" || fail "uninstall all"
+[[ ! -e "$HOME/.agents/skills/atry-implement" ]] && pass "uninstall legacy .agents" || fail "uninstall legacy .agents"
+[[ ! -e "$HOME/.agent/skills/atry-implement" ]] && pass "uninstall legacy .agent" || fail "uninstall legacy .agent"
 
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL SMOKE TESTS PASSED"

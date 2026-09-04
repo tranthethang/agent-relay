@@ -60,8 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/insta
 Skills install **globally** into:
 
 - `~/.cursor/rules/*.mdc` for Cursor
-- `~/.agents/skills/<name>/SKILL.md` for Antigravity (canonical path; Antigravity
-  still accepts the legacy `~/.agent/skills/` location)
+- `~/.gemini/config/skills/<name>/SKILL.md` for Antigravity
 
 From a local checkout:
 
