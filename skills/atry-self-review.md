@@ -1,6 +1,7 @@
-______________________________________________________________________
-
-## name: atry-self-review description: Self-review code produced from .agent-relay/plan.md using implement-plan.md and implement-report.md; fix confirmed bugs; write dated sections in review-report.md and review-walkthrough.md. Use after an agent-relay implement step, or when the user asks to self-review that implementation — not for unrelated refactors.
+---
+name: atry-self-review
+description: Self-review code produced from .agent-relay/plan.md using implement-plan.md and implement-report.md; fix confirmed bugs; write dated sections in review-report.md and review-walkthrough.md. Use after an agent-relay implement step, or when the user asks to self-review that implementation — not for unrelated refactors.
+---
 
 # Self-Review
 

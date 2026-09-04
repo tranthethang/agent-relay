@@ -1,6 +1,7 @@
-______________________________________________________________________
-
-## name: atry-implement description: Implement an existing .agent-relay/plan.md task-by-task, following project rules, and write implement-plan.md + implement-report.md. Use when the user asks to implement, build, or code according to an agent-relay plan.
+---
+name: atry-implement
+description: Implement an existing .agent-relay/plan.md task-by-task, following project rules, and write implement-plan.md + implement-report.md. Use when the user asks to implement, build, or code according to an agent-relay plan.
+---
 
 # Implement
 

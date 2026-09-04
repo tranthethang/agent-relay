@@ -1,6 +1,7 @@
-______________________________________________________________________
-
-## name: atry-cross-review description: Second-opinion cross-review of an agent-relay change using plan.md, implement artifacts, and the prior Self-Review sections; append dated Cross-Review sections. Use when the user asks for a cross-check, second-opinion review, or final review in a different tool/model than the self-review.
+---
+name: atry-cross-review
+description: Second-opinion cross-review of an agent-relay change using plan.md, implement artifacts, and the prior Self-Review sections; append dated Cross-Review sections. Use when the user asks for a cross-check, second-opinion review, or final review in a different tool/model than the self-review.
+---
 
 # Cross-Review
 
