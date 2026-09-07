@@ -65,8 +65,8 @@ Download the release script and checksum file, verify the SHA-256 signature, the
 REF="v0.1.0"
 
 # 2. Download install script and checksums
-curl -fsSLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
-curl -fsSLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
+curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
+curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 
 # 3. Verify SHA-256 checksum (macOS: shasum, Linux: sha256sum)
 shasum -a 256 -c --ignore-missing SHA256SUMS
@@ -84,7 +84,7 @@ Follow the same download-verify-run pattern for verification and removal:
 **Verify:**
 
 ```bash
-curl -fsSLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/verify.sh"
+curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/verify.sh"
 shasum -a 256 -c --ignore-missing SHA256SUMS
 bash ./verify.sh
 ```
@@ -92,7 +92,7 @@ bash ./verify.sh
 **Uninstall:**
 
 ```bash
-curl -fsSLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/uninstall.sh"
+curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/uninstall.sh"
 shasum -a 256 -c --ignore-missing SHA256SUMS
 bash ./uninstall.sh
 ```
