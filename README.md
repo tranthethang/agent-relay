@@ -1,14 +1,18 @@
 # agent-relay
 
-agent-relay ships a reusable, tool-agnostic pipeline of AI coding skills —
+[![CI](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml)
+
+agent-relay ships a reusable pipeline of AI coding skills —
 **implement → self-review → cross-review** — for multi-agent workflows like
 Cursor + Antigravity. One neutral markdown source per stage under `skills/`,
 one installer that adapts and installs it globally into each tool's native
-rules/skills format. Extensible to Codex, Claude, and beyond.
+rules/skills format. Skill-folder installs also target Claude and Codex;
+end-to-end pipeline dogfood on those tools is still planned.
 
 ## Table of contents
 
 - [Why](#why)
+  - [Case study](#case-study)
 - [Pipeline](#pipeline)
 - [Install](#install)
   - [Recommended: verified release install](#recommended-verified-release-install)
@@ -19,6 +23,7 @@ rules/skills format. Extensible to Codex, Claude, and beyond.
 - [Options](#options)
 - [Adding a new target tool](#adding-a-new-target-tool)
 - [Status](#status)
+- [Contributing](#contributing)
 - [License](#license)
 
 ## Why
@@ -27,6 +32,20 @@ Running plan → implement → review across *different* tools/models catches
 more bugs than looping a single model over its own output — but rewriting
 the same review logic per tool, per project, gets old fast. agent-relay keeps
 one source of truth per stage and adapts it to wherever it needs to run.
+
+### Case study
+
+**Shaped demo** (not a claim about the sample healthz artifacts in
+[`examples/`](examples/)): a probe handler with a swallowed error and an
+authz gap. Self-review caught the always-`200` catch path; only cross-review
+(different tool/model family) caught the missing admin role check.
+
+|              | Before                         | After                       | Caught by    |
+| ------------ | ------------------------------ | --------------------------- | ------------ |
+| `healthz`    | `catch` still returns `200 ok` | Surfaces `503` on failure   | Self-review  |
+| `adminReady` | Any signed-in user             | Requires `role === "admin"` | Cross-review |
+
+Full snippets: [`examples/case-study/`](examples/case-study/).
 
 ## Pipeline
 
@@ -43,7 +62,7 @@ see [`docs/file-conventions.md`](docs/file-conventions.md). A shared NanoID per
 run avoids collisions when several features are in flight; skills resolve the
 active run via user path/id, then `CURRENT`, then a single matching plan.
 A shape reference lives in [`examples/`](examples/). Re-run `./install.sh`
-after pulling skill changes so installed Cursor/Antigravity copies stay in sync.
+after pulling skill changes so installed skill-folder copies stay in sync.
 
 ## Install
 
@@ -52,6 +71,8 @@ Requires **bash ≥ 3.2** (macOS system `/bin/bash` is fine). Skills install
 
 - `~/.cursor/skills/<name>/SKILL.md` for Cursor (Agent Skills)
 - `~/.gemini/config/skills/<name>/SKILL.md` for Antigravity
+- `~/.claude/skills/<name>/SKILL.md` for Claude
+- `~/.codex/skills/<name>/SKILL.md` for Codex
 
 Re-running install also removes prior Cursor rule copies at
 `~/.cursor/rules/atry-*.mdc` (legacy layout).
@@ -137,7 +158,7 @@ Supported by `install.sh`, `uninstall.sh`, and `verify.sh` where noted:
 
 ```
 --only TOOL[,TOOL]    Limit to specific tools (case-insensitive;
-                      e.g. --only cursor or --only CURSOR,antigravity)
+                      e.g. --only cursor or --only CURSOR,claude)
 --skill NAME[,NAME]   Limit to specific skills (e.g. --skill atry-implement)
 --ref REF             Target release tag (e.g. v0.1.0) or commit SHA (remote mode)
 --sha256 HEX          Explicit SHA-256 checksum (required for commit SHA)
@@ -169,8 +190,19 @@ keeping it neutral.
 
 ## Status
 
-Currently supports Cursor and Antigravity. Codex and Claude support are
-planned — see the commented-out entries in `targets.conf`.
+**Verified pipeline (dogfooded):** Cursor + Antigravity.
+
+**Install targets:** The installer also writes skill folders for Claude
+(`~/.claude/skills`) and Codex (`~/.codex/skills`). End-to-end
+implement → review on Claude/Codex is **planned / not dogfooded** yet.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).
+
+## Contributing
+
+Clone, install, and run smoke tests as described in
+[CONTRIBUTING.md](CONTRIBUTING.md). Release history lives in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
