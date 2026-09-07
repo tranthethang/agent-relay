@@ -18,3 +18,10 @@ and set `CURRENT`.
 | [`implement-report.md`](implement-report.md)     | Per-task notes after coding              |
 | [`review-report.md`](review-report.md)           | Self-review + appended cross-review      |
 | [`review-walkthrough.md`](review-walkthrough.md) | Narrative for the next reviewer          |
+
+## Case study (shaped demo)
+
+[`case-study/`](case-study/) — small TypeScript before/after showing what
+self-review vs cross-review tend to catch. See
+[`case-study/narrative.md`](case-study/narrative.md). Not tied to the healthz
+sample run above.
