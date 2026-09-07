@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check bootstrap sync
+        run: bash ./scripts/sync-bootstrap.sh --check
+
+      - name: Run local smoke tests
+        run: bash ./tests/smoke.sh
+
+      - name: Run remote smoke tests
+        run: bash ./tests/smoke-remote.sh

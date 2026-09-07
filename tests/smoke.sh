@@ -22,15 +22,23 @@ export HOME="$T"
 
 "$INSTALL" --only cursor >/dev/null
 [[ $? -eq 0 ]] && pass "exit 0 on success" || fail "exit 0 on success"
-[[ -f "$HOME/.cursor/rules/atry-implement.mdc" ]] && pass "cursor mdc" || fail "cursor mdc"
+[[ -f "$HOME/.cursor/skills/atry-implement/SKILL.md" ]] && pass "cursor skill-folder" || fail "cursor skill-folder"
 
 "$INSTALL" --only antigravity >/dev/null
 [[ -f "$HOME/.gemini/config/skills/atry-implement/SKILL.md" ]] && pass ".gemini/config/skills" || fail ".gemini/config/skills"
 
-# Legacy Antigravity paths should be cleaned by uninstall even after path change.
-mkdir -p "$HOME/.agents/skills/atry-implement" "$HOME/.agent/skills/atry-implement"
+# Legacy Cursor rules (.mdc) and Antigravity paths should be cleaned by uninstall
+# (and by install migration) even after path/format change.
+mkdir -p "$HOME/.cursor/rules" "$HOME/.agents/skills/atry-implement" "$HOME/.agent/skills/atry-implement"
+echo legacy > "$HOME/.cursor/rules/atry-implement.mdc"
 echo legacy > "$HOME/.agents/skills/atry-implement/SKILL.md"
 echo legacy > "$HOME/.agent/skills/atry-implement/SKILL.md"
+
+# Re-install cursor should migrate away the legacy .mdc
+"$INSTALL" --only cursor --skill atry-implement >/dev/null
+[[ ! -f "$HOME/.cursor/rules/atry-implement.mdc" ]] && pass "install cleans legacy mdc" || fail "install cleans legacy mdc"
+# Recreate for uninstall coverage below
+echo legacy > "$HOME/.cursor/rules/atry-implement.mdc"
 
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
 
@@ -44,7 +52,7 @@ out="$("$INSTALL" --dry-run --only "cursor, antigravity" 2>/dev/null)" \
   || true
 echo "$out" | grep -q ANTIGRAVITY && pass "comma+space" || fail "comma+space"
 
-# Apostrophe quoting in mdc frontmatter: use a nested fake HOME.
+# Description with apostrophe must survive skill-folder copy.
 DESC="$T/apos-src"
 mkdir -p "$DESC/skills"
 cp "$INSTALL" "$ROOT/targets.conf" "$DESC/"
@@ -55,11 +63,11 @@ printf '%s\n' '---' 'name: apos-test' "description: Review the user's implementa
   cd "$DESC"
   ./install.sh --only cursor --skill apos-test
 ) >/dev/null
-grep -q "user's implementation" "$DESC/out/.cursor/rules/apos-test.mdc" && pass "apostrophe" || fail "apostrophe"
+grep -q "user's implementation" "$DESC/out/.cursor/skills/apos-test/SKILL.md" && pass "apostrophe" || fail "apostrophe"
 
-echo MARKER >> "$HOME/.cursor/rules/atry-implement.mdc"
+echo MARKER >> "$HOME/.cursor/skills/atry-implement/SKILL.md"
 "$INSTALL" --only cursor --skill atry-implement --no-clobber >/dev/null
-grep -q MARKER "$HOME/.cursor/rules/atry-implement.mdc" && pass "no-clobber" || fail "no-clobber"
+grep -q MARKER "$HOME/.cursor/skills/atry-implement/SKILL.md" && pass "no-clobber" || fail "no-clobber"
 
 if "$INSTALL" --only cursor --dry-run 2>&1 | grep -q -- '--target'; then
   fail "--target rejected"
@@ -69,9 +77,10 @@ else
 fi
 
 "$UNINSTALL" --only cursor --skill atry-implement >/dev/null
-[[ ! -f "$HOME/.cursor/rules/atry-implement.mdc" ]] && pass "uninstall cursor skill" || fail "uninstall cursor skill"
+[[ ! -e "$HOME/.cursor/skills/atry-implement" ]] && pass "uninstall cursor skill" || fail "uninstall cursor skill"
+[[ ! -f "$HOME/.cursor/rules/atry-implement.mdc" ]] && pass "uninstall legacy mdc" || fail "uninstall legacy mdc"
 # Other cursor skills should remain
-[[ -f "$HOME/.cursor/rules/atry-self-review.mdc" ]] && pass "uninstall scoped" || fail "uninstall scoped"
+[[ -f "$HOME/.cursor/skills/atry-self-review/SKILL.md" ]] && pass "uninstall scoped" || fail "uninstall scoped"
 
 if "$VERIFY" --only cursor --skill atry-implement >/dev/null 2>&1; then
   fail "verify fail after partial uninstall"

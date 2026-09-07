@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Validate release tag matches VERSION
+        run: |
+          TARGET_TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION_FILE_TAG="v$(tr -d '[:space:]' < VERSION)"
+          if [[ "$TARGET_TAG" != "$VERSION_FILE_TAG" ]]; then
+            echo "Error: Tag '$TARGET_TAG' does not match expected tag '$VERSION_FILE_TAG' from VERSION file." >&2
+            exit 1
+          fi
+          echo "Building release for tag $TARGET_TAG"
+
+      - name: Build release assets
+        run: |
+          TARGET_TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          bash ./scripts/build-release-assets.sh "$TARGET_TAG"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TARGET_TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release create "$TARGET_TAG" \
+            dist/agent-relay-*.tar.gz \
+            dist/install.sh \
+            dist/uninstall.sh \
+            dist/verify.sh \
+            dist/SHA256SUMS \
+            --title "$TARGET_TAG" \
+            --generate-notes

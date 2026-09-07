@@ -11,8 +11,12 @@ rules/skills format. Extensible to Codex, Claude, and beyond.
 - [Why](#why)
 - [Pipeline](#pipeline)
 - [Install](#install)
-  - [Quick install](#quick-install)
-  - [Advanced](#advanced)
+  - [Recommended: verified release install](#recommended-verified-release-install)
+  - [Verify and uninstall](#verify-and-uninstall)
+  - [Advanced: clone locally](#advanced-clone-locally)
+  - [Advanced: pin commit SHA](#advanced-pin-commit-sha)
+  - [Safety notes](#safety-notes)
+- [Options](#options)
 - [Adding a new target tool](#adding-a-new-target-tool)
 - [Status](#status)
 - [License](#license)
@@ -46,34 +50,56 @@ after pulling skill changes so installed Cursor/Antigravity copies stay in sync.
 Requires **bash ≥ 3.2** (macOS system `/bin/bash` is fine). Skills install
 **globally** into:
 
-- `~/.cursor/rules/*.mdc` for Cursor
+- `~/.cursor/skills/<name>/SKILL.md` for Cursor (Agent Skills)
 - `~/.gemini/config/skills/<name>/SKILL.md` for Antigravity
 
-### Quick install
+Re-running install also removes prior Cursor rule copies at
+`~/.cursor/rules/atry-*.mdc` (legacy layout).
 
-Pipe the scripts from `main` — no clone required.
+### Recommended: verified release install
 
-**Install:**
+Download the release script and checksum file, verify the SHA-256 signature, then run locally:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/install.sh | bash
+# 1. Choose release tag
+REF="v0.1.0"
+
+# 2. Download install script and checksums
+curl -fsSLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
+curl -fsSLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
+
+# 3. Verify SHA-256 checksum (macOS: shasum, Linux: sha256sum)
+shasum -a 256 -c --ignore-missing SHA256SUMS
+
+# 4. Run installer
+bash ./install.sh
 ```
+
+The installer will automatically download the release archive, verify its integrity against `SHA256SUMS`, and extract and configure the skills.
+
+### Verify and uninstall
+
+Follow the same download-verify-run pattern for verification and removal:
 
 **Verify:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/verify.sh | bash
+curl -fsSLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/verify.sh"
+shasum -a 256 -c --ignore-missing SHA256SUMS
+bash ./verify.sh
 ```
 
 **Uninstall:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/uninstall.sh | bash
+curl -fsSLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/uninstall.sh"
+shasum -a 256 -c --ignore-missing SHA256SUMS
+bash ./uninstall.sh
 ```
 
-### Advanced
+### Advanced: clone locally
 
-Clone the repo when you want a local checkout, flags, or smoke tests.
+Clone the repo when you want a local checkout, custom edits, or to run smoke tests:
 
 ```bash
 git clone https://github.com/tranthethang/agent-relay.git
@@ -82,18 +108,39 @@ cd agent-relay
 ./verify.sh
 ```
 
-Pass flags after `--` when piping the one-liners:
+### Advanced: pin commit SHA
+
+In remote mode, installs targeting a specific 40-character commit SHA require an explicit `--sha256` checksum:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tranthethang/agent-relay/main/install.sh | bash -s -- --only cursor
+bash ./install.sh --ref <40-char-commit-sha> --sha256 <expected-sha256-hex>
 ```
 
-Options (install / uninstall / verify where noted):
+Or via environment variables:
+
+```bash
+export AGENT_RELAY_REF="<40-char-commit-sha>"
+export AGENT_RELAY_SHA256="<expected-sha256-hex>"
+bash ./install.sh
+```
+
+### Safety notes
+
+- **No `curl | bash`**: agent-relay encourages downloading and verifying scripts before running them, preventing execution of truncated downloads or unauthorized payload changes.
+- **No floating refs**: Remote installs from floating branches (like `main` or `master`) are refused for security. Use immutable release tags or explicit commit hashes with checksums.
+- **No `sudo`**: agent-relay never requires elevated privileges.
+- **Scoped to `$HOME`**: All files are written strictly to user configuration directories under `$HOME`.
+
+## Options
+
+Supported by `install.sh`, `uninstall.sh`, and `verify.sh` where noted:
 
 ```
 --only TOOL[,TOOL]    Limit to specific tools (case-insensitive;
                       e.g. --only cursor or --only CURSOR,antigravity)
 --skill NAME[,NAME]   Limit to specific skills (e.g. --skill atry-implement)
+--ref REF             Target release tag (e.g. v0.1.0) or commit SHA (remote mode)
+--sha256 HEX          Explicit SHA-256 checksum (required for commit SHA)
 --dry-run             Show what would be written/removed, without changing anything
                       (install, uninstall)
 --no-clobber          Skip destinations that already exist (install only;
@@ -103,7 +150,11 @@ Options (install / uninstall / verify where noted):
 Unknown tool/skill names are rejected. Re-running install without `--no-clobber`
 silently overwrites previously installed copies of these skills.
 
-Installer smoke checks: `./tests/smoke.sh`
+Smoke test commands:
+
+```bash
+make test        # run both local and remote smoke tests
+```
 
 ## Adding a new target tool
 

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help format
+.PHONY: help format test smoke
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -8,3 +8,9 @@ help: ## Show available commands
 
 format: ## Format Markdown files with mdformat
 	uv run mdformat README.md docs/ examples/ skills/
+
+smoke: ## Run local and remote smoke tests
+	bash ./tests/smoke.sh
+	bash ./tests/smoke-remote.sh
+
+test: smoke ## Run all tests
