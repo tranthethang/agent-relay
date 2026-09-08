@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-07
+
 ### Added
 
 - README case study (`examples/case-study/`) showing self-review vs cross-review catches
@@ -19,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - README Status/Install wording: verified pipeline remains Cursor + Antigravity;
   Claude/Codex are install-supported, not yet dogfooded end-to-end
+- Recommended install docs: show curl download progress (`curl -fLO` instead of `-fsSLO`)
 
 ## [0.1.0] — baseline
 

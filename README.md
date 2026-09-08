@@ -83,7 +83,7 @@ Download the release script and checksum file, verify the SHA-256 signature, the
 
 ```bash
 # 1. Choose release tag
-REF="v0.1.0"
+REF="v0.2.0"
 
 # 2. Download install script and checksums
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
