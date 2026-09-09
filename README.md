@@ -73,7 +73,7 @@ Chain the steps so a failed check does not continue. On Linux, `sha256sum -c`
 is the usual tool; macOS has `shasum`.
 
 ```bash
-REF="v0.2.0"
+REF="v0.3.0"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 if command -v shasum >/dev/null 2>&1; then
@@ -100,7 +100,7 @@ Use the same tag. Download `SHA256SUMS` again if it is not already in the
 current directory. Do not assume `$REF` is still set.
 
 ```bash
-REF="v0.2.0"
+REF="v0.3.0"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/verify.sh"
 if command -v shasum >/dev/null 2>&1; then
@@ -112,7 +112,7 @@ bash ./verify.sh
 ```
 
 ```bash
-REF="v0.2.0"
+REF="v0.3.0"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/uninstall.sh"
 if command -v shasum >/dev/null 2>&1; then
