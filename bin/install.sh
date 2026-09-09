@@ -6,19 +6,19 @@
 #
 # Requires: bash >= 3.2 (macOS system bash is fine).
 #
-# Usage:
-#   ./install.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
-#                [--ref REF] [--sha256 HEX]
-#                [--dry-run] [--no-clobber]
+# Usage (clone). A release download is the same script, saved as ./install.sh.
+#   ./bin/install.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
+#                    [--ref REF] [--sha256 HEX]
+#                    [--dry-run] [--no-clobber]
 #
 # Examples:
-#   ./install.sh                                  # install all skills, all tools (local)
-#   ./install.sh --ref v0.1.0                     # download & install release v0.1.0
-#   ./install.sh --ref <sha> --sha256 <hex>       # download & install pinned commit SHA
-#   ./install.sh --only cursor                    # install for Cursor only
-#   ./install.sh --skill atry-implement           # install a subset of skills
-#   ./install.sh --dry-run                        # show what would happen, write nothing
-#   ./install.sh --no-clobber                     # skip destinations that already exist
+#   ./bin/install.sh                                  # install all skills, all tools (local)
+#   ./bin/install.sh --ref <tag>                      # download & install a release tag
+#   ./bin/install.sh --ref <sha> --sha256 <hex>       # download & install pinned commit SHA
+#   ./bin/install.sh --only cursor                    # install for Cursor only
+#   ./bin/install.sh --skill atry-implement           # install a subset of skills
+#   ./bin/install.sh --dry-run                        # show what would happen, write nothing
+#   ./bin/install.sh --no-clobber                     # skip destinations that already exist
 #
 # Re-running without --no-clobber silently overwrites prior installs of the
 # same skill files (custom edits to installed copies will be lost).
@@ -34,6 +34,9 @@ ONLY_SKILLS=""
 DRY_RUN=0
 NO_CLOBBER=0
 TEMP_DIR=""
+# Parse loop shifts "$@" away. Remote mode re-execs the extracted script,
+# which must still see --only / --skill / --dry-run / --no-clobber.
+ORIG_ARGS=("$@")
 
 usage() {
   cat <<'EOF'
@@ -44,19 +47,19 @@ rules/skills format, installed globally under $HOME.
 
 Requires: bash >= 3.2 (macOS system bash is fine).
 
-Usage:
-  ./install.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
-               [--ref REF] [--sha256 HEX]
-               [--dry-run] [--no-clobber]
+Usage (clone). A release download is the same script, saved as ./install.sh.
+  ./bin/install.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
+                   [--ref REF] [--sha256 HEX]
+                   [--dry-run] [--no-clobber]
 
 Examples:
-  ./install.sh                                  # install all skills, all tools (local)
-  ./install.sh --ref v0.1.0                     # download & install release v0.1.0
-  ./install.sh --ref <sha> --sha256 <hex>       # download & install pinned commit SHA
-  ./install.sh --only cursor                    # install for Cursor only
-  ./install.sh --skill atry-implement           # install a subset of skills
-  ./install.sh --dry-run                        # show what would happen, write nothing
-  ./install.sh --no-clobber                     # skip destinations that already exist
+  ./bin/install.sh                                  # install all skills, all tools (local)
+  ./bin/install.sh --ref <tag>                      # download & install a release tag
+  ./bin/install.sh --ref <sha> --sha256 <hex>       # download & install pinned commit SHA
+  ./bin/install.sh --only cursor                    # install for Cursor only
+  ./bin/install.sh --skill atry-implement           # install a subset of skills
+  ./bin/install.sh --dry-run                        # show what would happen, write nothing
+  ./bin/install.sh --no-clobber                     # skip destinations that already exist
 
 Re-running without --no-clobber silently overwrites prior installs of the
 same skill files (custom edits to installed copies will be lost).
@@ -179,13 +182,13 @@ download_and_extract_repo() {
   local temp_dir="$3"
 
   if [[ -z "$ref" ]]; then
-    echo "Error: No release ref specified. Provide --ref <tag> (e.g. --ref v0.1.0) or clone locally." >&2
+    echo "Error: No release ref specified. Provide --ref <tag> (a release tag) or clone locally." >&2
     return 1
   fi
 
   if [[ "$ref" == "main" || "$ref" == "master" || "$ref" == "refs/heads/"* ]]; then
     echo "Error: Remote install from floating ref '$ref' is refused for security." >&2
-    echo "Please specify a tagged release (e.g. --ref v0.1.0) or clone locally." >&2
+    echo "Please specify a tagged release (--ref <tag>) or clone locally." >&2
     return 1
   fi
 
@@ -241,7 +244,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --target)
       echo "Error: --target is no longer supported. Skills install globally under \$HOME." >&2
-      echo "See README Quick Start, or run with -h." >&2
+      echo "See README Install, or run with -h." >&2
       exit 1
       ;;
     --only)
@@ -273,13 +276,28 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
 
-if [[ -f "$SCRIPT_DIR/lib/bootstrap.sh" ]]; then
+# Checkout: this script lives in bin/, repo root is the parent.
+# Copied beside skills/ (tests, older archives): use SCRIPT_DIR.
+REPO_ROOT=""
+if [[ -n "$SCRIPT_DIR" && -d "$SCRIPT_DIR/skills" && -f "$SCRIPT_DIR/targets.conf" ]]; then
+  REPO_ROOT="$SCRIPT_DIR"
+elif [[ -n "$SCRIPT_DIR" && -d "$SCRIPT_DIR/../skills" && -f "$SCRIPT_DIR/../targets.conf" ]]; then
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
+if [[ -n "$REPO_ROOT" && -f "$REPO_ROOT/lib/bootstrap.sh" ]]; then
+  # shellcheck source=../lib/bootstrap.sh
+  source "$REPO_ROOT/lib/bootstrap.sh"
+elif [[ -f "$SCRIPT_DIR/lib/bootstrap.sh" ]]; then
   # shellcheck source=lib/bootstrap.sh
   source "$SCRIPT_DIR/lib/bootstrap.sh"
 fi
 
-# Detect Local vs Remote Mode (standalone script or no skills/ + targets.conf).
-if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && (! -n "$SCRIPT_DIR" || ! -d "$SCRIPT_DIR/skills" || ! -f "$SCRIPT_DIR/targets.conf") ]]; then
+# Standalone release download has neither layout, so it fetches the archive.
+# --ref / AGENT_RELAY_REF also fetch, even from a clone. Otherwise a checkout
+# would ignore the pin and install the working tree. DEFAULT_REF alone does
+# not override a checkout (clone scripts leave it empty).
+if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && ( -z "$REPO_ROOT" || -n "${CLI_REF:-}" || -n "${AGENT_RELAY_REF:-}" ) ]]; then
   echo "Installer running in Remote Mode..."
   TARGET_REF="$(resolve_ref "${CLI_REF:-}" "${AGENT_RELAY_REF:-}" "${DEFAULT_REF:-}")"
   TARGET_SHA256="${CLI_SHA256:-${AGENT_RELAY_SHA256:-}}"
@@ -287,13 +305,27 @@ if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && (! -n "$SCRIPT_DIR" || ! -d "$SCRIPT
   TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agent-relay-install.XXXXXX")"
   download_and_extract_repo "$TARGET_REF" "$TARGET_SHA256" "$TEMP_DIR" >/dev/null
 
+  if [[ -f "$SRC_DIR/bin/install.sh" ]]; then
+    RELAY_NEXT="$SRC_DIR/bin/install.sh"
+  elif [[ -f "$SRC_DIR/install.sh" ]]; then
+    RELAY_NEXT="$SRC_DIR/install.sh"
+  else
+    echo "Error: install.sh not found in extracted archive" >&2
+    exit 1
+  fi
+
   export AGENT_RELAY_BOOTSTRAPPED=1
-  "$SRC_DIR/install.sh" "$@"
+  # bash 3.2 + set -u errors on an empty "${arr[@]}"
+  if [[ ${#ORIG_ARGS[@]} -gt 0 ]]; then
+    "$RELAY_NEXT" "${ORIG_ARGS[@]}"
+  else
+    "$RELAY_NEXT"
+  fi
   exit $?
 fi
 
 echo "Installer running in Local Mode..."
-SRC_DIR="$SCRIPT_DIR"
+SRC_DIR="$REPO_ROOT"
 
 SKILLS_DIR="$SRC_DIR/skills"
 CONF="$SRC_DIR/targets.conf"
@@ -551,6 +583,6 @@ else
     dir_var="${tool}_DIR"
     echo "  ${!dir_var}"
   done
-  echo "Tip: run verify.sh to confirm the install."
+  echo "Tip: run bin/verify.sh (clone) or ./verify.sh (release download) to confirm the install."
   echo "Tip: add .agent-relay/ to each project's .gitignore if you do not want relay working files committed."
 fi

@@ -10,6 +10,8 @@
 #   - commit SHA with explicit valid --sha256 succeeds
 #   - AGENT_RELAY_REF and AGENT_RELAY_SHA256 env vars honored
 #   - baked script with DEFAULT_REF succeeds without flags
+#   - clone --ref / AGENT_RELAY_REF is remote, not the working tree
+#   - remote --only / --dry-run are forwarded into the extracted script
 
 set -euo pipefail
 
@@ -82,9 +84,9 @@ export PATH="$MOCK_BIN:$PATH"
 # Setup isolated environment for running remote scripts
 RUN_DIR="$T/run"
 mkdir -p "$RUN_DIR"
-cp "$ROOT_DIR/install.sh" "$RUN_DIR/install.sh"
-cp "$ROOT_DIR/uninstall.sh" "$RUN_DIR/uninstall.sh"
-cp "$ROOT_DIR/verify.sh" "$RUN_DIR/verify.sh"
+cp "$ROOT_DIR/bin/install.sh" "$RUN_DIR/install.sh"
+cp "$ROOT_DIR/bin/uninstall.sh" "$RUN_DIR/uninstall.sh"
+cp "$ROOT_DIR/bin/verify.sh" "$RUN_DIR/verify.sh"
 
 export HOME="$T/home"
 mkdir -p "$HOME"
@@ -185,6 +187,68 @@ if [[ -f "$HOME/.cursor/skills/atry-implement/SKILL.md" ]]; then
   pass "baked script with DEFAULT_REF succeeds"
 else
   fail "baked script with DEFAULT_REF succeeds"
+fi
+
+# 11. From a clone, --ref is remote (floating main refused, not local mode)
+set +e
+out="$("$ROOT_DIR/bin/install.sh" --ref main 2>&1)"
+status=$?
+set -e
+if [[ $status -ne 0 ]] && echo "$out" | grep -qi "refused for security" && ! echo "$out" | grep -q "Local Mode"; then
+  pass "clone --ref main is remote, not local"
+else
+  fail "clone --ref main is remote, not local (status=$status, out=$out)"
+fi
+
+# 12. AGENT_RELAY_REF from a clone is remote too
+set +e
+out="$(AGENT_RELAY_REF=main "$ROOT_DIR/bin/install.sh" 2>&1)"
+status=$?
+set -e
+if [[ $status -ne 0 ]] && echo "$out" | grep -qi "refused for security" && ! echo "$out" | grep -q "Local Mode"; then
+  pass "clone AGENT_RELAY_REF is remote, not local"
+else
+  fail "clone AGENT_RELAY_REF is remote, not local (status=$status, out=$out)"
+fi
+
+# 13. Remote --only is forwarded to the extracted installer.
+# Fixture installs cursor and antigravity; --only cursor must skip antigravity.
+rm -rf "$HOME/.cursor" "$HOME/.gemini" "$HOME/.claude" "$HOME/.codex"
+"$RUN_DIR/install.sh" --ref v0.1.0 --only cursor >/dev/null
+if [[ -f "$HOME/.cursor/skills/atry-implement/SKILL.md" && ! -e "$HOME/.gemini/config/skills/atry-implement" ]]; then
+  pass "remote --only cursor is forwarded"
+else
+  fail "remote --only cursor is forwarded"
+fi
+
+# 14. Remote --dry-run writes nothing
+rm -rf "$HOME/.cursor" "$HOME/.gemini"
+"$RUN_DIR/install.sh" --ref v0.1.0 --dry-run >/dev/null
+if [[ ! -e "$HOME/.cursor/skills/atry-implement" && ! -e "$HOME/.gemini/config/skills/atry-implement" ]]; then
+  pass "remote --dry-run writes nothing"
+else
+  fail "remote --dry-run writes nothing"
+fi
+
+# 15. Clone --ref installs the archive, not the working tree, and forwards --only.
+# Working tree has three skills; the fixture has only atry-implement.
+rm -rf "$HOME/.cursor" "$HOME/.gemini"
+"$ROOT_DIR/bin/install.sh" --ref v0.1.0 --only cursor >/dev/null
+if [[ -f "$HOME/.cursor/skills/atry-implement/SKILL.md" \
+  && ! -e "$HOME/.cursor/skills/atry-self-review" \
+  && ! -e "$HOME/.gemini/config/skills/atry-implement" ]]; then
+  pass "clone --ref installs archive and forwards --only"
+else
+  fail "clone --ref installs archive and forwards --only"
+fi
+
+# 16. Remote uninstall --only is forwarded
+"$RUN_DIR/install.sh" --ref v0.1.0 >/dev/null
+"$RUN_DIR/uninstall.sh" --ref v0.1.0 --only cursor >/dev/null
+if [[ ! -e "$HOME/.cursor/skills/atry-implement" && -e "$HOME/.gemini/config/skills/atry-implement" ]]; then
+  pass "remote uninstall --only is forwarded"
+else
+  fail "remote uninstall --only is forwarded"
 fi
 
 if [[ $FAIL -gt 0 ]]; then

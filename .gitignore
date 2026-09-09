@@ -3,17 +3,5 @@
 # to keep here as documentation of the convention)
 .agent-relay/
 
-# Python / uv
-.venv/
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-.eggs/
+# Release build output (scripts/build-release-assets.sh)
 dist/
-build/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.coverage
-htmlcov/

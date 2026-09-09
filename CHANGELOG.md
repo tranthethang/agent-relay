@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Python / uv / mdformat toolchain (`pyproject.toml`, `uv.lock`, `.python-version`, `make format`). Nothing in CI used it.
+- `examples/case-study/`. It was a constructed before/after, not a recorded pipeline run.
+
+### Fixed
+
+- `--ref` and `AGENT_RELAY_REF` fetch that ref even from a clone. They no longer install the working tree.
+- Remote install, verify, and uninstall forward `--only`, `--skill`, `--dry-run`, and `--no-clobber` into the extracted script.
+
+### Changed
+
+- README, `docs/file-conventions.md`, `templates/`, and `CONTRIBUTING.md` describe what the installer and skills actually do. Templates no longer invent a feature, test result, or review outcome.
+- `install.sh`, `verify.sh`, and `uninstall.sh` live in `bin/`. Release downloads are still named `install.sh` / `verify.sh` / `uninstall.sh`.
+- `examples/` renamed to `templates/`. Those files are empty outlines, not a sample run.
+
 ## [0.2.0] — 2026-09-07
 
 ### Added

@@ -5,9 +5,12 @@
 ```bash
 git clone https://github.com/tranthethang/agent-relay.git
 cd agent-relay
-./install.sh
-./verify.sh
+./bin/install.sh
+./bin/verify.sh
 ```
+
+That copies skills into your user skill directories. It does not exercise
+implement or review.
 
 ## Tests
 
@@ -16,19 +19,27 @@ make test              # local + remote smoke
 ./tests/smoke.sh       # local install/uninstall/verify only
 ```
 
-Requires **bash ≥ 3.2**. Remote smoke needs network access to GitHub releases.
+Requires bash ≥ 3.2. Both smoke scripts are offline. Remote smoke stubs
+`curl` and uses `tests/fixtures/`.
 
-## Reporting results
+There is no Markdown formatter and no Python toolchain in this repo.
 
-When filing an issue about install or smoke failures, include:
+## Reporting install or smoke failures
 
-- OS and version (e.g. macOS 15, Ubuntu 24.04)
+Include:
+
+- OS and version
 - `bash --version`
-- Which tools you installed (`--only …` or full default set)
-- Command run and pass/fail (paste relevant smoke output)
+- Tools selected (`--only …`, or the default set)
+- The command and the relevant output
 
-## Scope notes
+## Where things live
 
-Skill sources live under `skills/`. Global install destinations are listed in
-[`targets.conf`](targets.conf). See [README](README.md) Status for what is
-dogfooded vs install-only.
+- Installer: `bin/`
+- Skill text: `skills/`
+- Install destinations: [`targets.conf`](targets.conf)
+- Artifact names: [`docs/file-conventions.md`](docs/file-conventions.md)
+- Empty outlines (not a sample run): [`templates/`](templates/)
+
+Install support for a tool is not the same as having used the stages in that
+tool. This repo does not keep a log of either.
