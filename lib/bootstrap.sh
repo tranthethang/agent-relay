@@ -99,13 +99,13 @@ download_and_extract_repo() {
   local temp_dir="$3"
 
   if [[ -z "$ref" ]]; then
-    echo "Error: No release ref specified. Provide --ref <tag> (e.g. --ref v0.1.0) or clone locally." >&2
+    echo "Error: No release ref specified. Provide --ref <tag> (a release tag) or clone locally." >&2
     return 1
   fi
 
   if [[ "$ref" == "main" || "$ref" == "master" || "$ref" == "refs/heads/"* ]]; then
     echo "Error: Remote install from floating ref '$ref' is refused for security." >&2
-    echo "Please specify a tagged release (e.g. --ref v0.1.0) or clone locally." >&2
+    echo "Please specify a tagged release (--ref <tag>) or clone locally." >&2
     return 1
   fi
 

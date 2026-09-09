@@ -2,206 +2,204 @@
 
 [![CI](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml)
 
-agent-relay ships a reusable pipeline of AI coding skills —
-**implement → self-review → cross-review** — for multi-agent workflows like
-Cursor + Antigravity. One neutral markdown source per stage under `skills/`,
-one installer that adapts and installs it globally into each tool's native
-rules/skills format. Skill-folder installs also target Claude and Codex;
-end-to-end pipeline dogfood on those tools is still planned.
+Three markdown skills and a bash installer. The skills tell an agent how to
+implement a plan, review that work, and append a second review. The installer
+copies each skill into global skill directories. It does not run the stages,
+pick a model, or talk to any agent runtime.
 
-## Table of contents
+CI checks the installer (local and remote smoke tests). It does not check
+whether an agent follows a skill.
 
-- [Why](#why)
-  - [Case study](#case-study)
-- [Pipeline](#pipeline)
-- [Install](#install)
-  - [Recommended: verified release install](#recommended-verified-release-install)
-  - [Verify and uninstall](#verify-and-uninstall)
-  - [Advanced: clone locally](#advanced-clone-locally)
-  - [Advanced: pin commit SHA](#advanced-pin-commit-sha)
-  - [Safety notes](#safety-notes)
-- [Options](#options)
-- [Adding a new target tool](#adding-a-new-target-tool)
-- [Status](#status)
-- [Contributing](#contributing)
-- [License](#license)
+## What this is not
 
-## Why
+- Not a message bus, orchestrator, or multi-agent runtime. You open a tool and
+  invoke a skill yourself.
+- Not a measured result. This repo does not include a recorded run, and it
+  does not show that a second tool catches bugs the first one missed.
+- Not a format adapter for the current targets. Cursor, Antigravity, Claude,
+  and Codex all use `skill-folder`. Install copies `skills/<name>.md` to
+  `<tool-dir>/<name>/SKILL.md`. An unused `mdc-flat` writer remains in
+  `bin/install.sh` for the old Cursor rules layout.
 
-Running plan → implement → review across *different* tools/models catches
-more bugs than looping a single model over its own output — but rewriting
-the same review logic per tool, per project, gets old fast. agent-relay keeps
-one source of truth per stage and adapts it to wherever it needs to run.
+## Stages
 
-### Case study
+There is no plan skill here. Write `.agent-relay/plan-<id>.md` yourself, or
+with whatever planning mode you already use, then invoke the skills in order.
 
-**Shaped demo** (not a claim about the sample healthz artifacts in
-[`examples/`](examples/)): a probe handler with a swallowed error and an
-authz gap. Self-review caught the always-`200` catch path; only cross-review
-(different tool/model family) caught the missing admin role check.
+| Order | Skill | What it is expected to do |
+| ----- | ----- | ------------------------- |
+| 1 | *(not in this repo)* | Produce `.agent-relay/plan-<id>.md` |
+| 2 | [`skills/atry-implement.md`](skills/atry-implement.md) | Implement that plan; write `implement-plan-<id>.md` and `implement-report-<id>.md` |
+| 3 | [`skills/atry-self-review.md`](skills/atry-self-review.md) | Review the diff against the plan; overwrite `review-*-<id>.md` with a `Self-Review` section |
+| 4 | [`skills/atry-cross-review.md`](skills/atry-cross-review.md) | Append a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that. |
 
-|              | Before                         | After                       | Caught by    |
-| ------------ | ------------------------------ | --------------------------- | ------------ |
-| `healthz`    | `catch` still returns `200 ok` | Surfaces `503` on failure   | Self-review  |
-| `adminReady` | Any signed-in user             | Requires `role === "admin"` | Cross-review |
+File names, `CURRENT`, and the run id are specified in
+[`docs/file-conventions.md`](docs/file-conventions.md). Empty templates (not a
+sample run) are in [`templates/`](templates/).
 
-Full snippets: [`examples/case-study/`](examples/case-study/).
-
-## Pipeline
-
-| Stage           | Skill                                                        | Typical runner                   |
-| --------------- | ------------------------------------------------------------ | -------------------------------- |
-| 1. Plan         | *(not included — bring your own planning step/mode)*         | e.g. Cursor Plan Mode            |
-| 2. Implement    | [`skills/atry-implement.md`](skills/atry-implement.md)       | fast/cheap model                 |
-| 3. Self-review  | [`skills/atry-self-review.md`](skills/atry-self-review.md)   | stronger model, same tool family |
-| 4. Cross-review | [`skills/atry-cross-review.md`](skills/atry-cross-review.md) | a *different* tool/model family  |
-
-All stages read/write a **run-scoped** set of files under `.agent-relay/`
-(`plan-<id>.md`, `implement-*-<id>.md`, `review-*-<id>.md`, plus `CURRENT`) —
-see [`docs/file-conventions.md`](docs/file-conventions.md). A shared NanoID per
-run avoids collisions when several features are in flight; skills resolve the
-active run via user path/id, then `CURRENT`, then a single matching plan.
-A shape reference lives in [`examples/`](examples/). Re-run `./install.sh`
-after pulling skill changes so installed skill-folder copies stay in sync.
+After you change files under `skills/`, run `./bin/install.sh` again. Installed
+copies are not updated until you do. Default install overwrites the same
+skill files.
 
 ## Install
 
-Requires **bash ≥ 3.2** (macOS system `/bin/bash` is fine). Skills install
-**globally** into:
+Requires bash ≥ 3.2. macOS `/bin/bash` is enough. No `sudo`. Writes only under
+`$HOME`:
 
-- `~/.cursor/skills/<name>/SKILL.md` for Cursor (Agent Skills)
-- `~/.gemini/config/skills/<name>/SKILL.md` for Antigravity
-- `~/.claude/skills/<name>/SKILL.md` for Claude
-- `~/.codex/skills/<name>/SKILL.md` for Codex
+| Tool | Destination |
+| ---- | ----------- |
+| Cursor | `~/.cursor/skills/<name>/SKILL.md` |
+| Antigravity | `~/.gemini/config/skills/<name>/SKILL.md` |
+| Claude | `~/.claude/skills/<name>/SKILL.md` |
+| Codex | `~/.codex/skills/<name>/SKILL.md` |
 
-Re-running install also removes prior Cursor rule copies at
-`~/.cursor/rules/atry-*.mdc` (legacy layout).
+Antigravity's global skills path has moved before. `targets.conf` matches the
+shared `~/.gemini/config/skills` location documented for current Antigravity
+surfaces. If a given app does not load skills from there, the install still
+"succeeds" and the skill will not appear.
 
-### Recommended: verified release install
+Re-running install deletes previous copies of these skills at
+`~/.cursor/rules/atry-*.mdc` and the Antigravity legacy dirs listed in
+`targets.conf`.
 
-Download the release script and checksum file, verify the SHA-256 signature, then run locally:
+### Release install
+
+Download the release script and `SHA256SUMS`, check the checksum, then run.
+These are checksums, not a signature. Both files come from the same GitHub
+Release, so a replaced release would still match. The check catches a truncated
+or corrupted download.
+
+Chain the steps so a failed check does not continue. On Linux, `sha256sum -c`
+is the usual tool; macOS has `shasum`.
 
 ```bash
-# 1. Choose release tag
 REF="v0.2.0"
-
-# 2. Download install script and checksums
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
-
-# 3. Verify SHA-256 checksum (macOS: shasum, Linux: sha256sum)
-shasum -a 256 -c --ignore-missing SHA256SUMS
-
-# 4. Run installer
+if command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 -c --ignore-missing SHA256SUMS
+else
+  sha256sum -c --ignore-missing SHA256SUMS
+fi
 bash ./install.sh
 ```
 
-The installer will automatically download the release archive, verify its integrity against `SHA256SUMS`, and extract and configure the skills.
+The downloaded file is still named `install.sh`. In a clone the same script is
+`bin/install.sh`. The release script has `DEFAULT_REF` set to that tag. It then downloads
+`agent-relay-${REF}.tar.gz`, checks that file against the release `SHA256SUMS`,
+and copies skills from the archive. A checkout of this repo runs in local mode
+and does not download anything.
+
+`--ignore-missing` skips `SHA256SUMS` entries you did not download (the
+tarball, `verify.sh`, `uninstall.sh`). It still fails if `install.sh` itself
+does not match.
 
 ### Verify and uninstall
 
-Follow the same download-verify-run pattern for verification and removal:
-
-**Verify:**
+Use the same tag. Download `SHA256SUMS` again if it is not already in the
+current directory. Do not assume `$REF` is still set.
 
 ```bash
+REF="v0.2.0"
+curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/verify.sh"
-shasum -a 256 -c --ignore-missing SHA256SUMS
+if command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 -c --ignore-missing SHA256SUMS
+else
+  sha256sum -c --ignore-missing SHA256SUMS
+fi
 bash ./verify.sh
 ```
 
-**Uninstall:**
-
 ```bash
+REF="v0.2.0"
+curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/uninstall.sh"
-shasum -a 256 -c --ignore-missing SHA256SUMS
+if command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 -c --ignore-missing SHA256SUMS
+else
+  sha256sum -c --ignore-missing SHA256SUMS
+fi
 bash ./uninstall.sh
 ```
 
-### Advanced: clone locally
+`verify.sh` checks that the installed `SKILL.md` files match the release
+archive. It does not check that a tool loads them.
 
-Clone the repo when you want a local checkout, custom edits, or to run smoke tests:
+### From a clone
 
 ```bash
 git clone https://github.com/tranthethang/agent-relay.git
 cd agent-relay
-./install.sh
-./verify.sh
+./bin/install.sh
+./bin/verify.sh
 ```
 
-### Advanced: pin commit SHA
+### Pin a commit
 
-In remote mode, installs targeting a specific 40-character commit SHA require an explicit `--sha256` checksum:
+A 40-character commit SHA is refused unless you pass the archive checksum.
+That checksum is not published by this repo for arbitrary commits; you have
+to compute it yourself for the GitHub archive tarball of that SHA.
 
 ```bash
-bash ./install.sh --ref <40-char-commit-sha> --sha256 <expected-sha256-hex>
+bash ./bin/install.sh --ref <40-char-commit-sha> --sha256 <archive-sha256-hex>
 ```
 
-Or via environment variables:
-
-```bash
-export AGENT_RELAY_REF="<40-char-commit-sha>"
-export AGENT_RELAY_SHA256="<expected-sha256-hex>"
-bash ./install.sh
-```
-
-### Safety notes
-
-- **No `curl | bash`**: agent-relay encourages downloading and verifying scripts before running them, preventing execution of truncated downloads or unauthorized payload changes.
-- **No floating refs**: Remote installs from floating branches (like `main` or `master`) are refused for security. Use immutable release tags or explicit commit hashes with checksums.
-- **No `sudo`**: agent-relay never requires elevated privileges.
-- **Scoped to `$HOME`**: All files are written strictly to user configuration directories under `$HOME`.
+`--ref` or `AGENT_RELAY_REF` always downloads that ref, including from a
+clone. It does not install the working tree. Flags such as `--only` and
+`--dry-run` apply to the extracted archive. Remote install of `main` or
+`master` is refused. Use a release tag or a pinned SHA plus checksum.
 
 ## Options
 
-Supported by `install.sh`, `uninstall.sh`, and `verify.sh` where noted:
+`bin/install.sh`, `bin/uninstall.sh`, and `bin/verify.sh`
+(release downloads use the same filenames without the `bin/` prefix):
 
 ```
---only TOOL[,TOOL]    Limit to specific tools (case-insensitive;
-                      e.g. --only cursor or --only CURSOR,claude)
---skill NAME[,NAME]   Limit to specific skills (e.g. --skill atry-implement)
---ref REF             Target release tag (e.g. v0.1.0) or commit SHA (remote mode)
---sha256 HEX          Explicit SHA-256 checksum (required for commit SHA)
---dry-run             Show what would be written/removed, without changing anything
-                      (install, uninstall)
---no-clobber          Skip destinations that already exist (install only;
-                      default is to overwrite prior installs of the same files)
+--only TOOL[,TOOL]    Limit to tools (case-insensitive; e.g. --only cursor)
+--skill NAME[,NAME]   Limit to skills (e.g. --skill atry-implement)
+--ref REF             Release tag or 40-char commit SHA (remote mode)
+--sha256 HEX          Required for a commit SHA
+--dry-run             Print paths; do not write or delete (install, uninstall)
+--no-clobber          Skip destinations that already exist (install only)
 ```
 
-Unknown tool/skill names are rejected. Re-running install without `--no-clobber`
-silently overwrites previously installed copies of these skills.
-
-Smoke test commands:
+Unknown tool or skill names are rejected. Without `--no-clobber`, install
+overwrites existing copies of these skills, including local edits.
 
 ```bash
-make test        # run both local and remote smoke tests
+make test
 ```
 
-## Adding a new target tool
+runs `tests/smoke.sh` and `tests/smoke-remote.sh`. Both are offline.
+`smoke-remote.sh` stubs `curl` and uses `tests/fixtures/`.
 
-1. Add a `<TOOL>_DIR` / `<TOOL>_FORMAT` pair to [`targets.conf`](targets.conf)
-   and list the tool in `TOOLS=(...)`.
-1. If the tool's format isn't `mdc-flat` or `skill-folder` yet, add a small
-   `write_<format>` helper to `install.sh` (and matching remove/check logic in
-   `uninstall.sh` / `verify.sh`).
+## Adding a tool
 
-No changes to the skill content itself are needed — that's the point of
-keeping it neutral.
+Add a `<TOOL>_DIR` / `<TOOL>_FORMAT` pair to [`targets.conf`](targets.conf)
+and append the name to `TOOLS`. If the format is not `skill-folder` or
+`mdc-flat`, add a writer in `bin/install.sh` and matching remove/check logic in
+`bin/uninstall.sh` / `bin/verify.sh`.
 
-## Status
+That copies the same skill text. It does not make the stage work in that
+tool. Skill text assumes a git checkout, and it refers to `AGENTS.md` /
+`CLAUDE.md` when those files exist.
 
-**Verified pipeline (dogfooded):** Cursor + Antigravity.
+## Limits
 
-**Install targets:** The installer also writes skill folders for Claude
-(`~/.claude/skills`) and Codex (`~/.codex/skills`). End-to-end
-implement → review on Claude/Codex is **planned / not dogfooded** yet.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).
+- Global install only. There is no per-repo pin.
+- Nothing records which model or tool ran a stage.
+- Self-review overwrites the review files. Cross-review appends. Re-running
+  self-review drops the previous self-review section.
+- Each skill repeats the run-id order. `docs/file-conventions.md` lives only
+  in this repo. It is not copied next to the installed `SKILL.md`.
+- Run ids are supposed to be 10 URL-safe characters. The documented `npx`
+  command downloads a package. The `openssl` fallback can yield fewer than
+  10 characters after filtering.
 
 ## Contributing
 
-Clone, install, and run smoke tests as described in
-[CONTRIBUTING.md](CONTRIBUTING.md). Release history lives in
+See [CONTRIBUTING.md](CONTRIBUTING.md). Release notes are in
 [CHANGELOG.md](CHANGELOG.md).
 
 ## License

@@ -6,9 +6,9 @@
 #
 # Requires: bash >= 3.2 (macOS system bash is fine).
 #
-# Usage:
-#   ./verify.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
-#               [--ref REF] [--sha256 HEX]
+# Usage (clone). A release download is the same script, saved as ./verify.sh.
+#   ./bin/verify.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
+#                   [--ref REF] [--sha256 HEX]
 
 set -euo pipefail
 
@@ -19,6 +19,9 @@ CLI_SHA256=""
 ONLY_TOOLS=""
 ONLY_SKILLS=""
 TEMP_DIR=""
+# Parse loop shifts "$@" away. Remote mode re-execs the extracted script,
+# which must still see --only / --skill.
+ORIG_ARGS=("$@")
 
 usage() {
   cat <<'EOF'
@@ -29,9 +32,9 @@ Prints [OK] / [FAIL] per item. Exit 0 only when every expected item is present.
 
 Requires: bash >= 3.2 (macOS system bash is fine).
 
-Usage:
-  ./verify.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
-              [--ref REF] [--sha256 HEX]
+Usage (clone). A release download is the same script, saved as ./verify.sh.
+  ./bin/verify.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
+                  [--ref REF] [--sha256 HEX]
 EOF
 }
 
@@ -149,13 +152,13 @@ download_and_extract_repo() {
   local temp_dir="$3"
 
   if [[ -z "$ref" ]]; then
-    echo "Error: No release ref specified. Provide --ref <tag> (e.g. --ref v0.1.0) or clone locally." >&2
+    echo "Error: No release ref specified. Provide --ref <tag> (a release tag) or clone locally." >&2
     return 1
   fi
 
   if [[ "$ref" == "main" || "$ref" == "master" || "$ref" == "refs/heads/"* ]]; then
     echo "Error: Remote install from floating ref '$ref' is refused for security." >&2
-    echo "Please specify a tagged release (e.g. --ref v0.1.0) or clone locally." >&2
+    echo "Please specify a tagged release (--ref <tag>) or clone locally." >&2
     return 1
   fi
 
@@ -236,12 +239,25 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
 
-if [[ -f "$SCRIPT_DIR/lib/bootstrap.sh" ]]; then
+# Checkout: this script lives in bin/, repo root is the parent.
+# Copied beside skills/ (tests, older archives): use SCRIPT_DIR.
+REPO_ROOT=""
+if [[ -n "$SCRIPT_DIR" && -d "$SCRIPT_DIR/skills" && -f "$SCRIPT_DIR/targets.conf" ]]; then
+  REPO_ROOT="$SCRIPT_DIR"
+elif [[ -n "$SCRIPT_DIR" && -d "$SCRIPT_DIR/../skills" && -f "$SCRIPT_DIR/../targets.conf" ]]; then
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
+if [[ -n "$REPO_ROOT" && -f "$REPO_ROOT/lib/bootstrap.sh" ]]; then
+  # shellcheck source=../lib/bootstrap.sh
+  source "$REPO_ROOT/lib/bootstrap.sh"
+elif [[ -f "$SCRIPT_DIR/lib/bootstrap.sh" ]]; then
   # shellcheck source=lib/bootstrap.sh
   source "$SCRIPT_DIR/lib/bootstrap.sh"
 fi
 
-if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && (! -n "$SCRIPT_DIR" || ! -d "$SCRIPT_DIR/skills" || ! -f "$SCRIPT_DIR/targets.conf") ]]; then
+# Standalone download, or an explicit --ref / AGENT_RELAY_REF (even from a clone).
+if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && ( -z "$REPO_ROOT" || -n "${CLI_REF:-}" || -n "${AGENT_RELAY_REF:-}" ) ]]; then
   echo "Verifier running in Remote Mode..."
   TARGET_REF="$(resolve_ref "${CLI_REF:-}" "${AGENT_RELAY_REF:-}" "${DEFAULT_REF:-}")"
   TARGET_SHA256="${CLI_SHA256:-${AGENT_RELAY_SHA256:-}}"
@@ -249,13 +265,27 @@ if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && (! -n "$SCRIPT_DIR" || ! -d "$SCRIPT
   TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agent-relay-verify.XXXXXX")"
   download_and_extract_repo "$TARGET_REF" "$TARGET_SHA256" "$TEMP_DIR" >/dev/null
 
+  if [[ -f "$SRC_DIR/bin/verify.sh" ]]; then
+    RELAY_NEXT="$SRC_DIR/bin/verify.sh"
+  elif [[ -f "$SRC_DIR/verify.sh" ]]; then
+    RELAY_NEXT="$SRC_DIR/verify.sh"
+  else
+    echo "Error: verify.sh not found in extracted archive" >&2
+    exit 1
+  fi
+
   export AGENT_RELAY_BOOTSTRAPPED=1
-  "$SRC_DIR/verify.sh" "$@"
+  # bash 3.2 + set -u errors on an empty "${arr[@]}"
+  if [[ ${#ORIG_ARGS[@]} -gt 0 ]]; then
+    "$RELAY_NEXT" "${ORIG_ARGS[@]}"
+  else
+    "$RELAY_NEXT"
+  fi
   exit $?
 fi
 
 echo "Verifier running in Local Mode..."
-SRC_DIR="$SCRIPT_DIR"
+SRC_DIR="$REPO_ROOT"
 
 SKILLS_DIR="$SRC_DIR/skills"
 CONF="$SRC_DIR/targets.conf"

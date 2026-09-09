@@ -2,7 +2,7 @@
 # scripts/sync-bootstrap.sh
 #
 # Synchronizes the bootstrap functions from lib/bootstrap.sh into
-# install.sh, uninstall.sh, and verify.sh between the markers:
+# bin/install.sh, bin/uninstall.sh, and bin/verify.sh between the markers:
 #   # BEGIN BOOTSTRAP
 #   # END BOOTSTRAP
 #
@@ -22,9 +22,9 @@ if [[ ! -f "$LIB_FILE" ]]; then
 fi
 
 TARGETS=(
-  "$ROOT_DIR/install.sh"
-  "$ROOT_DIR/uninstall.sh"
-  "$ROOT_DIR/verify.sh"
+  "$ROOT_DIR/bin/install.sh"
+  "$ROOT_DIR/bin/uninstall.sh"
+  "$ROOT_DIR/bin/verify.sh"
 )
 
 CHECK_ONLY=0

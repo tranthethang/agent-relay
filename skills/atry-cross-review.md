@@ -11,8 +11,9 @@ previous review — it's to catch what a same-family model/tool is likely to mis
 
 ## Run discovery
 
-Resolve the shared run `<id>` before reading or writing artifacts (see
-`docs/file-conventions.md`). Order:
+Resolve the shared run `<id>` before reading or writing artifacts. The same
+rules are in the agent-relay repo at `docs/file-conventions.md`; that file is
+not installed next to this skill. Order:
 
 1. User gave a plan path or run id → use that id
 1. Else read `.agent-relay/CURRENT` (one trimmed line)

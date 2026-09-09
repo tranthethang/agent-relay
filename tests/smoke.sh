@@ -5,9 +5,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-INSTALL="$ROOT/install.sh"
-UNINSTALL="$ROOT/uninstall.sh"
-VERIFY="$ROOT/verify.sh"
+INSTALL="$ROOT/bin/install.sh"
+UNINSTALL="$ROOT/bin/uninstall.sh"
+VERIFY="$ROOT/bin/verify.sh"
 
 FAIL=0
 pass() { echo "PASS: $1"; }
