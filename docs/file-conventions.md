@@ -50,13 +50,14 @@ the branch tip). Do not invent one.
 
 ## Review headings
 
-Self-review creates or overwrites each review file with one section:
+Self-review creates or replaces that day's section in each review file:
 
 ```markdown
 ## Self-Review — YYYY-MM-DD
 ```
 
-Cross-review appends. It must not remove the self-review section:
+If run again on the same day, it replaces only that section. Cross-review
+appends and must not remove the self-review section:
 
 ```markdown
 ## Cross-Review — YYYY-MM-DD
@@ -68,6 +69,63 @@ If `.agent-relay/plan.md` exists and no `plan-*.md` exists, a skill may read
 the unsuffixed set once (`implement-plan.md`, and so on). New writes go to
 `*-<id>.md` and `CURRENT`. Do not create new unsuffixed names.
 
+## Parallel task implementation (optional)
+
+When multiple sub-agents implement tasks of the same run `<id>` concurrently,
+agent-relay supports an opt-in directory format to prevent lost updates on
+`implement-plan-<id>.md`.
+
+### Directory format
+
+Instead of a single hand-edited `implement-plan-<id>.md` file, the run uses a
+directory `.agent-relay/implement-plan-<id>/`:
+
+- `implement-plan-<id>/<task-id>.status` — exactly two lines:
+  ```text
+  status: pending|in-progress|done|skipped (<reason>)
+  desc: <short description>
+  ```
+- `implement-plan-<id>/_meta.md` — free-text notes not tied to one task.
+- `implement-plan-<id>.md` — a generated, read-only rollup file in the standard
+  format (`- [<status>] <task id>: <desc>` per line), regenerated on every state change.
+
+### `task-claim.sh` contract
+
+The script `scripts/task-claim.sh` manages atomic task claiming, status updates,
+and rollup generation:
+
+```bash
+task-claim.sh claim <id> <task-id> <session-tag>
+task-claim.sh update [--session <tag>] <id> <task-id> [<session-tag>] <status> [<reason>]
+task-claim.sh release <id> <task-id>
+task-claim.sh list <id>
+```
+
+- `claim`: Atomically creates `implement-plan-<id>/.lock-<task-id>` (`mkdir` is atomic on POSIX). On success, writes `<session-tag> <ISO8601>` inside it and sets the task's status to `in-progress`. On failure, prints the existing lock's owner + timestamp and exits non-zero. A stale lock older than 2 hours is loudly stolen.
+- `update`: Refuses if the caller's session-tag does not match the lock owner, failing loudly.
+- `release`: Removes the lock directory only, leaving `.status` untouched.
+- `list`: Prints current state of all tasks (`- [<status>] <task-id>: <desc>`).
+- Every state-changing subcommand regenerates the rollup file as its last step.
+
+### Concurrency
+
+| Scenario | Safe? |
+|---|---|
+| Multiple runs (different `<id>`) in parallel | Yes |
+| Multiple sub-agents, same `<id>`, different tasks, via `task-claim.sh` | Yes |
+| Multiple sub-agents, same `<id>`, same task | No — second claim fails loudly |
+| Hand-editing `implement-plan-<id>.md` while parallel mode is active | No — it's generated, gets overwritten |
+
+### Migration
+
+Legacy single-file runs (`implement-plan-<id>.md`) keep working un-migrated in
+the default sequential mode. Run `scripts/task-init.sh <id> --migrate` only when
+switching an existing sequential run to parallel mode. This converts the single
+file into the directory format, preserves all current statuses, and preserves the
+original file as `implement-plan-<id>.md.bak`. Plain `task-init.sh <id>` (no
+`--migrate`) refuses if the legacy rollup file already exists, so sequential
+progress is not overwritten.
+
 ## Notes
 
 - Put the plan at `.agent-relay/plan-<id>.md` and set `CURRENT` before
@@ -78,3 +136,4 @@ the unsuffixed set once (`implement-plan.md`, and so on). New writes go to
 - The id commands in the skills are suggestions. `npx --yes nanoid@5` needs
   network and npm. The `openssl` fallback strips characters and can be shorter
   than 10. Either way, use the same id on every file for that run.
+

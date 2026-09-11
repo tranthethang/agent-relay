@@ -84,3 +84,36 @@ openssl rand -base64 12 | tr -dc 'A-Za-z0-9_-' | head -c 10
 
 1. Do not expand scope beyond the plan. Clarifying an ambiguous step is fine only
    when the plan already implies it; otherwise skip and report.
+
+## Parallel mode
+
+The default behavior above (sequential, "one at a time" on a single shared
+`implement-plan-<id>.md` file) is unchanged. This section applies only when you
+are explicitly invoked in parallel mode across multiple sub-agents (separate
+sessions).
+
+1. **Setup**: Run `scripts/task-init.sh <id>` instead of hand-writing
+   `implement-plan-<id>.md`. (If converting an existing sequential run, use
+   `scripts/task-init.sh <id> --migrate`). This creates the directory
+   `implement-plan-<id>/` and generates the rollup `implement-plan-<id>.md`.
+
+2. **Per sub-agent loop**:
+   - Run `scripts/task-claim.sh list <id>`.
+   - Pick one `pending` task whose stated dependencies (if any) are `done`.
+   - Attempt to claim it with `scripts/task-claim.sh claim <id> <task-id> <session-tag>`.
+   - If the claim fails (another agent already claimed it), pick a different
+     `pending` task or stop if none are available.
+   - Implement only that task's files.
+   - Update the task status with `scripts/task-claim.sh update <id> <task-id> <session-tag> done`
+     (or `skipped (<reason>)`).
+   - Release the lock with `scripts/task-claim.sh release <id> <task-id>`.
+
+3. **File scoping rule in parallel mode**:
+   In addition to not modifying files outside the plan's scope, do not touch
+   any file owned by another task that is still `pending` or `in-progress` under
+   a lock you do not hold. Report the conflict instead of guessing.
+
+4. **Implementation report in parallel mode**:
+   In parallel mode, each sub-agent appends its own dated `### <task-id>` subsection
+   to `.agent-relay/implement-report-<id>.md` rather than overwriting the whole file.
+

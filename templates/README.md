@@ -13,7 +13,10 @@ that happened.
 | File | Runtime name |
 | --- | --- |
 | [`plan.md`](plan.md) | `.agent-relay/plan-<id>.md` |
-| [`implement-plan.md`](implement-plan.md) | `.agent-relay/implement-plan-<id>.md` |
+| [`implement-plan/`](implement-plan/) | `.agent-relay/implement-plan-<id>/` |
 | [`implement-report.md`](implement-report.md) | `.agent-relay/implement-report-<id>.md` |
 | [`review-report.md`](review-report.md) | `.agent-relay/review-report-<id>.md` |
 | [`review-walkthrough.md`](review-walkthrough.md) | `.agent-relay/review-walkthrough-<id>.md` |
+
+Note: The legacy single-file format (`.agent-relay/implement-plan-<id>.md`) is still valid for sequential runs; see [`docs/file-conventions.md`](../docs/file-conventions.md#parallel-task-implementation-optional).
+
