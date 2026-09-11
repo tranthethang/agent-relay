@@ -454,6 +454,15 @@ for tool in "${TOOLS[@]}"; do
   done
 done
 
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "  [dry-run] rm -f $HOME/.agent-relay/scripts/task-*.sh $HOME/.agent-relay/scripts/resolve-task-bin.sh"
+else
+  echo "  rm task scripts under $HOME/.agent-relay/scripts"
+  rm -f "$HOME/.agent-relay/scripts"/task-*.sh \
+    "$HOME/.agent-relay/scripts/resolve-task-bin.sh"
+  rmdir "$HOME/.agent-relay/scripts" 2>/dev/null || true
+  rmdir "$HOME/.agent-relay" 2>/dev/null || true
+fi
 if [[ "$removed" -eq 0 && "$missing" -eq 0 ]]; then
   echo "Nothing to uninstall (filters matched no tool/skill combinations)." >&2
   exit 1

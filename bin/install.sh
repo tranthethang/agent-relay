@@ -568,6 +568,25 @@ for tool in "${TOOLS[@]}"; do
   done
 done
 
+SCRIPTS_DEST="$HOME/.agent-relay/scripts"
+SCRIPTS_TO_INSTALL=(task-claim.sh task-init.sh resolve-task-bin.sh)
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "  [dry-run] Install task scripts to $SCRIPTS_DEST"
+else
+  echo "  Installing task scripts to $SCRIPTS_DEST"
+  mkdir -p "$SCRIPTS_DEST"
+  for _script in "${SCRIPTS_TO_INSTALL[@]}"; do
+    if [[ ! -f "$SRC_DIR/scripts/$_script" ]]; then
+      continue
+    fi
+    if [[ "$NO_CLOBBER" -eq 1 && -e "$SCRIPTS_DEST/$_script" ]]; then
+      echo "  skip (exists): $SCRIPTS_DEST/$_script"
+      continue
+    fi
+    cp "$SRC_DIR/scripts/$_script" "$SCRIPTS_DEST/$_script"
+    chmod +x "$SCRIPTS_DEST/$_script"
+  done
+fi
 if [[ "$installed" -eq 0 && "$skipped" -eq 0 ]]; then
   echo "Nothing to install (filters matched no tool/skill combinations)." >&2
   exit 1
@@ -584,5 +603,6 @@ else
     echo "  ${!dir_var}"
   done
   echo "Tip: run bin/verify.sh (clone) or ./verify.sh (release download) to confirm the install."
+  echo "Tip: parallel scripts live in $SCRIPTS_DEST (override with .agent-relay/scripts/ in a project)."
   echo "Tip: add .agent-relay/ to each project's .gitignore if you do not want relay working files committed."
 fi

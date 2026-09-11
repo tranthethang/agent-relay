@@ -28,8 +28,13 @@ After resolving an id, write/overwrite `.agent-relay/CURRENT` with that id.
 ## Inputs
 
 - Plan file: `.agent-relay/plan-<id>.md` (use its `base:` ref when present)
-- Implementation plan: `.agent-relay/implement-plan-<id>.md`
-- Implementation report: `.agent-relay/implement-report-<id>.md`
+- Implementation plan: `.agent-relay/implement-plan-<id>.md`. If
+  `implement-plan-<id>/` exists, prefer `task-claim.sh list <id>` output
+  over a possibly-stale rollup file.
+- Implementation report: if `implement-report-<id>/` exists, prefer
+  `task-claim.sh report-list <id>` (or read each `<task-id>.md` in that dir)
+  over the generated `implement-report-<id>.md` rollup. Otherwise read
+  `.agent-relay/implement-report-<id>.md`.
 - Current uncommitted changes (`git status` / `git diff`). If the work was
   already committed, diff from the plan's `base:` ref (or ask the user) so you
   still see the full change — not only the latest unstaged hunk.
@@ -71,8 +76,11 @@ After resolving an id, write/overwrite `.agent-relay/CURRENT` with that id.
      explain why — do not silently diverge.
 
 1. Write `.agent-relay/review-report-<id>.md` and
-   `.agent-relay/review-walkthrough-<id>.md`. Create or overwrite each file with
-   a single dated section (use today's date):
+   `.agent-relay/review-walkthrough-<id>.md`. If a `## Self-Review — <today>`
+   section already exists, replace only that section (from its heading to the
+   next `## ` heading or EOF). Otherwise append a new dated section. Never remove
+   `## Cross-Review` sections or Self-Review sections from other dates. Use
+   today's date:
 
    ```markdown
    ## Self-Review — YYYY-MM-DD
