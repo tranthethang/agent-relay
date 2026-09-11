@@ -412,6 +412,18 @@ for tool in "${TOOLS[@]}"; do
   done
 done
 
+# Always verify global scripts regardless of --only / --skill filters.
+for _script in task-claim.sh task-init.sh resolve-task-bin.sh; do
+  _sdest="$HOME/.agent-relay/scripts/$_script"
+  if [[ -x "$_sdest" ]]; then
+    echo "[OK] script '$_script' at $_sdest"
+  else
+    echo "[FAIL] script '$_script' missing or not executable at $_sdest"
+    FAILED=1
+  fi
+  checked=$((checked + 1))
+done
+
 if [[ "$checked" -eq 0 ]]; then
   echo "Nothing to verify (filters matched no tool/skill combinations)." >&2
   exit 1

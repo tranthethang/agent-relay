@@ -2,20 +2,23 @@
 
 [![CI](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml)
 
-Three markdown skills and a bash installer. The skills tell an agent how to
-implement a plan, review that work, and append a second review. The installer
-copies each skill into global skill directories. It does not run the stages,
-pick a model, or talk to any agent runtime.
+Markdown skills plus a bash installer. The skills tell an agent how to implement
+a plan, self-review that work, and append a second review. The installer copies
+those skills into each tool’s global skill directory. Optional shell helpers
+under `~/.agent-relay/scripts/` exist for an experimental parallel-claim layout.
 
-CI checks the installer (local and remote smoke tests). It does not check
-whether an agent follows a skill.
+This repo does **not** run the stages, pick a model, talk to an agent runtime,
+or prove that following the skills improves outcomes. CI checks the installer
+and the task scripts. It does not check whether an agent follows a skill.
 
 ## What this is not
 
 - Not a message bus, orchestrator, or multi-agent runtime. You open a tool and
   invoke a skill yourself.
-- Not a measured result. This repo does not include a recorded run, and it
-  does not show that a second tool catches bugs the first one missed.
+- Not a measured result. There is no recorded pipeline run here, and nothing
+  shows that a second tool catches bugs the first one missed.
+- Not a guarantee that every listed tool loads the installed files the same
+  way. Install only copies files to known paths.
 - Not a format adapter for the current targets. Cursor, Antigravity, Claude,
   and Codex all use `skill-folder`. Install copies `skills/<name>.md` to
   `<tool-dir>/<name>/SKILL.md`. An unused `mdc-flat` writer remains in
@@ -29,17 +32,57 @@ with whatever planning mode you already use, then invoke the skills in order.
 | Order | Skill | What it is expected to do |
 | ----- | ----- | ------------------------- |
 | 1 | *(not in this repo)* | Produce `.agent-relay/plan-<id>.md` |
-| 2 | [`skills/atry-implement.md`](skills/atry-implement.md) | Implement that plan; write `implement-plan-<id>.md` and `implement-report-<id>.md` |
-| 3 | [`skills/atry-self-review.md`](skills/atry-self-review.md) | Review the diff against the plan; overwrite `review-*-<id>.md` with a `Self-Review` section |
+| 2 | [`skills/atry-implement.md`](skills/atry-implement.md) | Implement that plan; write implement-plan / implement-report artifacts |
+| 3 | [`skills/atry-self-review.md`](skills/atry-self-review.md) | Review the diff against the plan; write a dated `Self-Review` section |
 | 4 | [`skills/atry-cross-review.md`](skills/atry-cross-review.md) | Append a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that. |
 
-File names, `CURRENT`, and the run id are specified in
-[`docs/file-conventions.md`](docs/file-conventions.md). Empty templates (not a
+Names, `CURRENT`, and the run id are in
+[`docs/file-conventions.md`](docs/file-conventions.md). Empty outlines (not a
 sample run) are in [`templates/`](templates/).
 
 After you change files under `skills/`, run `./bin/install.sh` again. Installed
 copies are not updated until you do. Default install overwrites the same
 skill files.
+
+## Working files
+
+Skills are instructed to read and write under `.agent-relay/` in the **target**
+repo (the project you are changing), not in this repo. Whether you commit that
+directory is your choice; install only prints a reminder.
+
+Default mode is sequential: one shared `implement-plan-<id>.md` and
+`implement-report-<id>.md`. That is enough for a single agent working through
+tasks one at a time.
+
+## Optional: parallel helpers
+
+If several agents work the **same** run id at once, a single shared markdown
+file for task status tends to lose updates. This repo ships small bash scripts
+that use per-task files and `mkdir` locks instead:
+
+| Script | Role |
+| ------ | ---- |
+| `task-init.sh` | Create or migrate `implement-plan-<id>/` and `implement-report-<id>/` |
+| `task-claim.sh` | Claim / update / release tasks; `report-write` / `report-list` / `report-rollup` |
+| `resolve-task-bin.sh` | Print the absolute path of claim or init |
+
+Install places them in `~/.agent-relay/scripts/`. A project may override with
+`.agent-relay/scripts/` (not a repo-root `./scripts/`). Details and limits:
+[`docs/file-conventions.md`](docs/file-conventions.md#parallel-task-implementation-optional).
+
+Honest limits of this path:
+
+- It serializes **task status** (and per-task report files). It does **not**
+  protect overlapping edits to the same source files.
+- Safe when tasks touch disjoint paths in one worktree, or when each agent has
+  its own worktree/branch and you merge later.
+- Unsafe when two agents edit the same files in one worktree. Use separate
+  worktrees or do not run parallel mode.
+- Experimental. Skill text tells the agent to call the scripts; nothing forces
+  that. Older release tarballs may lack these scripts until you install from a
+  release that includes them.
+
+Most users can ignore this section and stay on sequential files.
 
 ## Install
 
@@ -53,10 +96,10 @@ Requires bash ≥ 3.2. macOS `/bin/bash` is enough. No `sudo`. Writes only under
 | Claude | `~/.claude/skills/<name>/SKILL.md` |
 | Codex | `~/.codex/skills/<name>/SKILL.md` |
 
-Antigravity's global skills path has moved before. `targets.conf` matches the
+Antigravity’s global skills path has moved before. `targets.conf` matches the
 shared `~/.gemini/config/skills` location documented for current Antigravity
 surfaces. If a given app does not load skills from there, the install still
-"succeeds" and the skill will not appear.
+“succeeds” and the skill will not appear.
 
 Re-running install deletes previous copies of these skills at
 `~/.cursor/rules/atry-*.mdc` and the Antigravity legacy dirs listed in
@@ -85,10 +128,10 @@ bash ./install.sh
 ```
 
 The downloaded file is still named `install.sh`. In a clone the same script is
-`bin/install.sh`. The release script has `DEFAULT_REF` set to that tag. It then downloads
-`agent-relay-${REF}.tar.gz`, checks that file against the release `SHA256SUMS`,
-and copies skills from the archive. A checkout of this repo runs in local mode
-and does not download anything.
+`bin/install.sh`. The release script has `DEFAULT_REF` set to that tag. It then
+downloads `agent-relay-${REF}.tar.gz`, checks that file against the release
+`SHA256SUMS`, and copies skills from the archive. A checkout of this repo runs
+in local mode and does not download anything.
 
 `--ignore-missing` skips `SHA256SUMS` entries you did not download (the
 tarball, `verify.sh`, `uninstall.sh`). It still fails if `install.sh` itself
@@ -123,8 +166,9 @@ fi
 bash ./uninstall.sh
 ```
 
-`verify.sh` checks that the installed `SKILL.md` files match the release
-archive. It does not check that a tool loads them.
+`verify.sh` checks that installed `SKILL.md` files and the three task scripts
+exist (and that skills match the release archive in remote mode). It does not
+check that a tool loads the skills, or that an agent will call the scripts.
 
 ### From a clone
 
@@ -165,14 +209,15 @@ clone. It does not install the working tree. Flags such as `--only` and
 ```
 
 Unknown tool or skill names are rejected. Without `--no-clobber`, install
-overwrites existing copies of these skills, including local edits.
+overwrites existing copies of these skills, including local edits. Task scripts
+are installed the same way (per-file `--no-clobber`).
 
 ```bash
 make test
 ```
 
-runs `tests/smoke.sh` and `tests/smoke-remote.sh`. Both are offline.
-`smoke-remote.sh` stubs `curl` and uses `tests/fixtures/`.
+runs `tests/smoke.sh`, `tests/tasks.sh`, and `tests/smoke-remote.sh`. All are
+offline. `smoke-remote.sh` stubs `curl` and uses `tests/fixtures/`.
 
 ## Adding a tool
 
@@ -187,15 +232,19 @@ tool. Skill text assumes a git checkout, and it refers to `AGENTS.md` /
 
 ## Limits
 
-- Global install only. There is no per-repo pin.
+- Global install only. There is no per-repo pin of skill text (only an optional
+  per-repo override of the parallel **scripts**).
 - Nothing records which model or tool ran a stage.
-- Self-review overwrites the review files. Cross-review appends. Re-running
-  self-review drops the previous self-review section.
-- Each skill repeats the run-id order. `docs/file-conventions.md` lives only
+- Self-review overwrites that day’s self-review section. Cross-review appends.
+  Re-running self-review on the same day replaces the previous self-review
+  section for that day.
+- Each skill repeats the run-id rules. `docs/file-conventions.md` lives only
   in this repo. It is not copied next to the installed `SKILL.md`.
 - Run ids are supposed to be 10 URL-safe characters. The documented `npx`
   command downloads a package. The `openssl` fallback can yield fewer than
   10 characters after filtering.
+- Parallel claim does not create worktrees, merge branches, or detect file
+  overlap. That remains manual.
 
 ## Contributing
 

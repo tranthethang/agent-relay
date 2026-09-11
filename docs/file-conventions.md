@@ -7,8 +7,8 @@ in this repo enforces the names except the skill text.
 | Purpose | Path | Written by |
 | --- | --- | --- |
 | Plan | `.agent-relay/plan-<id>.md` | You, or a planning tool. Not a skill in this repo. |
-| Task list | `.agent-relay/implement-plan-<id>.md` | `atry-implement` |
-| Implement notes | `.agent-relay/implement-report-<id>.md` | `atry-implement` |
+| Task list | `.agent-relay/implement-plan-<id>.md` (or `implement-plan-<id>/` in parallel mode) | `atry-implement` |
+| Implement notes | `.agent-relay/implement-report-<id>.md` (or `implement-report-<id>/` in parallel mode) | `atry-implement` |
 | Review report | `.agent-relay/review-report-<id>.md` | `atry-self-review` creates or overwrites. `atry-cross-review` appends. |
 | Review walkthrough | `.agent-relay/review-walkthrough-<id>.md` | Same as the review report. |
 | Active id | `.agent-relay/CURRENT` | Any stage after it resolves or creates an id. |
@@ -71,48 +71,90 @@ the unsuffixed set once (`implement-plan.md`, and so on). New writes go to
 
 ## Parallel task implementation (optional)
 
-When multiple sub-agents implement tasks of the same run `<id>` concurrently,
-agent-relay supports an opt-in directory format to prevent lost updates on
-`implement-plan-<id>.md`.
+Default implement/review skills still use one shared markdown file for the
+plan checklist and one for the report. That is fine for a single agent.
+
+When several agents update the **same** run `<id>` at once, those shared files
+tend to lose updates. An **opt-in** directory layout plus small bash helpers
+avoid that for **status and per-task notes only**. They do not schedule agents,
+create worktrees, or protect overlapping source-file edits. See
+[Working-tree isolation](#working-tree-isolation).
 
 ### Directory format
 
-Instead of a single hand-edited `implement-plan-<id>.md` file, the run uses a
-directory `.agent-relay/implement-plan-<id>/`:
+Instead of hand-editing a single `implement-plan-<id>.md` or
+`implement-report-<id>.md`, parallel mode uses
+`.agent-relay/implement-plan-<id>/` and `.agent-relay/implement-report-<id>/`:
 
-- `implement-plan-<id>/<task-id>.status` — exactly two lines:
+- `implement-plan-<id>/<task-id>.status` — three lines:
   ```text
   status: pending|in-progress|done|skipped (<reason>)
   desc: <short description>
+  deps: <task-id-1> <task-id-2>
   ```
+  `deps:` is optional; omit or leave empty for no dependencies. Tokens are
+  whitespace-separated task ids in the same plan.
 - `implement-plan-<id>/_meta.md` — free-text notes not tied to one task.
-- `implement-plan-<id>.md` — a generated, read-only rollup file in the standard
-  format (`- [<status>] <task id>: <desc>` per line), regenerated on every state change.
+- `implement-plan-<id>.md` — a generated, read-only rollup file.
+- `implement-report-<id>/<task-id>.md` — execution notes for a specific task.
+- `implement-report-<id>/_meta.md` — shared architectural notes.
+- `implement-report-<id>.md` — a generated, read-only rollup file of execution notes.
 
 ### `task-claim.sh` contract
 
 The script `scripts/task-claim.sh` manages atomic task claiming, status updates,
-and rollup generation:
+dependency validation, and rollup generation:
 
 ```bash
 task-claim.sh claim <id> <task-id> <session-tag>
 task-claim.sh update [--session <tag>] <id> <task-id> [<session-tag>] <status> [<reason>]
 task-claim.sh release <id> <task-id>
 task-claim.sh list <id>
+task-claim.sh rollup <id>
+task-claim.sh report-write <id> <task-id> <path-or-->
+task-claim.sh report-list <id>
+task-claim.sh report-rollup <id>
 ```
 
-- `claim`: Atomically creates `implement-plan-<id>/.lock-<task-id>` (`mkdir` is atomic on POSIX). On success, writes `<session-tag> <ISO8601>` inside it and sets the task's status to `in-progress`. On failure, prints the existing lock's owner + timestamp and exits non-zero. A stale lock older than 2 hours is loudly stolen.
-- `update`: Refuses if the caller's session-tag does not match the lock owner, failing loudly.
+- `claim`: Atomically creates `implement-plan-<id>/.lock-<task-id>` (`mkdir` is atomic on POSIX). Verifies every `deps:` entry is `done` before locking. On success, writes `<session-tag> <ISO8601>` inside the lock and sets status to `in-progress`. On failure, prints the existing lock's owner + timestamp and exits non-zero. A stale lock older than 2 hours is loudly stolen.
+- `update`: Refuses if the caller's session-tag does not match the lock owner, failing loudly. Preserves the `deps:` line.
 - `release`: Removes the lock directory only, leaving `.status` untouched.
 - `list`: Prints current state of all tasks (`- [<status>] <task-id>: <desc>`).
-- Every state-changing subcommand regenerates the rollup file as its last step.
+- `report-write`: Writes stdin (`-`) or a file to `implement-report-<id>/<task-id>.md` and regenerates the report rollup under `.lock-report-rollup`.
+- `report-list`: Prints paths of per-task report files in plan order (authoritative for review skills).
+- `report-rollup`: Regenerates `implement-report-<id>.md` from `_meta.md` + per-task files.
+- Every state-changing plan subcommand regenerates the plan rollup as its last step.
+
+### Script resolution
+
+Parallel helpers resolve in this order (do **not** use a repo-root `./scripts/`
+override — that collides with application scripts):
+
+1. `.agent-relay/scripts/task-claim.sh` (and `task-init.sh`) in the project
+2. Else `$HOME/.agent-relay/scripts/...` (installed by `bin/install.sh`)
+3. Else fail — run `bin/install.sh`
+
+Use `resolve-task-bin.sh claim|init` (same search order) to print the absolute
+path. Prefer reading `implement-report-<id>/` (or `report-list`) over the
+generated `implement-report-<id>.md` rollup when the directory exists.
+
+### Working-tree isolation
+
+The claim protocol serializes **task status**, not file contents:
+
+| Scenario | Safe? |
+|---|---|
+| Different tasks, **disjoint** file sets, same worktree | Yes (protocol + skill scoping) |
+| Different tasks, overlapping files, same worktree | No — git/content races; claim does not protect |
+| One agent per git worktree/branch, then merge | Yes (recommended when files overlap) |
+| Multiple features (different `<id>`) thrashing `CURRENT` | Soft conflict — pass an explicit id; do not rely on `CURRENT` for multi-feature work |
 
 ### Concurrency
 
 | Scenario | Safe? |
 |---|---|
 | Multiple runs (different `<id>`) in parallel | Yes |
-| Multiple sub-agents, same `<id>`, different tasks, via `task-claim.sh` | Yes |
+| Multiple sub-agents, same `<id>`, different tasks, via `task-claim.sh` | Yes (for status/report; see isolation above for files) |
 | Multiple sub-agents, same `<id>`, same task | No — second claim fails loudly |
 | Hand-editing `implement-plan-<id>.md` while parallel mode is active | No — it's generated, gets overwritten |
 

@@ -14,6 +14,9 @@ Usage:
   task-claim.sh release <id> <task-id>
   task-claim.sh list <id>
   task-claim.sh rollup <id>
+  task-claim.sh report-write <id> <task-id> <path-or-->
+  task-claim.sh report-list <id>
+  task-claim.sh report-rollup <id>
 EOF
   exit 1
 }
@@ -32,6 +35,7 @@ resolve_paths() {
 
   PLAN_DIR="$base_dir/implement-plan-$id"
   ROLLUP_FILE="$base_dir/implement-plan-$id.md"
+  BASE_DIR="$base_dir"
 }
 
 get_lock_age() {
@@ -135,6 +139,65 @@ regenerate_rollup() {
   rmdir "$rollup_lock" 2>/dev/null || rm -rf "$rollup_lock"
 }
 
+regenerate_report_rollup() {
+  local report_dir="$1"
+  local rollup_file="$2"
+  local id="$3"
+
+  local rollup_lock="$report_dir/.lock-report-rollup"
+  local lock_waited=0
+  while ! mkdir "$rollup_lock" 2>/dev/null; do
+    sleep 0.05
+    lock_waited=$((lock_waited + 1))
+    if [[ "$lock_waited" -ge 100 ]]; then
+      rm -rf "$rollup_lock"
+      lock_waited=0
+    fi
+  done
+
+  local tmp_rollup="$report_dir/.rollup-tmp-$$.md"
+  {
+    echo "# implement-report ($id)"
+    echo ""
+    if [[ -f "$report_dir/_meta.md" && -s "$report_dir/_meta.md" ]]; then
+      cat "$report_dir/_meta.md"
+      echo ""
+    fi
+
+    # Read tasks in order from .order if it exists in the plan dir
+    # To do that, we need the plan dir. Let's find it.
+    local base_dir
+    base_dir="$(dirname "$report_dir")"
+    local plan_dir="$base_dir/implement-plan-$id"
+    if [[ -d "$plan_dir" ]]; then
+      while IFS= read -r tid || [[ -n "$tid" ]]; do
+        [[ -n "$tid" ]] || continue
+        if [[ -f "$report_dir/$tid.md" ]]; then
+          echo "### $tid"
+          echo ""
+          cat "$report_dir/$tid.md"
+          echo ""
+        fi
+      done < <(get_ordered_tasks "$plan_dir")
+    else
+      # Fallback: just list .md files in alphabetical order
+      for f in "$report_dir"/*.md; do
+        [[ -f "$f" ]] || continue
+        local fname="${f##*/}"
+        [[ "$fname" == "_meta.md" ]] && continue
+        [[ "$fname" == .rollup* ]] && continue
+        local tid="${fname%.md}"
+        echo "### $tid"
+        echo ""
+        cat "$f"
+        echo ""
+      done
+    fi
+  } > "$tmp_rollup"
+
+  mv -f "$tmp_rollup" "$rollup_file"
+  rmdir "$rollup_lock" 2>/dev/null || rm -rf "$rollup_lock"
+}
 list_tasks() {
   local plan_dir="$1"
   while IFS= read -r tid || [[ -n "$tid" ]]; do
@@ -179,6 +242,23 @@ case "$SUBCMD" in
       exit 1
     }
 
+    # Check dependencies before claiming
+    DEPS="$(grep -E '^deps:' "$TASK_FILE" 2>/dev/null | head -n 1 | sed -e 's/^deps:[[:space:]]*//' || true)"
+    if [[ -n "$DEPS" ]]; then
+      for dep in $DEPS; do
+        dep_file="$PLAN_DIR/$dep.status"
+        if [[ ! -f "$dep_file" ]]; then
+          echo "Error: dependency '$dep' for task '$TASK_ID' does not exist." >&2
+          exit 1
+        fi
+        dep_status="$(grep -E '^status:' "$dep_file" 2>/dev/null | head -n 1 | sed -e 's/^status:[[:space:]]*//' || true)"
+        if [[ "$dep_status" != done* ]]; then
+          echo "Error: dependency '$dep' is not done (status: $dep_status). Cannot claim '$TASK_ID'." >&2
+          exit 1
+        fi
+      done
+    fi
+
     LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
     ISO_NOW="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     EPOCH_NOW="$(date +%s)"
@@ -219,8 +299,13 @@ case "$SUBCMD" in
     fi
 
     # Update status to in-progress
-    DESC="$(grep -E '^desc:' "$TASK_FILE" | head -n 1 | sed -e 's/^desc:[[:space:]]*//')"
-    printf 'status: in-progress\ndesc: %s\n' "$DESC" > "$TASK_FILE.tmp"
+    DESC="$(grep -E '^desc[[:space:]]*:' "$TASK_FILE" 2>/dev/null | head -n 1 | sed -e 's/^desc[[:space:]]*:[[:space:]]*//' || true)"
+    DEPS="$(grep -E '^deps[[:space:]]*:' "$TASK_FILE" 2>/dev/null | head -n 1 | sed -e 's/^deps[[:space:]]*:[[:space:]]*//' || true)"
+    if grep -q -E '^deps[[:space:]]*:' "$TASK_FILE" 2>/dev/null; then
+      printf 'status: in-progress\ndesc: %s\ndeps: %s\n' "$DESC" "$DEPS" > "$TASK_FILE.tmp"
+    else
+      printf 'status: in-progress\ndesc: %s\n' "$DESC" > "$TASK_FILE.tmp"
+    fi
     mv -f "$TASK_FILE.tmp" "$TASK_FILE"
 
     regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
@@ -298,8 +383,13 @@ case "$SUBCMD" in
       FINAL_STATUS="$ARG_STATUS ($REASON)"
     fi
 
-    DESC="$(grep -E '^desc:' "$TASK_FILE" | head -n 1 | sed -e 's/^desc:[[:space:]]*//')"
-    printf 'status: %s\ndesc: %s\n' "$FINAL_STATUS" "$DESC" > "$TASK_FILE.tmp"
+    DESC="$(grep -E '^desc[[:space:]]*:' "$TASK_FILE" 2>/dev/null | head -n 1 | sed -e 's/^desc[[:space:]]*:[[:space:]]*//' || true)"
+    DEPS="$(grep -E '^deps[[:space:]]*:' "$TASK_FILE" 2>/dev/null | head -n 1 | sed -e 's/^deps[[:space:]]*:[[:space:]]*//' || true)"
+    if grep -q -E '^deps[[:space:]]*:' "$TASK_FILE" 2>/dev/null; then
+      printf 'status: %s\ndesc: %s\ndeps: %s\n' "$FINAL_STATUS" "$DESC" "$DEPS" > "$TASK_FILE.tmp"
+    else
+      printf 'status: %s\ndesc: %s\n' "$FINAL_STATUS" "$DESC" > "$TASK_FILE.tmp"
+    fi
     mv -f "$TASK_FILE.tmp" "$TASK_FILE"
 
     regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
@@ -334,6 +424,68 @@ case "$SUBCMD" in
     list_tasks "$PLAN_DIR"
     ;;
 
+  report-write)
+    [[ $# -eq 3 ]] || usage
+    ID="$1"
+    TASK_ID="$2"
+    IN_FILE="$3"
+
+    resolve_paths "$ID"
+    report_dir="$BASE_DIR/implement-report-$ID"
+    mkdir -p "$report_dir"
+
+    if [[ "$IN_FILE" == "-" ]]; then
+      cat > "$report_dir/$TASK_ID.md"
+    else
+      cp "$IN_FILE" "$report_dir/$TASK_ID.md"
+    fi
+
+    regenerate_report_rollup "$report_dir" "$BASE_DIR/implement-report-$ID.md" "$ID"
+    ;;
+
+  report-list)
+    [[ $# -eq 1 ]] || usage
+    ID="$1"
+
+    resolve_paths "$ID"
+    report_dir="$BASE_DIR/implement-report-$ID"
+    [[ -d "$report_dir" ]] || {
+      echo "Error: report directory '$report_dir' does not exist." >&2
+      exit 1
+    }
+
+    plan_dir="$BASE_DIR/implement-plan-$ID"
+    if [[ -d "$plan_dir" ]]; then
+      while IFS= read -r tid || [[ -n "$tid" ]]; do
+        [[ -n "$tid" ]] || continue
+        if [[ -f "$report_dir/$tid.md" ]]; then
+          echo "$report_dir/$tid.md"
+        fi
+      done < <(get_ordered_tasks "$plan_dir")
+    else
+      for f in "$report_dir"/*.md; do
+        [[ -f "$f" ]] || continue
+        fname="${f##*/}"
+        [[ "$fname" == "_meta.md" ]] && continue
+        [[ "$fname" == .rollup* ]] && continue
+        echo "$f"
+      done
+    fi
+    ;;
+
+  report-rollup)
+    [[ $# -eq 1 ]] || usage
+    ID="$1"
+
+    resolve_paths "$ID"
+    report_dir="$BASE_DIR/implement-report-$ID"
+    [[ -d "$report_dir" ]] || {
+      echo "Error: report directory '$report_dir' does not exist." >&2
+      exit 1
+    }
+
+    regenerate_report_rollup "$report_dir" "$BASE_DIR/implement-report-$ID.md" "$ID"
+    ;;
   rollup)
     [[ $# -eq 1 ]] || usage
     ID="$1"

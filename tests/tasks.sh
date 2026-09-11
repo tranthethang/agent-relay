@@ -280,6 +280,117 @@ done
   pass "concurrent different-task claims: rollup consistent (5 iters)" || \
   fail "concurrent different-task claims: rollup lost updates ($diff_lost/5)"
 
+# 10. deps: dependency check during claim
+cat <<'EOF' > .agent-relay/plan-deps.md
+base: main
+id: deps
+
+## Tasks
+
+1. **Task A.** First task
+2. **Task B.** Depends on A (deps: T1)
+EOF
+"$TASK_INIT" deps >/dev/null
+grep -q '^deps: T1$' .agent-relay/implement-plan-deps/T2.status && \
+  pass "init writes deps: into .status" || \
+  fail "init writes deps: into .status (got: $(tr '\n' ' ' < .agent-relay/implement-plan-deps/T2.status))"
+# Claim T2 -> should fail because T1 is pending
+if "$TASK_CLAIM" claim deps T2 worker >/dev/null 2>&1; then
+  fail "claim T2 should fail when T1 is pending"
+else
+  pass "claim T2 fails when T1 is pending"
+fi
+# Finish T1
+"$TASK_CLAIM" claim deps T1 worker >/dev/null
+"$TASK_CLAIM" update deps T1 worker done >/dev/null
+# Claim T2 -> should succeed
+if "$TASK_CLAIM" claim deps T2 worker >/dev/null; then
+  pass "claim T2 succeeds when T1 is done"
+else
+  fail "claim T2 should succeed when T1 is done"
+fi
+# deps preserved after update
+grep -q '^deps: T1$' .agent-relay/implement-plan-deps/T2.status && \
+  pass "claim preserves deps: line" || \
+  fail "claim preserves deps: line"
+
+# 11. report-write / report-list / report-rollup
+rm -rf .agent-relay/implement-plan-r1 .agent-relay/implement-plan-r1.md \
+  .agent-relay/implement-report-r1 .agent-relay/implement-report-r1.md \
+  .agent-relay/plan-r1.md
+cat <<'PLAN' > .agent-relay/plan-r1.md
+## Tasks
+- [ ] rT1: Report task 1
+- [ ] rT2: Report task 2
+PLAN
+"$TASK_INIT" r1 >/dev/null
+
+echo "report 1 content" | "$TASK_CLAIM" report-write r1 rT1 -
+[[ -f .agent-relay/implement-report-r1/rT1.md ]] && \
+  pass "report-write creates file from stdin" || \
+  fail "report-write creates file from stdin"
+
+echo "report 2 content" > "$T/rt2.txt"
+"$TASK_CLAIM" report-write r1 rT2 "$T/rt2.txt"
+[[ -f .agent-relay/implement-report-r1/rT2.md ]] && \
+  pass "report-write creates file from path" || \
+  fail "report-write creates file from path"
+
+rlist="$("$TASK_CLAIM" report-list r1)"
+echo "$rlist" | grep -q 'rT1.md' && echo "$rlist" | grep -q 'rT2.md' && \
+  pass "report-list shows tasks" || \
+  fail "report-list shows tasks ($rlist)"
+
+rollup="$(cat .agent-relay/implement-report-r1.md)"
+echo "$rollup" | grep -q 'report 1 content' && echo "$rollup" | grep -q 'report 2 content' && \
+  pass "report-write updates rollup" || \
+  fail "report-write updates rollup"
+
+# Concurrent report-write should not lose updates
+report_lost=0
+for i in 1 2 3 4 5; do
+  rm -f .agent-relay/implement-report-r1/rT1.md .agent-relay/implement-report-r1/rT2.md \
+    .agent-relay/implement-report-r1.md
+  echo "concurrent-a-$i" | "$TASK_CLAIM" report-write r1 rT1 - &
+  pid_a=$!
+  echo "concurrent-b-$i" | "$TASK_CLAIM" report-write r1 rT2 - &
+  pid_b=$!
+  wait $pid_a || true
+  wait $pid_b || true
+  if ! grep -q "concurrent-a-$i" .agent-relay/implement-report-r1.md || \
+     ! grep -q "concurrent-b-$i" .agent-relay/implement-report-r1.md; then
+    report_lost=$((report_lost + 1))
+  fi
+done
+[[ "$report_lost" -eq 0 ]] && \
+  pass "concurrent report-write: rollup consistent (5 iters)" || \
+  fail "concurrent report-write: rollup lost updates ($report_lost/5)"
+
+# 12. migrate legacy report file -> dir
+rm -rf .agent-relay/implement-plan-m2 .agent-relay/implement-plan-m2.md \
+  .agent-relay/implement-report-m2 .agent-relay/implement-report-m2.md \
+  .agent-relay/implement-plan-m2.md.bak .agent-relay/implement-report-m2.md.bak
+cat <<'LEGACY' > .agent-relay/implement-plan-m2.md
+- [done] m1: Task 1
+- [ ] m2: Task 2
+LEGACY
+cat <<'LEGACY_REPORT' > .agent-relay/implement-report-m2.md
+# implement-report (m2)
+Some legacy text.
+LEGACY_REPORT
+
+"$TASK_INIT" --migrate m2 >/dev/null
+
+[[ -d .agent-relay/implement-report-m2 ]] && \
+  pass "migrate creates report dir" || \
+  fail "migrate creates report dir"
+grep -q 'Some legacy text' .agent-relay/implement-report-m2/_meta.md && \
+  pass "migrate moves legacy report into _meta.md" || \
+  fail "migrate moves legacy report into _meta.md"
+[[ -f .agent-relay/implement-report-m2.md.bak ]] && \
+  pass "migrate backs up legacy report" || \
+  fail "migrate backs up legacy report"
+
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL TASK TESTS PASSED"
 else

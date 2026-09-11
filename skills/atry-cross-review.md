@@ -29,9 +29,12 @@ After resolving an id, write/overwrite `.agent-relay/CURRENT` with that id.
 
 - Plan file: `.agent-relay/plan-<id>.md`
 - Implementation plan: `.agent-relay/implement-plan-<id>.md`. If
-  `implement-plan-<id>/` exists, prefer `scripts/task-claim.sh list <id>` output
+  `implement-plan-<id>/` exists, prefer `task-claim.sh list <id>` output
   over a possibly-stale rollup file.
-- Implementation report: `.agent-relay/implement-report-<id>.md`
+- Implementation report: if `implement-report-<id>/` exists, prefer
+  `task-claim.sh report-list <id>` (or read each `<task-id>.md` in that dir)
+  over the generated `implement-report-<id>.md` rollup. Otherwise read
+  `.agent-relay/implement-report-<id>.md`.
 - Prior review report: `.agent-relay/review-report-<id>.md`
 - Prior review walkthrough: `.agent-relay/review-walkthrough-<id>.md`
 - Full diff from the plan's `base:` git ref to the current tree. If `base:` is

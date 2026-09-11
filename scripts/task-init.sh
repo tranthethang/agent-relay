@@ -53,6 +53,8 @@ fi
 PLAN_DIR="$BASE_DIR/implement-plan-$ID"
 ROLLUP_FILE="$BASE_DIR/implement-plan-$ID.md"
 PLAN_FILE="$BASE_DIR/plan-$ID.md"
+REPORT_DIR="$BASE_DIR/implement-report-$ID"
+REPORT_ROLLUP_FILE="$BASE_DIR/implement-report-$ID.md"
 
 if [[ "$MIGRATE" -eq 1 ]]; then
   # Migration mode
@@ -88,7 +90,7 @@ if [[ "$MIGRATE" -eq 1 ]]; then
       desc="$(echo "$desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
       echo "$tid" >> "$ORDER_TMP"
-      printf 'status: %s\ndesc: %s\n' "$status" "$desc" > "$PLAN_DIR/$tid.status"
+      printf 'status: %s\ndesc: %s\ndeps: \n' "$status" "$desc" > "$PLAN_DIR/$tid.status"
     else
       echo "$line" >> "$META_TMP"
     fi
@@ -110,6 +112,16 @@ if [[ "$MIGRATE" -eq 1 ]]; then
   # Regenerate rollup
   "$CLAIM_SH" rollup "$ID"
   echo "Migrated '$ROLLUP_FILE' -> '$PLAN_DIR/' (backup saved to '$ROLLUP_FILE.bak')"
+
+  # Migrate report if exists
+  if [[ -f "$REPORT_ROLLUP_FILE" && ! -d "$REPORT_DIR" ]]; then
+    mkdir -p "$REPORT_DIR"
+    # Basic migration: move whole body into _meta.md
+    cp "$REPORT_ROLLUP_FILE" "$REPORT_DIR/_meta.md"
+    mv "$REPORT_ROLLUP_FILE" "$REPORT_ROLLUP_FILE.bak"
+    "$CLAIM_SH" report-rollup "$ID"
+    echo "Migrated '$REPORT_ROLLUP_FILE' -> '$REPORT_DIR/' (backup saved to '$REPORT_ROLLUP_FILE.bak')"
+  fi
 
 else
   # Init from plan
@@ -173,9 +185,17 @@ else
       num="${BASH_REMATCH[1]}"
       rest="${BASH_REMATCH[2]}"
       tid="T$num"
-      desc="$(echo "$rest" | sed -e 's/^\*\*//' -e 's/\*\*[[:space:]]*[:-]\{0,1\}[[:space:]]*/: /' -e 's/: :/: /' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+      desc="$(echo "$rest" | sed -e 's/^\*\*//' -e 's/\.\*\*/\*\*/' -e 's/\*\*[[:space:]]*[:-]\{0,1\}[[:space:]]*/: /' -e 's/: :/: /' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+      deps=""
+      re='[[:space:]]*\(?deps:[[:space:]]*([^)]+)\)?$'
+      if [[ "$desc" =~ $re ]]; then
+        deps="${BASH_REMATCH[1]}"
+        desc="${desc%%${BASH_REMATCH[0]}}"
+        desc="$(echo "$desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        deps="$(echo "$deps" | sed -e 's/,/ /g' | xargs)"
+      fi
       echo "$tid" >> "$ORDER_TMP"
-      printf 'status: pending\ndesc: %s\n' "$desc" > "$PLAN_DIR/$tid.status"
+      printf 'status: pending\ndesc: %s\ndeps: %s\n' "$desc" "$deps" > "$PLAN_DIR/$tid.status"
       found_count=$((found_count + 1))
     elif [[ "$line" =~ ^[[:space:]]*-[[:space:]]*\[([^]]*)\][[:space:]]*([^:]+):[[:space:]]*(.*)$ ]]; then
       # Format: - [pending] T1: desc
@@ -184,15 +204,27 @@ else
       desc="${BASH_REMATCH[3]}"
       tid="$(echo "$tid" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
       desc="$(echo "$desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+      deps=""
+      re='[[:space:]]*\(?deps:[[:space:]]*([^)]+)\)?$'
+      if [[ "$desc" =~ $re ]]; then
+        deps="${BASH_REMATCH[1]}"
+        desc="${desc%%${BASH_REMATCH[0]}}"
+        desc="$(echo "$desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        deps="$(echo "$deps" | sed -e 's/,/ /g' | xargs)"
+      fi
       [[ -n "$s" ]] || s="pending"
       echo "$tid" >> "$ORDER_TMP"
-      printf 'status: %s\ndesc: %s\n' "$s" "$desc" > "$PLAN_DIR/$tid.status"
+      printf 'status: %s\ndesc: %s\ndeps: %s\n' "$s" "$desc" "$deps" > "$PLAN_DIR/$tid.status"
       found_count=$((found_count + 1))
     fi
   done < "$PLAN_FILE"
 
   mv -f "$ORDER_TMP" "$PLAN_DIR/.order"
 
+  mkdir -p "$REPORT_DIR"
+  : > "$REPORT_DIR/_meta.md"
+
   "$CLAIM_SH" rollup "$ID"
-  echo "Initialized '$PLAN_DIR/' with $found_count task(s)."
+  "$CLAIM_SH" report-rollup "$ID"
+  echo "Initialized '$PLAN_DIR/' and '$REPORT_DIR/' with $found_count task(s)."
 fi

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Experimental parallel task execution via `task-init.sh` / `task-claim.sh`,
+  installed to `~/.agent-relay/scripts/` (override with `.agent-relay/scripts/`).
+- `resolve-task-bin.sh` to locate claim/init binaries.
+- Optional `deps:` on per-task `.status` files; `claim` refuses unmet deps.
+- Append-safe `implement-report-<id>/` per-task reports with `report-write` /
+  `report-list` / `report-rollup` (rollup file is generated only).
+- Working-tree isolation notes and script resolution order in
+  `docs/file-conventions.md`.
+
+### Changed
+
+- Release tarball includes `scripts/` and `templates/`.
+- Review skills prefer `implement-report-<id>/` (via `report-list`) over the
+  rollup when the directory exists.
+- `atry-implement` parallel mode uses `report-write` instead of appending a
+  shared report file.
+- README reframed: sequential path first; parallel helpers documented as
+  optional/experimental with explicit isolation limits. Smoke coverage for
+  script install, `resolve-task-bin` override, and `--no-clobber` per-file
+  restore.
+
 ### Removed
 
 - Python / uv / mdformat toolchain (`pyproject.toml`, `uv.lock`, `.python-version`, `make format`). Nothing in CI used it.

@@ -61,6 +61,8 @@ mkdir -p "$TARGET_STAGE"
 # Copy required repo contents into target stage
 cp -R "$ROOT_DIR/skills" "$TARGET_STAGE/"
 cp "$ROOT_DIR/targets.conf" "$TARGET_STAGE/"
+cp -R "$ROOT_DIR/templates" "$TARGET_STAGE/"
+cp -R "$ROOT_DIR/scripts" "$TARGET_STAGE/"
 cp -R "$ROOT_DIR/lib" "$TARGET_STAGE/"
 mkdir -p "$TARGET_STAGE/bin"
 cp "$ROOT_DIR/bin/install.sh" "$TARGET_STAGE/bin/"

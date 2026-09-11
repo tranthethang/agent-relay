@@ -48,6 +48,61 @@ echo legacy > "$HOME/.cursor/rules/atry-implement.mdc"
 
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
 
+# Parallel task scripts install under ~/.agent-relay/scripts/
+[[ -x "$HOME/.agent-relay/scripts/task-claim.sh" ]] && pass "scripts task-claim" || fail "scripts task-claim"
+[[ -x "$HOME/.agent-relay/scripts/task-init.sh" ]] && pass "scripts task-init" || fail "scripts task-init"
+[[ -x "$HOME/.agent-relay/scripts/resolve-task-bin.sh" ]] && pass "scripts resolve-task-bin" || fail "scripts resolve-task-bin"
+[[ ! -e "$HOME/.agent-relay/scripts/build-release-assets.sh" ]] && \
+  pass "scripts omit release builder" || \
+  fail "scripts omit release builder"
+
+# resolve-task-bin: global path, then project override
+resolved="$("$HOME/.agent-relay/scripts/resolve-task-bin.sh" claim)"
+case "$resolved" in
+  */.agent-relay/scripts/task-claim.sh)
+    pass "resolve-task-bin global"
+    ;;
+  *)
+    fail "resolve-task-bin global (got: $resolved)"
+    ;;
+esac
+
+PROJ="$T/proj-override"
+mkdir -p "$PROJ/.agent-relay/scripts"
+printf '%s\n' '#!/usr/bin/env bash' 'echo override-claim' > "$PROJ/.agent-relay/scripts/task-claim.sh"
+chmod +x "$PROJ/.agent-relay/scripts/task-claim.sh"
+cp "$HOME/.agent-relay/scripts/resolve-task-bin.sh" "$PROJ/.agent-relay/scripts/resolve-task-bin.sh"
+ov="$(
+  cd "$PROJ"
+  ./.agent-relay/scripts/resolve-task-bin.sh claim
+)"
+# Compare by suffix so /var vs /private/var does not flake on macOS.
+case "$ov" in
+  */proj-override/.agent-relay/scripts/task-claim.sh)
+    pass "resolve-task-bin project override"
+    ;;
+  *)
+    fail "resolve-task-bin project override (got: $ov)"
+    ;;
+esac
+
+# verify fails if a required script is removed
+rm -f "$HOME/.agent-relay/scripts/task-claim.sh"
+if "$VERIFY" >/dev/null 2>&1; then fail "verify fails without task-claim"; else pass "verify fails without task-claim"; fi
+
+# --no-clobber restores a missing script without overwriting an existing one
+echo KEEP > "$HOME/.agent-relay/scripts/task-init.sh"
+chmod +x "$HOME/.agent-relay/scripts/task-init.sh"
+"$INSTALL" --only cursor --no-clobber >/dev/null
+[[ -x "$HOME/.agent-relay/scripts/task-claim.sh" ]] && \
+  pass "no-clobber restores missing task-claim" || \
+  fail "no-clobber restores missing task-claim"
+grep -q KEEP "$HOME/.agent-relay/scripts/task-init.sh" && \
+  pass "no-clobber keeps existing task-init" || \
+  fail "no-clobber keeps existing task-init"
+# restore stock scripts for remaining checks
+"$INSTALL" --only cursor >/dev/null
+
 "$INSTALL" --dry-run --only CURSOR >/dev/null
 pass "--only CURSOR"
 
@@ -100,6 +155,7 @@ fi
 [[ ! -e "$HOME/.codex/skills/atry-implement" ]] && pass "uninstall codex skill" || fail "uninstall codex skill"
 [[ ! -e "$HOME/.agents/skills/atry-implement" ]] && pass "uninstall legacy .agents" || fail "uninstall legacy .agents"
 [[ ! -e "$HOME/.agent/skills/atry-implement" ]] && pass "uninstall legacy .agent" || fail "uninstall legacy .agent"
+[[ ! -e "$HOME/.agent-relay/scripts/task-claim.sh" ]] && pass "uninstall scripts" || fail "uninstall scripts"
 
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL SMOKE TESTS PASSED"

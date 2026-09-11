@@ -15,11 +15,13 @@ implement or review.
 ## Tests
 
 ```bash
-make test              # local + remote smoke
-./tests/smoke.sh       # local install/uninstall/verify only
+make test              # local smoke + tasks + remote smoke
+./tests/smoke.sh       # install/uninstall/verify (fake HOME)
+./tests/tasks.sh       # task-init / task-claim / report helpers
+./tests/smoke-remote.sh  # offline remote-mode stubs
 ```
 
-Requires bash ≥ 3.2. Both smoke scripts are offline. Remote smoke stubs
+Requires bash ≥ 3.2. All three scripts are offline. Remote smoke stubs
 `curl` and uses `tests/fixtures/`.
 
 There is no Markdown formatter and no Python toolchain in this repo.
@@ -40,6 +42,8 @@ Include:
 - Install destinations: [`targets.conf`](targets.conf)
 - Artifact names: [`docs/file-conventions.md`](docs/file-conventions.md)
 - Empty outlines (not a sample run): [`templates/`](templates/)
+- Optional parallel helpers: `scripts/task-*.sh`, `scripts/resolve-task-bin.sh`
+  (installed to `~/.agent-relay/scripts/`)
 
 Install support for a tool is not the same as having used the stages in that
 tool. This repo does not keep a log of either.

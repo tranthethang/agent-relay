@@ -9,7 +9,7 @@ help: ## Show available commands
 tasks: ## Run parallel tasks test suite
 	bash ./tests/tasks.sh
 
-smoke: ## Run local, task, and remote smoke tests
+smoke: ## Run local smoke, tasks suite, and remote smoke
 	bash ./tests/smoke.sh
 	bash ./tests/tasks.sh
 	bash ./tests/smoke-remote.sh
