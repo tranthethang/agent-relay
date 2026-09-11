@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-11
+
 ### Added
 
 - Experimental parallel task execution via `task-init.sh` / `task-claim.sh`,
@@ -17,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `report-list` / `report-rollup` (rollup file is generated only).
 - Working-tree isolation notes and script resolution order in
   `docs/file-conventions.md`.
+- Templates for `implement-plan/<task>.status` and `implement-report/<task>.md`.
+- Smoke coverage for script install, `resolve-task-bin` override, and
+  `--no-clobber` per-file restore; `tests/tasks.sh` for claim/init/report helpers.
 
 ### Changed
 
@@ -26,9 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `atry-implement` parallel mode uses `report-write` instead of appending a
   shared report file.
 - README reframed: sequential path first; parallel helpers documented as
-  optional/experimental with explicit isolation limits. Smoke coverage for
-  script install, `resolve-task-bin` override, and `--no-clobber` per-file
-  restore.
+  optional/experimental with explicit isolation limits.
+- Install / verify / uninstall cover the three task helper scripts.
+
+## [0.3.0] — 2026-09-09
 
 ### Removed
 
