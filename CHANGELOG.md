@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-12
+
+### Added
+
+- Skill **bundles** (`skills/<name>/SKILL.md` + `references/` + `scripts/`).
+- `atry-plan` skill and `review-section.sh` upsert helper.
+- Provenance HTML comments and `date +%F` guidance in all four skills.
+- Explicit `task-claim.sh steal` with try-once mutex; concurrent steal harness.
+- Ident validation, dependency cycle detection, portable task sorting, base-dir
+  walk-up, status whitelist, release ownership checks, `--allow-skipped-deps`.
+- `scripts/sync-references.sh` (+ CI `--check`) so `docs/file-conventions.md`
+  stays the single source for run-id rules.
+- Shellcheck job and `tests/tasks.sh` in CI.
+
+### Changed
+
+- Installer copies whole skill directories; helpers no longer install to
+  `~/.agent-relay/scripts/`.
+- `claim` refuses stale locks (prints the `steal` command) instead of
+  auto-stealing after two hours.
+- `CURRENT` is written only when creating a new id.
+- `--session` accepted before the subcommand or in `update`/`release` args;
+  ambient `SESSION` / `SESSION_TAG` ignored for auth.
+- `task-init` uses a global `T1…Tn` counter, requires `## Tasks`, rejects
+  nested numbered lists and duplicate ids.
+
+### Removed
+
+- `resolve-task-bin.sh` and the `~/.agent-relay/scripts/` install path.
+- `mdc-flat` writer (legacy `.mdc` cleanup on install/uninstall remains).
+- Flat `skills/*.md` sources.
+
+### Migration
+
+See README “Migration v0.4 → v1.0”. Re-run `./bin/install.sh` from v1.0.0;
+legacy global scripts and flat skill files are replaced by bundles.
+
 ## [0.4.0] — 2026-09-11
 
 ### Added

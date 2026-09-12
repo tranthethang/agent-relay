@@ -310,11 +310,15 @@ for tool in "${TOOLS[@]}"; do
 done
 
 shopt -s nullglob
-skill_files=("$SKILLS_DIR"/*.md)
+skill_dirs=()
+for _d in "$SKILLS_DIR"/*/ ; do
+  [[ -f "${_d}SKILL.md" ]] || continue
+  skill_dirs+=("$_d")
+done
 shopt -u nullglob
 
-if [[ ${#skill_files[@]} -eq 0 ]]; then
-  echo "No skills found in $SKILLS_DIR/*.md" >&2
+if [[ ${#skill_dirs[@]} -eq 0 ]]; then
+  echo "No skill bundles found in $SKILLS_DIR/*/SKILL.md" >&2
   exit 1
 fi
 
@@ -357,8 +361,8 @@ for tool in "${TOOLS[@]}"; do
   valid_tools+=("$(echo "$tool" | tr '[:upper:]' '[:lower:]')")
 done
 valid_skills=()
-for skill_file in "${skill_files[@]}"; do
-  valid_skills+=("$(echo "$(basename "$skill_file" .md)" | tr '[:upper:]' '[:lower:]')")
+for skill_dir in "${skill_dirs[@]}"; do
+  valid_skills+=("$(echo "$(basename "${skill_dir%/}")" | tr '[:upper:]' '[:lower:]')")
 done
 
 if [[ -n "$ONLY_TOOLS" ]] && csv_has_unknown tool "$ONLY_TOOLS" "${valid_tools[@]}"; then
@@ -426,19 +430,16 @@ for tool in "${TOOLS[@]}"; do
   fi
 
   echo "[$tool] -> $dest_dir ($fmt)"
-  for skill_file in "${skill_files[@]}"; do
-    name="$(basename "$skill_file" .md)"
+  for skill_dir in "${skill_dirs[@]}"; do
+    name="$(basename "${skill_dir%/}")"
     skill_selected "$name" || continue
 
     case "$fmt" in
-      mdc-flat)
-        remove_mdc "$dest_dir/$name.mdc"
-        ;;
       skill-folder)
         remove_skill_folder "$dest_dir/$name"
         ;;
       *)
-        echo "Unknown format '$fmt' for $tool" >&2
+        echo "Unknown format '$fmt' for $tool (only skill-folder is supported)" >&2
         exit 1
         ;;
     esac
@@ -455,11 +456,12 @@ for tool in "${TOOLS[@]}"; do
 done
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "  [dry-run] rm -f $HOME/.agent-relay/scripts/task-*.sh $HOME/.agent-relay/scripts/resolve-task-bin.sh"
+  echo "  [dry-run] rm -rf $HOME/.agent-relay/scripts (legacy v0.4 helpers)"
 else
-  echo "  rm task scripts under $HOME/.agent-relay/scripts"
+  echo "  rm legacy task scripts under $HOME/.agent-relay/scripts"
   rm -f "$HOME/.agent-relay/scripts"/task-*.sh \
-    "$HOME/.agent-relay/scripts/resolve-task-bin.sh"
+    "$HOME/.agent-relay/scripts/resolve-task-bin.sh" \
+    "$HOME/.agent-relay/scripts/review-section.sh"
   rmdir "$HOME/.agent-relay/scripts" 2>/dev/null || true
   rmdir "$HOME/.agent-relay" 2>/dev/null || true
 fi
