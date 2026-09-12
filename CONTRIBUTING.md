@@ -1,5 +1,9 @@
 # Contributing
 
+Agent-oriented constraints for editing this repo (bash 3.2, sync scripts,
+honest limits): [`AGENTS.md`](AGENTS.md). Deeper maintainer guides:
+[`docs/INDEX.md`](docs/INDEX.md).
+
 ## Quick start
 
 ```bash
@@ -13,6 +17,8 @@ That copies skills into your user skill directories. It does not exercise
 implement or review.
 
 ## Tests
+
+Detail: [`docs/testing.md`](docs/testing.md).
 
 ```bash
 make test              # local smoke + tasks + remote smoke
@@ -49,11 +55,13 @@ Include:
 
 - Installer: `bin/`
 - Skill bundles: `skills/<name>/` (`SKILL.md`, `references/`, `scripts/`)
-- Install destinations: [`targets.conf`](targets.conf)
+- Install destinations: [`targets.conf`](targets.conf) (sourced after
+  `validate_targets_conf`)
 - Artifact names: [`docs/file-conventions.md`](docs/file-conventions.md)
 - Empty outlines (not a sample run): [`templates/`](templates/)
 - Task helpers (repo + bundled copies): `scripts/task-*.sh`,
   `scripts/review-section.sh`
+- Release version: [`VERSION`](VERSION) (must match the `v*` tag)
 
 Install support for a tool is not the same as having used the stages in that
 tool. This repo does not keep a log of either.

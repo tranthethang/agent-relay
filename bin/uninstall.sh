@@ -292,6 +292,8 @@ SRC_DIR="$REPO_ROOT"
 SKILLS_DIR="$SRC_DIR/skills"
 CONF="$SRC_DIR/targets.conf"
 
+validate_targets_conf "$CONF" || exit 1
+
 # shellcheck source=targets.conf
 source "$CONF"
 

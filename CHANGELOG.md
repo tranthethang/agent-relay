@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-09-12
+
+### Added
+
+- `validate_targets_conf` in `lib/bootstrap.sh`: before install/uninstall/verify
+  `source` `targets.conf`, only allow plain `KEY=value` / `KEY=(...)` lines;
+  refuse command substitution, backticks, pipes, redirects, control operators,
+  and non-assignment lines. Mitigation only — the file is still sourced.
+- `task-claim.sh check <id>`: compare on-disk rollups to a fresh regeneration
+  from per-task files; print `MISMATCH` and exit non-zero on drift (no repair).
+- Non-blocking same-`tool=`/`model=` warning in `review-section.sh` when
+  upserting Cross-Review (fence-aware; skips `tool=unknown`).
+- Smoke checks that each installed `SKILL.md` has front-matter `name:` and
+  `description:`; smoke cases for the targets.conf allowlist.
+- `atry-implement` mode check: if `implement-plan-<id>/` exists, instruct the
+  agent to use `task-claim.sh` and not hand-edit rollups.
+- `atry-self-review` note to prefer a stronger model when cross-review may
+  never run.
+- Reviewer notes in `docs/file-conventions.md` for dual lockfiles and
+  directory/rollup drift (synced into skill `references/`).
+- [`AGENTS.md`](AGENTS.md) for contributors editing this repository.
+- Maintainer documentation under [`docs/`](docs/INDEX.md) (architecture,
+  installer, task-claim, testing, release, security, troubleshooting,
+  skills-authoring), with [`docs/INDEX.md`](docs/INDEX.md) as the entry point.
+
+### Changed
+
+- README documents the allowlist, `check`, advisory cross-review warning, and
+  front-matter smoke limits without claiming enforcement or load guarantees;
+  links into the new `docs/` set.
+
 ## [1.0.0] — 2026-09-12
 
 ### Added

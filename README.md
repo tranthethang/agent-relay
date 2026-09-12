@@ -12,6 +12,10 @@ or prove that following the skills improves outcomes. CI checks the installer,
 shellcheck, reference sync, and the task scripts. It does not check whether an
 agent follows a skill.
 
+Agent-oriented notes for editing **this** repo: [`AGENTS.md`](AGENTS.md).
+Maintainer docs (architecture, installer, tests, release, …):
+[`docs/INDEX.md`](docs/INDEX.md).
+
 ## What this is not
 
 - Not a message bus, orchestrator, or multi-agent runtime. You open a tool and
@@ -19,7 +23,9 @@ agent follows a skill.
 - Not a measured result. Provenance comments record which tool/model a stage
   *claims* to have used; nothing verifies that claim.
 - Not a guarantee that every listed tool loads the installed files the same
-  way. Install only copies files to known paths.
+  way. Install only copies files to known paths. Smoke tests check that each
+  installed `SKILL.md` has non-empty front-matter `name:` / `description:` —
+  not that Cursor, Antigravity, Claude, or Codex actually load the skill.
 
 ## Stages
 
@@ -33,7 +39,8 @@ agent follows a skill.
 Names, `CURRENT`, and the run id:
 [`docs/file-conventions.md`](docs/file-conventions.md) (also shipped as
 `references/file-conventions.md` inside every installed bundle). Empty outlines
-are in [`templates/`](templates/).
+are in [`templates/`](templates/). Writing or changing skills:
+[`docs/skills-authoring.md`](docs/skills-authoring.md).
 
 After you change files under `skills/`, run `./bin/install.sh` again. Keep
 `docs/file-conventions.md` and the copies under `skills/*/references/` in sync
@@ -51,7 +58,8 @@ Default mode is sequential: one shared `implement-plan-<id>.md` and
 
 If several agents share one run id, use the helpers shipped **inside** the
 implement skill bundle (`scripts/task-init.sh`, `scripts/task-claim.sh` next to
-`SKILL.md`). They use per-task files and `mkdir` locks.
+`SKILL.md`). They use per-task files and `mkdir` locks. Protocol detail:
+[`docs/task-claim.md`](docs/task-claim.md).
 
 Covered by `tests/tasks.sh` (including concurrent steal with a try-once mutex,
 ident validation, dependency cycles, and portable sorting):
@@ -59,16 +67,23 @@ ident validation, dependency cycles, and portable sorting):
 - Exactly one winner when two agents race a `steal`
 - `claim` never auto-steals a stale lock (use explicit `steal`)
 - Status whitelist; release ownership checks; `--session` in both positions
+- `task-claim.sh check <id>` compares generated rollups to per-task files and
+  exits non-zero on `MISMATCH` (detects hand-edited rollups; does not repair)
 
 Still true:
 
 - Serializes **task status** (and per-task reports), not overlapping source edits
 - Use disjoint paths or separate worktrees when files overlap
+- If `implement-plan-<id>/` already exists, `atry-implement` tells the agent to
+  use `task-claim.sh` and not hand-edit the rollup `.md` files — that is skill
+  text, not a lock on the filesystem
 
 ## Install
 
 Requires bash ≥ 3.2. No `sudo`. Writes only under `$HOME`. Each skill installs
-as a **bundle**:
+as a **bundle**. Flags, `targets.conf`, and adding a tool:
+[`docs/installer.md`](docs/installer.md). Trust boundaries:
+[`docs/security.md`](docs/security.md).
 
 | Tool | Destination |
 | ---- | ----------- |
@@ -86,13 +101,15 @@ cd agent-relay
 
 ### Release install
 
-Checksums catch truncated downloads. They do **not** stop a replaced release:
-`targets.conf` is `source`d by the installer, so a maliciously swapped release
-asset is arbitrary code execution under your user. Treat release trust like any
-other script you download.
+Checksums catch truncated downloads. They do **not** stop a replaced release.
+`targets.conf` is still `source`d by install/uninstall/verify. Before that,
+the scripts run an **allowlist** check (`validate_targets_conf`): only plain
+`KEY=value` / `KEY=(...)` lines, with command substitution, backticks, pipes,
+redirects, and control operators refused. That is a mitigation, not a proof
+that sourcing is safe. Treat release trust like any other script you download.
 
 ```bash
-REF="v1.0.0"
+REF="v1.0.1"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 shasum -a 256 -c SHA256SUMS
@@ -110,14 +127,20 @@ bash ./install.sh --ref "$REF"
 - Only `skill-folder` format remains (the old Cursor `.mdc` writer is gone;
   leftover `.mdc` files are still cleaned from legacy dirs).
 
+No separate migration step for v1.0.0 → v1.0.1: re-run `./bin/install.sh` (or
+install from the `v1.0.1` release) to refresh bundles.
+
 ## Honest limits
 
 - Nothing forces an agent to follow a skill or to use a different tool for
   cross-review. Provenance lines are **records**, not enforcement.
+  `review-section.sh` prints a **non-blocking** warning when a Cross-Review
+  provenance `tool=`/`model=` matches the latest Self-Review in the same file
+  (fence-aware; `unknown` is ignored).
 - Parallel claim does not protect overlapping source-file edits.
 - Antigravity’s skills path has moved before; install can “succeed” while the
   app ignores the files.
-- `targets.conf` is executed as bash by install/uninstall/verify.
+- `targets.conf` is still executed as bash after the allowlist check above.
 
 ## Development
 
@@ -127,4 +150,13 @@ bash scripts/sync-bootstrap.sh --check
 bash scripts/sync-references.sh --check
 ```
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`CHANGELOG.md`](CHANGELOG.md).
+| Doc | Topic |
+| --- | --- |
+| [`docs/INDEX.md`](docs/INDEX.md) | Full maintainer doc index |
+| [`docs/architecture.md`](docs/architecture.md) | How layers fit; non-goals |
+| [`docs/testing.md`](docs/testing.md) | Suites, CI, adding regressions |
+| [`docs/release.md`](docs/release.md) | `VERSION`, tag, `dist/` assets |
+| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Install / sync / lock triage |
+
+Also: [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md),
+[`CHANGELOG.md`](CHANGELOG.md).

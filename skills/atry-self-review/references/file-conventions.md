@@ -4,6 +4,12 @@ Skills read and write files under `.agent-relay/` in the target repo. One run
 uses one id on every file so two features do not overwrite each other. Nothing
 in this repo enforces the names except the skill text.
 
+This file is the **source of truth** for those names. Maintainer docs that
+point here (architecture, task-claim, skill authoring, …):
+[`INDEX.md`](INDEX.md). Do not hand-edit the copies under
+`skills/*/references/` — run `bash scripts/sync-references.sh` from the repo
+root after changing this file.
+
 | Purpose | Path | Written by |
 | --- | --- | --- |
 | Plan | `.agent-relay/plan-<id>.md` | You, or `atry-plan`. |
@@ -191,6 +197,27 @@ file into the directory format, preserves all current statuses, and preserves th
 original file as `implement-plan-<id>.md.bak`. Plain `task-init.sh <id>` (no
 `--migrate`) refuses if the legacy rollup file already exists, so sequential
 progress is not overwritten.
+
+## Review notes worth flagging explicitly
+
+Reviewers (`atry-self-review`, `atry-cross-review`) routinely touch package
+manager files as part of a change. Two are worth calling out by name in the
+review report's notes rather than only mentioning in passing, because they
+tend to recur silently across runs otherwise:
+
+- **Dual lockfiles.** A diff that updates more than one lockfile for the same
+  package manager ecosystem (for example both `pnpm-lock.yaml` and
+  `package-lock.json`) for a project whose own rules (e.g. `AGENTS.md`) name
+  one preferred package manager is a maintenance smell: the second lockfile
+  drifts the moment someone forgets to update it by hand. Note it explicitly
+  in the review report even if fixing it is out of scope for the current
+  plan.
+- **Directory/rollup drift.** If `implement-plan-<id>/` or
+  `implement-report-<id>/` exists for the run under review, run
+  `scripts/task-claim.sh check <id>` before writing the review. A
+  `MISMATCH` means the rollup `.md` was hand-edited outside the claim
+  protocol and the per-task `.status`/report files are stale — call this out
+  in the review rather than treating the rollup `.md` as ground truth.
 
 ## Notes
 

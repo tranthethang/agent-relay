@@ -75,6 +75,31 @@ LIST_OUT="$("$TASK_CLAIM" list happy)"
 echo "$LIST_OUT" | grep -q -- "- \[done\] T1:" && pass "list shows done T1" || fail "list shows done T1"
 echo "$LIST_OUT" | grep -q -- "- \[pending\] T2:" && pass "list shows pending T2" || fail "list shows pending T2"
 
+# 1b. check: rollups still in sync with the per-task directory state
+if "$TASK_CLAIM" check happy >/dev/null 2>&1; then
+  pass "check reports OK when rollup matches .status files"
+else
+  fail "check reports OK when rollup matches .status files"
+fi
+
+# Hand-edit the rollup directly (bypassing task-claim.sh) the same way the
+# real-world run that motivated this subcommand did -- check must catch it.
+cp .agent-relay/implement-plan-happy.md "$T/happy-rollup.bak"
+printf '# implement-plan (happy)\n\n- [done] T1: Setup DB.\n- [done] T2: Add API.\n' > .agent-relay/implement-plan-happy.md
+CHECK_OUT="$("$TASK_CLAIM" check happy 2>&1 || true)"
+if "$TASK_CLAIM" check happy >/dev/null 2>&1; then
+  fail "check detects a hand-edited rollup"
+else
+  pass "check detects a hand-edited rollup"
+fi
+echo "$CHECK_OUT" | grep -q "MISMATCH" && pass "check output names the mismatch" || fail "check output names the mismatch"
+cp "$T/happy-rollup.bak" .agent-relay/implement-plan-happy.md
+if "$TASK_CLAIM" check happy >/dev/null 2>&1; then
+  pass "check is OK again once the rollup is restored"
+else
+  fail "check is OK again once the rollup is restored"
+fi
+
 # 2. Lock collision: second claim on locked task fails loudly and prints owner
 "$TASK_CLAIM" claim happy T2 agent-first >/dev/null
 SECOND_OUT="$("$TASK_CLAIM" claim happy T2 agent-second 2>&1 || true)"
@@ -910,6 +935,31 @@ if [[ "$(grep -c '^$' "$MID")" -eq "$(grep -c '^$' "$T/review-mid.after1")" ]]; 
 else
   fail "upsert does not accumulate blank lines"
 fi
+
+# --- CR-1b: Cross-Review provenance matching the last Self-Review warns ---
+WARN_FILE="$T/review-report-warn.md"
+printf '<!-- relay: stage=self-review tool=cursor model=composer-unknown base=abc date=%s -->\nSelf body.\n' "$TODAY" > "$T/warn-self-body.md"
+"$REVIEW_SH" upsert "$WARN_FILE" Self-Review "$TODAY" "$T/warn-self-body.md" >/dev/null 2>&1
+
+printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=abc date=%s -->\nCross body.\n' "$TODAY" > "$T/warn-cross-same.md"
+WARN_OUT="$("$REVIEW_SH" upsert "$WARN_FILE" Cross-Review "$TODAY" "$T/warn-cross-same.md" 2>&1 >/dev/null)"
+echo "$WARN_OUT" | grep -qi "warning.*Cross-Review" && pass "same tool/model cross-review warns" || fail "same tool/model cross-review warns"
+
+WARN_FILE2="$T/review-report-warn2.md"
+"$REVIEW_SH" upsert "$WARN_FILE2" Self-Review "$TODAY" "$T/warn-self-body.md" >/dev/null 2>&1
+printf '<!-- relay: stage=cross-review tool=gemini model=gemini-3.1-pro-low base=abc date=%s -->\nCross body.\n' "$TODAY" > "$T/warn-cross-diff.md"
+WARN_OUT2="$("$REVIEW_SH" upsert "$WARN_FILE2" Cross-Review "$TODAY" "$T/warn-cross-diff.md" 2>&1 >/dev/null)"
+[[ -z "$WARN_OUT2" ]] && pass "different tool/model cross-review is silent" || fail "different tool/model cross-review is silent"
+
+# --- CR-1c: the same-tool warning must not fire on a provenance line that is
+# only quoted inside a fenced code block (the file already has real prior
+# art for this gotcha -- CR-1 above -- so the warning must share that rigor)
+WARN_FILE3="$T/review-report-warn3.md"
+printf '<!-- relay: stage=self-review tool=gemini model=weak-model base=abc date=%s -->\nSelf body quoting the provenance format for reference:\n\n```\n<!-- relay: stage=self-review tool=cursor model=composer-unknown base=zzz date=2000-01-01 -->\n```\n' "$TODAY" > "$T/warn-self-fenced.md"
+"$REVIEW_SH" upsert "$WARN_FILE3" Self-Review "$TODAY" "$T/warn-self-fenced.md" >/dev/null 2>&1
+printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=abc date=%s -->\nCross body.\n' "$TODAY" > "$T/warn-cross-fenced.md"
+WARN_OUT3="$("$REVIEW_SH" upsert "$WARN_FILE3" Cross-Review "$TODAY" "$T/warn-cross-fenced.md" 2>&1 >/dev/null)"
+[[ -z "$WARN_OUT3" ]] && pass "fenced example provenance is not mistaken for the real prior self-review" || fail "fenced example provenance is not mistaken for the real prior self-review"
 
 # --- CR-2: skill bundle copies must not drift from their sources ---
 # atry-plan has no scripts/; this also covers bash 3.2 + set -u on empty arrays.

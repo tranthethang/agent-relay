@@ -55,6 +55,26 @@ guess).
 
 This is a record for later readers, not a proof of which runtime invoked you.
 
+## Mode check (do this before step 1)
+
+Before writing anything, check whether `.agent-relay/implement-plan-<id>/` (a
+directory, not the `.md` file) already exists for the resolved `<id>`.
+
+- If it does **not** exist: proceed with the default sequential instructions
+  below (hand-write `implement-plan-<id>.md` / `implement-report-<id>.md`).
+- If it **does** exist: a parallel-mode run was already initialized for this
+  id (via `task-init.sh`, by you or another agent). You must use
+  `scripts/task-claim.sh` (see "Parallel mode" below) for every further
+  status and report write for the rest of this run. Do **not** hand-edit
+  `implement-plan-<id>.md` or `implement-report-<id>.md` directly — both are
+  generated rollups; a run has previously been left with `.status` files
+  stuck at `pending` while an agent hand-wrote `[done]` straight into the
+  rollup, which silently desyncs the two and defeats the per-task
+  claim/lock protocol for anyone who joins later. Run
+  `scripts/task-claim.sh check <id>` at any point to confirm the rollups
+  still match the per-task files; a `MISMATCH` means something wrote to a
+  rollup outside `task-claim.sh`.
+
 ## Instructions
 
 1. Resolve `<id>` as above (write `CURRENT` only if you created the id). Read the

@@ -46,6 +46,16 @@ Today's date: run `date +%F` (do not guess). Open each review section with:
 Use `unknown` when you cannot know the tool or model. This is a record, not a
 runtime proof.
 
+## Model choice
+
+Self-review is often the *only* independent check a change gets -- Cross-Review
+is invoked separately and may never run for a given change. If you cannot
+confirm that a cross-review will follow, prefer the strongest model available
+to you for this stage rather than defaulting to whatever ran implement. A
+weaker self-review model can miss real bugs and still write "no bugs found"
+with full confidence; there is nothing downstream to catch that if
+cross-review is skipped.
+
 ## Instructions
 
 1. Resolve `<id>` as above (write `CURRENT` only if you created the id). Read the

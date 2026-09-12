@@ -58,6 +58,51 @@ else
   cat "$BODY_SRC" > "$BODY_TMP"
 fi
 
+# Non-blocking heads-up: a Cross-Review whose own provenance tool/model
+# matches the most recently written Self-Review provenance in this same file
+# is not actually a second opinion from a different tool -- the whole point
+# of cross-review per the skill docs. This cannot be enforced (nothing here
+# can verify which tool is really calling it), so it only warns.
+if [[ "$KIND" == "Cross-Review" ]]; then
+  new_prov="$(grep -m 1 -E '<!-- relay: stage=cross-review ' "$BODY_TMP" 2>/dev/null || true)"
+  if [[ -n "$new_prov" ]]; then
+    new_tool="$(printf '%s' "$new_prov" | sed -n 's/.* tool=\([^ ]*\).*/\1/p')"
+    new_model="$(printf '%s' "$new_prov" | sed -n 's/.* model=\([^ ]*\).*/\1/p')"
+    if [[ -f "$FILE" && -n "$new_tool" && "$new_tool" != "unknown" ]]; then
+      # Fence-aware: only trust a provenance line that immediately follows a
+      # real (unfenced) "## Self-Review — ..." heading. A plain grep over the
+      # whole file would also match an example provenance line quoted inside
+      # a fenced code block (the awk rewrite below has the same gotcha for
+      # headings, documented at the top of this file) and warn on a false
+      # match.
+      prev_prov="$(awk '
+        function is_fence(s) {
+          sub(/^[ 	]*/, "", s)
+          return (s ~ /^```/ || s ~ /^~~~/)
+        }
+        BEGIN { fence = 0; capture = 0; prov = "" }
+        {
+          if (is_fence($0)) { fence = !fence; next }
+          if (!fence && $0 ~ /^## Self-Review — /) { capture = 1; next }
+          if (capture && !fence) {
+            if ($0 ~ /^<!-- relay: stage=self-review /) { prov = $0; capture = 0 }
+            else if ($0 !~ /^[ 	]*$/) { capture = 0 }
+          }
+        }
+        END { if (prov != "") print prov }
+      ' "$FILE")"
+      if [[ -n "$prev_prov" ]]; then
+        prev_tool="$(printf '%s' "$prev_prov" | sed -n 's/.* tool=\([^ ]*\).*/\1/p')"
+        prev_model="$(printf '%s' "$prev_prov" | sed -n 's/.* model=\([^ ]*\).*/\1/p')"
+        if [[ "$new_tool" == "$prev_tool" && "$new_model" == "$prev_model" ]]; then
+          printf 'review-section: warning: Cross-Review provenance (tool=%s model=%s) matches the most recent Self-Review in %s -- this is not a genuine second opinion from a different tool/model.\n' \
+            "$new_tool" "$new_model" "$FILE" >&2
+        fi
+      fi
+    fi
+  fi
+fi
+
 # Ensure file exists
 if [[ ! -f "$FILE" ]]; then
   mkdir -p "$(dirname "$FILE")"

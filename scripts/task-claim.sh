@@ -17,6 +17,7 @@ Usage:
   task-claim.sh release [--force] [--session <tag>] <id> <task-id> [<session-tag>]
   task-claim.sh list <id>
   task-claim.sh rollup <id>
+  task-claim.sh check <id>
   task-claim.sh report-write <id> <task-id> <path-or-->
   task-claim.sh report-list <id>
   task-claim.sh report-rollup <id>
@@ -304,6 +305,63 @@ regenerate_report_rollup() {
 
   mv -f "$tmp_rollup" "$rollup_file"
   rmdir "$rollup_lock" 2>/dev/null || rm -rf "$rollup_lock"
+}
+
+check_consistency() {
+  # Diff each on-disk rollup against what regenerate_{rollup,report_rollup}
+  # would produce from the current *.status / per-task report files. A
+  # mismatch means the rollup was hand-edited (or is stale) instead of being
+  # written by task-claim.sh -- the directory-based per-task files are the
+  # source of truth, so this only ever flags, never repairs, the drift.
+  local base_dir="$1"
+  local id="$2"
+  local plan_dir="$base_dir/implement-plan-$id"
+  local rollup_file="$base_dir/implement-plan-$id.md"
+  local report_dir="$base_dir/implement-report-$id"
+  local report_rollup="$base_dir/implement-report-$id.md"
+  local mismatch=0
+
+  if [[ -d "$plan_dir" ]]; then
+    local tmp_plan
+    # Stage beside the plan dir so regenerate_rollup's final mv stays
+    # same-filesystem (cross-device mv degrades to copy+unlink).
+    tmp_plan="$(mktemp "$plan_dir/.ar-check-plan.XXXXXX")"
+    regenerate_rollup "$plan_dir" "$tmp_plan" "$id"
+    if [[ -f "$rollup_file" ]]; then
+      if ! cmp -s "$tmp_plan" "$rollup_file"; then
+        echo "MISMATCH: $rollup_file does not match the state of $plan_dir/*.status" >&2
+        echo "  This means the rollup was edited by hand, or a task-claim.sh call" >&2
+        echo "  never ran, since it was last regenerated. Diff (expected vs actual):" >&2
+        diff -u "$tmp_plan" "$rollup_file" >&2 || true
+        mismatch=1
+      fi
+    else
+      echo "MISMATCH: $plan_dir exists but $rollup_file is missing" >&2
+      mismatch=1
+    fi
+    rm -f "$tmp_plan"
+  fi
+
+  if [[ -d "$report_dir" ]]; then
+    local tmp_report
+    tmp_report="$(mktemp "$report_dir/.ar-check-report.XXXXXX")"
+    regenerate_report_rollup "$report_dir" "$tmp_report" "$id"
+    if [[ -f "$report_rollup" ]]; then
+      if ! cmp -s "$tmp_report" "$report_rollup"; then
+        echo "MISMATCH: $report_rollup does not match the per-task files in $report_dir" >&2
+        mismatch=1
+      fi
+    else
+      echo "MISMATCH: $report_dir exists but $report_rollup is missing" >&2
+      mismatch=1
+    fi
+    rm -f "$tmp_report"
+  fi
+
+  if [[ "$mismatch" -eq 0 ]]; then
+    echo "OK: rollup file(s) match the per-task directory state for id '$id'"
+  fi
+  return "$mismatch"
 }
 
 list_tasks() {
@@ -774,6 +832,19 @@ case "$SUBCMD" in
       exit 1
     }
     regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
+    ;;
+
+  check)
+    [[ $# -eq 1 ]] || usage
+    ID="$1"
+    validate_ident "id" "$ID"
+    resolve_paths "$ID"
+    if [[ ! -d "$PLAN_DIR" && ! -d "$BASE_DIR/implement-report-$ID" ]]; then
+      echo "Error: neither '$PLAN_DIR' nor an implement-report-$ID directory exists for id '$ID'." >&2
+      echo "Nothing to check (this id has no parallel-mode directories)." >&2
+      exit 1
+    fi
+    check_consistency "$BASE_DIR" "$ID"
     ;;
 
   *)
