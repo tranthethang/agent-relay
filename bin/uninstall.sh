@@ -209,6 +209,46 @@ download_and_extract_repo() {
   SRC_DIR="$found_dir"
   echo "$found_dir"
 }
+
+# Validate targets.conf before it is sourced. Prefer an allowlist of plain
+# KEY=value / KEY=(...) lines over a keyword blocklist: substring checks for
+# "source"/"eval"/"exec" false-positive on paths like ".resource" or
+# ".execute", and a blocklist alone still accepts a bare command on its own
+# line (or `VAR=value cmd`) which bash happily runs when the file is sourced.
+# This is still a mitigation, not a proof that sourcing is safe.
+validate_targets_conf() {
+  local conf="$1"
+  local line lineno=0
+  # Regexes in variables (unquoted on =~) keep bash 3.2 and 4+ behavior aligned.
+  local re_dq='^[A-Za-z_][A-Za-z0-9_]*="[^"]*"$'
+  local re_sq="^[A-Za-z_][A-Za-z0-9_]*='[^']*'$"
+  local re_bare='^[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_./+@%:-]+$'
+  local re_array='^[A-Za-z_][A-Za-z0-9_]*=\([A-Za-z0-9_[:space:]"$./+@%:-]*\)$'
+  if [[ ! -f "$conf" ]]; then
+    echo "Error: targets.conf not found: $conf" >&2
+    return 1
+  fi
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+    case "$line" in
+      ''|[[:space:]]*'#'*|'#'*) continue ;;
+    esac
+    case "$line" in
+      *'$('*|*'`'*|*';'*|*'&&'*|*'||'*|*'|'*|*'>'*|*'<'*|*'$IFS'*)
+        printf 'Error: targets.conf line %d contains a construct that is not allowed in this manifest: %s\n' "$lineno" "$line" >&2
+        printf 'Refusing to source targets.conf (command substitution, pipes/redirects, control operators are blocked as a safety measure). Inspect the file manually, then remove the offending construct if it is expected.\n' >&2
+        return 1
+        ;;
+    esac
+    if [[ "$line" =~ $re_dq || "$line" =~ $re_sq || "$line" =~ $re_bare || "$line" =~ $re_array ]]; then
+      continue
+    fi
+    printf 'Error: targets.conf line %d is not a plain KEY=value / KEY=(...) assignment: %s\n' "$lineno" "$line" >&2
+    printf 'Refusing to source targets.conf (only blank lines, comments, and simple assignments are allowed).\n' >&2
+    return 1
+  done < "$conf"
+  return 0
+}
 # END BOOTSTRAP
 
 while [[ $# -gt 0 ]]; do

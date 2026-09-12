@@ -19,8 +19,10 @@ docs for end users — see [`README.md`](README.md).
 - Do not invent orchestration, schedulers, or “enforcement” that the code does
   not implement. Prefer “record, don’t enforce” unless a check is cheap and
   clearly safe (then document it as advisory or a hard refuse, accurately).
-- Do not claim CI proves skills work end-to-end. CI covers installer smoke,
-  `tests/tasks.sh`, shellcheck (`-S error`), and `sync-references.sh --check`.
+- Do not claim CI proves skills work end-to-end. CI covers installer smoke
+  (`tests/smoke.sh`), task-helper smoke (`tests/tasks.sh`), remote-download
+  smoke (`tests/smoke-remote.sh`), shellcheck (`-S error`),
+  `sync-references.sh --check`, and `sync-bootstrap.sh --check`.
 
 ## Layout
 
@@ -49,12 +51,30 @@ docs for end users — see [`README.md`](README.md).
    **warning** in `review-section.sh`, not a hard failure; parallel `claim`
    serializes task **status**, not overlapping source edits.
 
+## Editing bootstrap (`lib/bootstrap.sh`)
+
+1. Edit **only** [`lib/bootstrap.sh`](lib/bootstrap.sh). Do not hand-edit the
+   `# BEGIN BOOTSTRAP` … `# END BOOTSTRAP` blocks in `bin/install.sh`,
+   `bin/uninstall.sh`, or `bin/verify.sh`.
+2. Run `bash scripts/sync-bootstrap.sh` so those three bin scripts match.
+3. Confirm with `bash scripts/sync-bootstrap.sh --check` before claiming done.
+   CI fails on drift the same way as `sync-references.sh --check`.
+
+### Case study — CI failed after adding `validate_targets_conf`
+
+`lib/bootstrap.sh` gained `validate_targets_conf()`, but the bootstrap blocks
+in `bin/*.sh` were left unchanged. Local/PR work looked fine until CI ran
+`sync-bootstrap.sh --check` and reported all three bin scripts out of sync.
+Fix: `bash scripts/sync-bootstrap.sh`, commit the updated `bin/*.sh`, re-run
+`--check`. Any change under `lib/bootstrap.sh` implies a sync step — treat it
+as mandatory, not optional.
+
 ## Tests before you claim “done”
 
 ```bash
 make test                          # smoke + tasks + remote smoke
 bash scripts/sync-references.sh --check
-bash scripts/sync-bootstrap.sh --check   # if you touch bootstrap copies
+bash scripts/sync-bootstrap.sh --check   # required after any lib/bootstrap.sh edit
 bash -n bin/*.sh lib/*.sh scripts/*.sh tests/*.sh
 ```
 

@@ -8,9 +8,10 @@ plan, implement, self-review, and cross-review work under `.agent-relay/`. The
 installer copies each bundle into every supported tool’s global skill directory.
 
 This repo does **not** run the stages, pick a model, talk to an agent runtime,
-or prove that following the skills improves outcomes. CI checks the installer,
-shellcheck, reference sync, and the task scripts. It does not check whether an
-agent follows a skill.
+or prove that following the skills improves outcomes. CI checks the installer
+(local and simulated release-download smoke), shellcheck, reference and
+bootstrap sync, and the task scripts. It does not check whether an agent
+follows a skill.
 
 Agent-oriented notes for editing **this** repo: [`AGENTS.md`](AGENTS.md).
 Maintainer docs (architecture, installer, tests, release, …):
@@ -69,6 +70,9 @@ ident validation, dependency cycles, and portable sorting):
 - Status whitelist; release ownership checks; `--session` in both positions
 - `task-claim.sh check <id>` compares generated rollups to per-task files and
   exits non-zero on `MISMATCH` (detects hand-edited rollups; does not repair)
+- `task-claim.sh rollup <id>` regenerates the plan rollup on demand; most
+  other subcommands already do this as their last step, so you rarely need
+  it directly
 
 Still true:
 
@@ -154,8 +158,13 @@ bash scripts/sync-references.sh --check
 | --- | --- |
 | [`docs/INDEX.md`](docs/INDEX.md) | Full maintainer doc index |
 | [`docs/architecture.md`](docs/architecture.md) | How layers fit; non-goals |
+| [`docs/installer.md`](docs/installer.md) | Install/uninstall/verify mechanics, `targets.conf`, adding a tool |
+| [`docs/skills-authoring.md`](docs/skills-authoring.md) | Bundle layout, sync workflow, adding a skill |
+| [`docs/file-conventions.md`](docs/file-conventions.md) | `.agent-relay/` artifact names, `CURRENT`, id resolution |
+| [`docs/task-claim.md`](docs/task-claim.md) | Parallel task helpers, locks, `check` |
 | [`docs/testing.md`](docs/testing.md) | Suites, CI, adding regressions |
 | [`docs/release.md`](docs/release.md) | `VERSION`, tag, `dist/` assets |
+| [`docs/security.md`](docs/security.md) | Trust boundaries, what checksums do and do not prove |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Install / sync / lock triage |
 
 Also: [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md),

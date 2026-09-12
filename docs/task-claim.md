@@ -57,6 +57,7 @@ task-claim.sh [--session <tag>] <subcommand> ...
 | `update` | Status whitelist: `pending` \| `in-progress` \| `done` \| `skipped` (`skipped` needs a reason). Session must match lock owner |
 | `release` | Drop lock if session matches, or `--force` |
 | `list` | Print tasks; pending + unmet deps get `[blocked: …]` |
+| `rollup` | Regenerate the plan rollup on demand. Every state-changing subcommand above already does this as its last step, so this is mostly for manual recovery |
 | `check` | Regenerate expected rollups into temps beside the plan/report dirs; `cmp` to on-disk rollups; `MISMATCH` → exit non-zero. **Does not repair** |
 | `report-*` | Per-task report files + generated `implement-report-<id>.md` |
 

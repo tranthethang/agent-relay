@@ -122,6 +122,7 @@ task-claim.sh update [--session <tag>] <id> <task-id> [<session-tag>] <status> [
 task-claim.sh release [--force] [--session <tag>] <id> <task-id> [<session-tag>]
 task-claim.sh list <id>
 task-claim.sh rollup <id>
+task-claim.sh check <id>
 task-claim.sh report-write <id> <task-id> <path-or-->
 task-claim.sh report-list <id>
 task-claim.sh report-rollup <id>
@@ -153,6 +154,9 @@ after it. An explicit `--session` wins over a positional session-tag. Ambient
   `implement-report-<id>/<task-id>.md` and regenerates the report rollup.
 - `report-list`: Prints paths of per-task report files in plan order.
 - `report-rollup`: Regenerates `implement-report-<id>.md`.
+- `check`: Regenerates the expected plan/report rollups into temp files and
+  compares them to what is on disk; prints `MISMATCH` and exits non-zero on
+  drift (does not repair). See [task-claim.md](task-claim.md).
 - Every state-changing plan subcommand regenerates the plan rollup as its last
   step. Base dir is found by walking up from cwd for `.agent-relay/` (stops at
   `/` or the git root), so running from a subdirectory does not create a second
