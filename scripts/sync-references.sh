@@ -53,6 +53,8 @@ for d in "${skill_dirs[@]}"; do
   shopt -s nullglob
   bundle_scripts=("$d"scripts/*.sh)
   shopt -u nullglob
+  # bash 3.2 + set -u errors on an empty "${arr[@]}" (atry-plan has no scripts/)
+  [[ ${#bundle_scripts[@]} -eq 0 ]] && continue
   for bs in "${bundle_scripts[@]}"; do
     base="${bs##*/}"
     src="$ROOT_DIR/scripts/$base"

@@ -912,7 +912,8 @@ else
 fi
 
 # --- CR-2: skill bundle copies must not drift from their sources ---
-if bash "$ROOT/scripts/sync-references.sh" --check >/dev/null 2>&1; then
+# atry-plan has no scripts/; this also covers bash 3.2 + set -u on empty arrays.
+if bash "$ROOT/scripts/sync-references.sh" --check; then
   pass "skill bundles in sync with sources"
 else
   fail "skill bundles in sync with sources"

@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stays the single source for run-id rules.
 - Shellcheck job and `tests/tasks.sh` in CI.
 
+### Fixed
+
+- `sync-references.sh --check` on macOS (bash 3.2 + `set -u`) no longer
+  fails when a skill bundle has no `scripts/` (e.g. `atry-plan`).
+
 ### Changed
 
 - Installer copies whole skill directories; helpers no longer install to
