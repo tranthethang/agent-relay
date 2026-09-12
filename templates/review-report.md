@@ -1,5 +1,7 @@
 ## Self-Review — YYYY-MM-DD
 
+<!-- relay: stage=self-review tool=<tool> model=<id-or-unknown> base=<ref> date=YYYY-MM-DD -->
+
 ### Issues found
 
 - <issue, or "none">
@@ -14,6 +16,8 @@
 - Test/build: <command and pass/fail, or "not run">
 
 ## Cross-Review — YYYY-MM-DD
+
+<!-- relay: stage=cross-review tool=<tool> model=<id-or-unknown> base=<ref> date=YYYY-MM-DD -->
 
 ### Issues found
 

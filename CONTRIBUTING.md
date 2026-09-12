@@ -24,6 +24,16 @@ make test              # local smoke + tasks + remote smoke
 Requires bash ≥ 3.2. All three scripts are offline. Remote smoke stubs
 `curl` and uses `tests/fixtures/`.
 
+CI also runs `shellcheck -S error` on `bin/*.sh`, `scripts/*.sh`, `lib/*.sh`,
+and `tests/*.sh`. The floor is **error**, not warning: warning-level findings
+still exist and would drown the signal. The commitment is to clear warnings
+and raise the floor to `-S warning`, then style, over time — not to disable
+the job.
+
+CI runs `scripts/sync-references.sh --check` so
+`skills/*/references/file-conventions.md` cannot drift from
+`docs/file-conventions.md`.
+
 There is no Markdown formatter and no Python toolchain in this repo.
 
 ## Reporting install or smoke failures
@@ -38,12 +48,12 @@ Include:
 ## Where things live
 
 - Installer: `bin/`
-- Skill text: `skills/`
+- Skill bundles: `skills/<name>/` (`SKILL.md`, `references/`, `scripts/`)
 - Install destinations: [`targets.conf`](targets.conf)
 - Artifact names: [`docs/file-conventions.md`](docs/file-conventions.md)
 - Empty outlines (not a sample run): [`templates/`](templates/)
-- Optional parallel helpers: `scripts/task-*.sh`, `scripts/resolve-task-bin.sh`
-  (installed to `~/.agent-relay/scripts/`)
+- Task helpers (repo + bundled copies): `scripts/task-*.sh`,
+  `scripts/review-section.sh`
 
 Install support for a tool is not the same as having used the stages in that
 tool. This repo does not keep a log of either.

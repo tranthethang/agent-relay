@@ -73,7 +73,11 @@ cp "$ROOT_DIR/VERSION" "$TARGET_STAGE/"
 cp "$ROOT_DIR/LICENSE" "$TARGET_STAGE/"
 cp "$ROOT_DIR/README.md" "$TARGET_STAGE/"
 
-tar -czf "$TARBALL_PATH" -C "$STAGE_DIR" "$PREFIX"
+# COPYFILE_DISABLE keeps macOS from writing AppleDouble "._*" entries into the
+# archive. CI builds on Linux and never produces them, so without this a local
+# build does not match the published one — which is exactly what the offline
+# release check is supposed to verify.
+COPYFILE_DISABLE=1 tar -czf "$TARBALL_PATH" -C "$STAGE_DIR" "$PREFIX"
 echo "Created $TARBALL_PATH"
 
 # 2. Build release install.sh, uninstall.sh, verify.sh with DEFAULT_REF baked in

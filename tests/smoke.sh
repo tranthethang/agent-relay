@@ -48,60 +48,25 @@ echo legacy > "$HOME/.cursor/rules/atry-implement.mdc"
 
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
 
-# Parallel task scripts install under ~/.agent-relay/scripts/
-[[ -x "$HOME/.agent-relay/scripts/task-claim.sh" ]] && pass "scripts task-claim" || fail "scripts task-claim"
-[[ -x "$HOME/.agent-relay/scripts/task-init.sh" ]] && pass "scripts task-init" || fail "scripts task-init"
-[[ -x "$HOME/.agent-relay/scripts/resolve-task-bin.sh" ]] && pass "scripts resolve-task-bin" || fail "scripts resolve-task-bin"
-[[ ! -e "$HOME/.agent-relay/scripts/build-release-assets.sh" ]] && \
-  pass "scripts omit release builder" || \
-  fail "scripts omit release builder"
+# Skill bundles include references/ and scripts/ (not ~/.agent-relay/scripts/)
+[[ -f "$HOME/.cursor/skills/atry-implement/references/file-conventions.md" ]] && \
+  pass "bundle references" || fail "bundle references"
+[[ -x "$HOME/.cursor/skills/atry-implement/scripts/task-claim.sh" ]] && \
+  pass "bundle task-claim" || fail "bundle task-claim"
+[[ -x "$HOME/.cursor/skills/atry-implement/scripts/task-init.sh" ]] && \
+  pass "bundle task-init" || fail "bundle task-init"
+[[ -x "$HOME/.cursor/skills/atry-self-review/scripts/review-section.sh" ]] && \
+  pass "bundle review-section" || fail "bundle review-section"
+[[ -f "$HOME/.cursor/skills/atry-plan/SKILL.md" ]] && pass "atry-plan installed" || fail "atry-plan installed"
+[[ ! -e "$HOME/.agent-relay/scripts/task-claim.sh" ]] && \
+  pass "no legacy global scripts" || fail "no legacy global scripts"
 
-# resolve-task-bin: global path, then project override
-resolved="$("$HOME/.agent-relay/scripts/resolve-task-bin.sh" claim)"
-case "$resolved" in
-  */.agent-relay/scripts/task-claim.sh)
-    pass "resolve-task-bin global"
-    ;;
-  *)
-    fail "resolve-task-bin global (got: $resolved)"
-    ;;
-esac
-
-PROJ="$T/proj-override"
-mkdir -p "$PROJ/.agent-relay/scripts"
-printf '%s\n' '#!/usr/bin/env bash' 'echo override-claim' > "$PROJ/.agent-relay/scripts/task-claim.sh"
-chmod +x "$PROJ/.agent-relay/scripts/task-claim.sh"
-cp "$HOME/.agent-relay/scripts/resolve-task-bin.sh" "$PROJ/.agent-relay/scripts/resolve-task-bin.sh"
-ov="$(
-  cd "$PROJ"
-  ./.agent-relay/scripts/resolve-task-bin.sh claim
-)"
-# Compare by suffix so /var vs /private/var does not flake on macOS.
-case "$ov" in
-  */proj-override/.agent-relay/scripts/task-claim.sh)
-    pass "resolve-task-bin project override"
-    ;;
-  *)
-    fail "resolve-task-bin project override (got: $ov)"
-    ;;
-esac
-
-# verify fails if a required script is removed
-rm -f "$HOME/.agent-relay/scripts/task-claim.sh"
-if "$VERIFY" >/dev/null 2>&1; then fail "verify fails without task-claim"; else pass "verify fails without task-claim"; fi
-
-# --no-clobber restores a missing script without overwriting an existing one
-echo KEEP > "$HOME/.agent-relay/scripts/task-init.sh"
-chmod +x "$HOME/.agent-relay/scripts/task-init.sh"
-"$INSTALL" --only cursor --no-clobber >/dev/null
-[[ -x "$HOME/.agent-relay/scripts/task-claim.sh" ]] && \
-  pass "no-clobber restores missing task-claim" || \
-  fail "no-clobber restores missing task-claim"
-grep -q KEEP "$HOME/.agent-relay/scripts/task-init.sh" && \
-  pass "no-clobber keeps existing task-init" || \
-  fail "no-clobber keeps existing task-init"
-# restore stock scripts for remaining checks
+# Legacy ~/.agent-relay/scripts is cleaned on install
+mkdir -p "$HOME/.agent-relay/scripts"
+echo old > "$HOME/.agent-relay/scripts/task-claim.sh"
 "$INSTALL" --only cursor >/dev/null
+[[ ! -e "$HOME/.agent-relay/scripts/task-claim.sh" ]] && \
+  pass "install cleans legacy scripts" || fail "install cleans legacy scripts"
 
 "$INSTALL" --dry-run --only CURSOR >/dev/null
 pass "--only CURSOR"
@@ -113,18 +78,26 @@ out="$("$INSTALL" --dry-run --only "cursor, antigravity" 2>/dev/null)" \
   || true
 echo "$out" | grep -q ANTIGRAVITY && pass "comma+space" || fail "comma+space"
 
-# Description with apostrophe must survive skill-folder copy.
+# Description with apostrophe must survive skill-folder bundle copy.
 DESC="$T/apos-src"
-mkdir -p "$DESC/skills"
-cp "$INSTALL" "$ROOT/targets.conf" "$DESC/"
-printf '%s\n' '---' 'name: apos-test' "description: Review the user's implementation." '---' '' '# Body' > "$DESC/skills/apos-test.md"
+mkdir -p "$DESC/skills/apos-test/references"
+cp "$INSTALL" "$DESC/install.sh"
+cp "$ROOT/targets.conf" "$DESC/"
+cp "$ROOT/lib/bootstrap.sh" "$DESC/lib/bootstrap.sh" 2>/dev/null || {
+  mkdir -p "$DESC/lib"
+  cp "$ROOT/lib/bootstrap.sh" "$DESC/lib/bootstrap.sh"
+}
+printf '%s\n' '---' 'name: apos-test' "description: Review the user's implementation." '---' '' '# Body' > "$DESC/skills/apos-test/SKILL.md"
+cp "$ROOT/docs/file-conventions.md" "$DESC/skills/apos-test/references/file-conventions.md"
 (
   export HOME="$DESC/out"
   mkdir -p "$HOME"
   cd "$DESC"
-  ./install.sh --only cursor --skill apos-test
+  bash ./install.sh --only cursor --skill apos-test
 ) >/dev/null
 grep -q "user's implementation" "$DESC/out/.cursor/skills/apos-test/SKILL.md" && pass "apostrophe" || fail "apostrophe"
+[[ -f "$DESC/out/.cursor/skills/apos-test/references/file-conventions.md" ]] && \
+  pass "apos bundle references" || fail "apos bundle references"
 
 echo MARKER >> "$HOME/.cursor/skills/atry-implement/SKILL.md"
 "$INSTALL" --only cursor --skill atry-implement --no-clobber >/dev/null

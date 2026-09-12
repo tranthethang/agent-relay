@@ -22,8 +22,28 @@ jobs:
       - name: Check bootstrap sync
         run: bash ./scripts/sync-bootstrap.sh --check
 
+      - name: Check skill bundle sync (references + scripts)
+        run: bash ./scripts/sync-references.sh --check
+
       - name: Run local smoke tests
         run: bash ./tests/smoke.sh
 
+      - name: Run task scripts tests
+        run: bash ./tests/tasks.sh
+
       - name: Run remote smoke tests
         run: bash ./tests/smoke-remote.sh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        # Severity floor: -S error (see CONTRIBUTING.md). Tighten toward
+        # -S warning once existing warnings are cleared.
+        run: shellcheck -S error bin/*.sh scripts/*.sh lib/*.sh tests/*.sh skills/*/scripts/*.sh

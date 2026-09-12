@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # agent-relay installer
 #
-# Adapts the neutral skills in skills/*.md into each supported tool's native
+# Adapts the skill bundles in skills/<name>/ into each supported tool's native
 # rules/skills format, installed globally under $HOME.
 #
 # Requires: bash >= 3.2 (macOS system bash is fine).
@@ -42,7 +42,7 @@ usage() {
   cat <<'EOF'
 agent-relay installer
 
-Adapts the neutral skills in skills/*.md into each supported tool's native
+Adapts the skill bundles in skills/<name>/ into each supported tool's native
 rules/skills format, installed globally under $HOME.
 
 Requires: bash >= 3.2 (macOS system bash is fine).
@@ -406,54 +406,28 @@ csv_has_unknown() {
   [[ "$unknown" -eq 1 ]]
 }
 
-# Split a skill file into frontmatter (between the two --- lines) and body.
-has_frontmatter() {
-  awk 'BEGIN{ok=0} /^---$/ {c++; if(c==2){ok=1; exit}} END{exit !ok}' "$1"
-}
-
-frontmatter_field() {
-  # frontmatter_field <file> <field>
-  awk -v field="$2" '
-    /^---$/ { d++; next }
-    d==1 && $0 ~ "^"field":" { sub("^"field": ?", ""); print; exit }
-  ' "$1"
-}
-
-body_only() {
-  # Emit body after YAML frontmatter; if no frontmatter, emit the whole file.
-  if has_frontmatter "$1"; then
-    awk '/^---$/{d++; next} d>=2' "$1"
-  else
-    cat "$1"
-  fi
-}
-
-yaml_quote() {
-  # YAML double-quoted scalar; escape \ and "
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  printf '"%s"' "$s"
-}
-
-write_mdc() {
-  # write_mdc <skill_file> <dest>
-  local skill_file="$1" dest="$2"
-  local description dest_dir
-  description="$(frontmatter_field "$skill_file" description)"
-  dest_dir="$(dirname "$dest")"
-  mkdir -p "$dest_dir"
-  {
-    printf -- '---\ndescription: %s\nalwaysApply: false\n---\n\n' "$(yaml_quote "$description")"
-    body_only "$skill_file"
-  } > "$dest"
-}
-
 write_skill_folder() {
-  # write_skill_folder <skill_file> <dest>
-  local skill_file="$1" dest="$2"
-  mkdir -p "$(dirname "$dest")"
-  cp "$skill_file" "$dest"
+  # write_skill_folder <skill_src_dir> <dest_skill_md>
+  # Copies the whole bundle (SKILL.md, references/, scripts/) into the parent
+  # of dest_skill_md. Per-file --no-clobber is handled by the caller on SKILL.md;
+  # sibling files are refreshed when SKILL.md is written.
+  local skill_src="$1" dest="$2"
+  local dest_root
+  dest_root="$(dirname "$dest")"
+  mkdir -p "$dest_root"
+  # Refresh bundle contents
+  rm -rf "$dest_root/references" "$dest_root/scripts"
+  cp "$skill_src/SKILL.md" "$dest"
+  if [[ -d "$skill_src/references" ]]; then
+    mkdir -p "$dest_root/references"
+    cp -R "$skill_src/references/." "$dest_root/references/"
+  fi
+  if [[ -d "$skill_src/scripts" ]]; then
+    mkdir -p "$dest_root/scripts"
+    cp -R "$skill_src/scripts/." "$dest_root/scripts/"
+    # Intentional: chmod may no-op on empty; ignore if no matches.
+    chmod +x "$dest_root/scripts"/* 2>/dev/null || true
+  fi
 }
 
 # Remove prior-format installs from LEGACY_DIRS (both .mdc and skill-folder).
@@ -482,13 +456,17 @@ cleanup_legacy_artifacts() {
   done
 }
 
-# Collect skill files (nullglob so an empty dir does not yield a literal *.md).
+# Collect skill bundles (skills/<name>/SKILL.md).
 shopt -s nullglob
-skill_files=("$SKILLS_DIR"/*.md)
+skill_dirs=()
+for _d in "$SKILLS_DIR"/*/ ; do
+  [[ -f "${_d}SKILL.md" ]] || continue
+  skill_dirs+=("$_d")
+done
 shopt -u nullglob
 
-if [[ ${#skill_files[@]} -eq 0 ]]; then
-  echo "No skills found in $SKILLS_DIR/*.md" >&2
+if [[ ${#skill_dirs[@]} -eq 0 ]]; then
+  echo "No skill bundles found in $SKILLS_DIR/*/SKILL.md" >&2
   exit 1
 fi
 
@@ -498,8 +476,8 @@ for tool in "${TOOLS[@]}"; do
   valid_tools+=("$(echo "$tool" | tr '[:upper:]' '[:lower:]')")
 done
 valid_skills=()
-for skill_file in "${skill_files[@]}"; do
-  valid_skills+=("$(echo "$(basename "$skill_file" .md)" | tr '[:upper:]' '[:lower:]')")
+for skill_dir in "${skill_dirs[@]}"; do
+  valid_skills+=("$(echo "$(basename "${skill_dir%/}")" | tr '[:upper:]' '[:lower:]')")
 done
 
 if [[ -n "$ONLY_TOOLS" ]] && csv_has_unknown tool "$ONLY_TOOLS" "${valid_tools[@]}"; then
@@ -531,28 +509,16 @@ for tool in "${TOOLS[@]}"; do
   fi
 
   echo "[$tool] -> $dest_dir ($fmt)"
-  for skill_file in "${skill_files[@]}"; do
-    name="$(basename "$skill_file" .md)"
+  for skill_dir in "${skill_dirs[@]}"; do
+    name="$(basename "${skill_dir%/}")"
     skill_selected "$name" || continue
 
     case "$fmt" in
-      mdc-flat)
-        dest="$dest_dir/$name.mdc"
-        if act_write "$dest" "-> $dest"; then
-          if [[ "$DRY_RUN" -eq 0 ]]; then
-            write_mdc "$skill_file" "$dest"
-          fi
-          installed=$((installed + 1))
-        else
-          skipped=$((skipped + 1))
-        fi
-        cleanup_legacy_artifacts "$name"
-        ;;
       skill-folder)
         dest="$dest_dir/$name/SKILL.md"
-        if act_write "$dest" "-> $dest"; then
+        if act_write "$dest" "-> $dest_dir/$name/ (bundle)"; then
           if [[ "$DRY_RUN" -eq 0 ]]; then
-            write_skill_folder "$skill_file" "$dest"
+            write_skill_folder "$skill_dir" "$dest"
           fi
           installed=$((installed + 1))
         else
@@ -561,32 +527,25 @@ for tool in "${TOOLS[@]}"; do
         cleanup_legacy_artifacts "$name"
         ;;
       *)
-        echo "Unknown format '$fmt' for $tool" >&2
+        echo "Unknown format '$fmt' for $tool (only skill-folder is supported)" >&2
         exit 1
         ;;
     esac
   done
 done
 
-SCRIPTS_DEST="$HOME/.agent-relay/scripts"
-SCRIPTS_TO_INSTALL=(task-claim.sh task-init.sh resolve-task-bin.sh)
-if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "  [dry-run] Install task scripts to $SCRIPTS_DEST"
-else
-  echo "  Installing task scripts to $SCRIPTS_DEST"
-  mkdir -p "$SCRIPTS_DEST"
-  for _script in "${SCRIPTS_TO_INSTALL[@]}"; do
-    if [[ ! -f "$SRC_DIR/scripts/$_script" ]]; then
-      continue
-    fi
-    if [[ "$NO_CLOBBER" -eq 1 && -e "$SCRIPTS_DEST/$_script" ]]; then
-      echo "  skip (exists): $SCRIPTS_DEST/$_script"
-      continue
-    fi
-    cp "$SRC_DIR/scripts/$_script" "$SCRIPTS_DEST/$_script"
-    chmod +x "$SCRIPTS_DEST/$_script"
-  done
+# Clean leftover v0.4 global script installs (scripts now live in skill bundles).
+LEGACY_SCRIPTS="$HOME/.agent-relay/scripts"
+if [[ "$DRY_RUN" -eq 0 && -d "$LEGACY_SCRIPTS" ]]; then
+  echo "  Cleaning legacy $LEGACY_SCRIPTS (scripts now ship inside skill bundles)"
+  rm -f "$LEGACY_SCRIPTS/task-claim.sh" \
+    "$LEGACY_SCRIPTS/task-init.sh" \
+    "$LEGACY_SCRIPTS/resolve-task-bin.sh" \
+    "$LEGACY_SCRIPTS/review-section.sh"
+  rmdir "$LEGACY_SCRIPTS" 2>/dev/null || true
+  rmdir "$HOME/.agent-relay" 2>/dev/null || true
 fi
+
 if [[ "$installed" -eq 0 && "$skipped" -eq 0 ]]; then
   echo "Nothing to install (filters matched no tool/skill combinations)." >&2
   exit 1
@@ -603,6 +562,6 @@ else
     echo "  ${!dir_var}"
   done
   echo "Tip: run bin/verify.sh (clone) or ./verify.sh (release download) to confirm the install."
-  echo "Tip: parallel scripts live in $SCRIPTS_DEST (override with .agent-relay/scripts/ in a project)."
+  echo "Tip: each skill bundle includes references/ and scripts/ next to SKILL.md."
   echo "Tip: add .agent-relay/ to each project's .gitignore if you do not want relay working files committed."
 fi

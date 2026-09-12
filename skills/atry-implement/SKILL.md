@@ -10,28 +10,26 @@ re-plan from scratch — decompose and execute the plan that already exists.
 
 ## Run discovery
 
-Resolve the shared run `<id>` before reading or writing artifacts. The same
-rules are in the agent-relay repo at `docs/file-conventions.md`; that file is
-not installed next to this skill. Order:
-
-1. User gave a plan path or run id → use that id
-1. Else read `.agent-relay/CURRENT` (one trimmed line)
-1. Else if exactly one `plan-*.md` → extract id from `^plan-(.+)\.md$`
-1. Else ask the user — do not guess by mtime
+Resolve the shared run `<id>` before reading or writing artifacts. Follow
+`references/file-conventions.md` (installed next to this skill) for the full
+order (user id → CURRENT → single plan-*.md → ask).
 
 If you must adopt a legacy `.agent-relay/plan.md` (no suffix) with no `plan-*.md`,
-generate a new id, migrate writes to `*-<id>.md`, and set `CURRENT`.
+generate a new id, migrate writes to `*-<id>.md`, and **then** write `CURRENT`.
 
-After resolving or creating an id, write/overwrite `.agent-relay/CURRENT` with
-that id.
+**Only write `.agent-relay/CURRENT` when you create a new id.** Resolving an
+existing id must not overwrite `CURRENT` (avoids stealing another feature's
+pointer).
 
 Generate a missing id with:
 
 ```bash
 npx --yes nanoid@5 --size 10
-# fallback:
+# fallback (must yield exactly 10 chars — regenerate if shorter):
 openssl rand -base64 12 | tr -dc 'A-Za-z0-9_-' | head -c 10
 ```
+
+Verify the id is exactly 10 characters before using it.
 
 ## Inputs
 
@@ -45,15 +43,26 @@ openssl rand -base64 12 | tr -dc 'A-Za-z0-9_-' | head -c 10
 - Infer conventions from the surrounding codebase if no rules file exists — do
   not impose your own style
 
+## Provenance
+
+Record what ran this stage. Prefer real values; use `unknown` when you cannot
+know the tool or model (do not invent). Today's date: run `date +%F` (do not
+guess).
+
+```html
+<!-- relay: stage=implement tool=<tool> model=<id-or-unknown> base=<ref> date=<YYYY-MM-DD> -->
+```
+
+This is a record for later readers, not a proof of which runtime invoked you.
+
 ## Instructions
 
-1. Resolve `<id>` (and update `CURRENT`) as above. Read the plan file fully before
-   writing any code. Identify each discrete task. If the plan has no `base:` git
-   ref, record one now (current `HEAD` or the branch tip before you start) at the
-   top of the plan so later review stages can diff the full change. If the plan
-   has no `id:` line, add `id: <id>` next to `base:` (matching the filename
-   suffix). If the plan file still uses a legacy unsuffixed name, rename/copy it
-   to `plan-<id>.md` before coding.
+1. Resolve `<id>` as above (write `CURRENT` only if you created the id). Read the
+   plan file fully before writing any code. Identify each discrete task. If the
+   plan has no `base:` git ref, record one now (`git rev-parse HEAD`) at the top
+   of the plan. If the plan has no `id:` line, add `id: <id>` next to `base:`.
+   If the plan file still uses a legacy unsuffixed name, rename/copy it to
+   `plan-<id>.md` before coding.
 
 1. Break the plan into an explicit task list and write it to
    `.agent-relay/implement-plan-<id>.md` **before** starting implementation. Use
@@ -92,17 +101,15 @@ The default behavior above (sequential, "one at a time" on a single shared
 are explicitly invoked in parallel mode across multiple sub-agents (separate
 sessions).
 
-Resolve task binaries before calling them (project override, then global install):
+Call the helpers shipped next to this skill (paths relative to this `SKILL.md`):
 
 ```bash
-RESOLVE=".agent-relay/scripts/resolve-task-bin.sh"
-[[ -x "$RESOLVE" ]] || RESOLVE="$HOME/.agent-relay/scripts/resolve-task-bin.sh"
-TASK_INIT="$("$RESOLVE" init)"
-TASK_CLAIM="$("$RESOLVE" claim)"
+TASK_INIT="$(dirname "$SKILL_DIR")/scripts/task-init.sh"   # or: scripts/task-init.sh beside SKILL.md
+TASK_CLAIM="$(dirname "$SKILL_DIR")/scripts/task-claim.sh"
+# From the skill directory:
+TASK_INIT="scripts/task-init.sh"
+TASK_CLAIM="scripts/task-claim.sh"
 ```
-
-Do not use a repo-root `./scripts/` path as the override — only
-`.agent-relay/scripts/` or `~/.agent-relay/scripts/`.
 
 1. **Setup**: Run `"$TASK_INIT" <id>` instead of hand-writing
    `implement-plan-<id>.md`. (If converting an existing sequential run, use
@@ -111,24 +118,21 @@ Do not use a repo-root `./scripts/` path as the override — only
 
 2. **Per sub-agent loop**:
    - Run `"$TASK_CLAIM" list <id>`.
-   - Pick one `pending` task whose `deps:` (if any) are all `done` — `claim`
-     also enforces this and fails loudly if a dependency is not done.
+   - Pick one `pending` task whose deps are claimable (list shows `[blocked: …]`
+     when they are not).
    - Attempt to claim it with `"$TASK_CLAIM" claim <id> <task-id> <session-tag>`.
-   - If the claim fails (another agent already claimed it, or deps not done),
-     pick a different `pending` task or stop if none are available.
+   - If the claim fails, pick a different pending task or stop.
    - Implement only that task's files (disjoint file sets in one worktree, or
      one worktree/agent when files overlap — claim does not protect content).
-   - Update the task status with `"$TASK_CLAIM" update <id> <task-id> <session-tag> done`
-     (or `skipped (<reason>)`).
-   - Release the lock with `"$TASK_CLAIM" release <id> <task-id>`.
+   - Update with `"$TASK_CLAIM" update <id> <task-id> <session-tag> done`
+     (or `skipped <reason>`).
+   - Release with `"$TASK_CLAIM" release <id> <task-id> <session-tag>`.
 
 3. **File scoping rule in parallel mode**:
-   In addition to not modifying files outside the plan's scope, do not touch
-   any file owned by another task that is still `pending` or `in-progress` under
-   a lock you do not hold. Report the conflict instead of guessing.
+   Do not touch any file owned by another task that is still `pending` or
+   `in-progress` under a lock you do not hold. Report the conflict instead.
 
 4. **Implementation report in parallel mode**:
    Use `"$TASK_CLAIM" report-write <id> <task-id> -` (stdin) or
-   `"$TASK_CLAIM" report-write <id> <task-id> <file>` to record task-specific
-   notes under `implement-report-<id>/<task-id>.md` and regenerate the rollup.
-   Do not manually edit `implement-report-<id>.md`.
+   `"$TASK_CLAIM" report-write <id> <task-id> <file>"` under
+   `implement-report-<id>/<task-id>.md`. Do not manually edit the rollup.

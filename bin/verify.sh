@@ -308,11 +308,15 @@ for tool in "${TOOLS[@]}"; do
 done
 
 shopt -s nullglob
-skill_files=("$SKILLS_DIR"/*.md)
+skill_dirs=()
+for _d in "$SKILLS_DIR"/*/ ; do
+  [[ -f "${_d}SKILL.md" ]] || continue
+  skill_dirs+=("$_d")
+done
 shopt -u nullglob
 
-if [[ ${#skill_files[@]} -eq 0 ]]; then
-  echo "No skills found in $SKILLS_DIR/*.md" >&2
+if [[ ${#skill_dirs[@]} -eq 0 ]]; then
+  echo "No skill bundles found in $SKILLS_DIR/*/SKILL.md" >&2
   exit 1
 fi
 
@@ -355,8 +359,8 @@ for tool in "${TOOLS[@]}"; do
   valid_tools+=("$(echo "$tool" | tr '[:upper:]' '[:lower:]')")
 done
 valid_skills=()
-for skill_file in "${skill_files[@]}"; do
-  valid_skills+=("$(echo "$(basename "$skill_file" .md)" | tr '[:upper:]' '[:lower:]')")
+for skill_dir in "${skill_dirs[@]}"; do
+  valid_skills+=("$(echo "$(basename "${skill_dir%/}")" | tr '[:upper:]' '[:lower:]')")
 done
 
 if [[ -n "$ONLY_TOOLS" ]] && csv_has_unknown tool "$ONLY_TOOLS" "${valid_tools[@]}"; then
@@ -380,49 +384,52 @@ for tool in "${TOOLS[@]}"; do
   dest_dir="${!dir_var}"
   fmt="${!fmt_var}"
 
-  for skill_file in "${skill_files[@]}"; do
-    name="$(basename "$skill_file" .md)"
+  for skill_dir in "${skill_dirs[@]}"; do
+    name="$(basename "${skill_dir%/}")"
     skill_selected "$name" || continue
     checked=$((checked + 1))
 
     case "$fmt" in
-      mdc-flat)
-        dest="$dest_dir/$name.mdc"
+      skill-folder)
+        dest="$dest_dir/$name/SKILL.md"
+        refs="$dest_dir/$name/references/file-conventions.md"
         if [[ -f "$dest" ]]; then
           echo "[OK] $tool skill '$name' at $dest"
         else
           echo "[FAIL] $tool skill '$name' missing at $dest"
           FAILED=1
         fi
-        ;;
-      skill-folder)
-        dest="$dest_dir/$name/SKILL.md"
-        if [[ -f "$dest" ]]; then
-          echo "[OK] $tool skill '$name' at $dest"
+        if [[ -f "$refs" ]]; then
+          echo "[OK] $tool skill '$name' references at $refs"
         else
-          echo "[FAIL] $tool skill '$name' missing at $dest"
+          echo "[FAIL] $tool skill '$name' missing references at $refs"
           FAILED=1
+        fi
+        # scripts/ is optional per skill (atry-plan may have none); if source has it, dest must.
+        if [[ -d "${skill_dir}scripts" ]] && [[ -n "$(ls -A "${skill_dir}scripts" 2>/dev/null || true)" ]]; then
+          if [[ -d "$dest_dir/$name/scripts" ]]; then
+            echo "[OK] $tool skill '$name' scripts/ present"
+          else
+            echo "[FAIL] $tool skill '$name' missing scripts/"
+            FAILED=1
+          fi
         fi
         ;;
       *)
-        echo "Unknown format '$fmt' for $tool" >&2
+        echo "Unknown format '$fmt' for $tool (only skill-folder is supported)" >&2
         exit 1
         ;;
     esac
   done
 done
 
-# Always verify global scripts regardless of --only / --skill filters.
-for _script in task-claim.sh task-init.sh resolve-task-bin.sh; do
-  _sdest="$HOME/.agent-relay/scripts/$_script"
-  if [[ -x "$_sdest" ]]; then
-    echo "[OK] script '$_script' at $_sdest"
-  else
-    echo "[FAIL] script '$_script' missing or not executable at $_sdest"
-    FAILED=1
-  fi
-  checked=$((checked + 1))
-done
+# Legacy global scripts must be gone (they now live inside skill bundles).
+if [[ -e "$HOME/.agent-relay/scripts/task-claim.sh" || -e "$HOME/.agent-relay/scripts/resolve-task-bin.sh" ]]; then
+  echo "[FAIL] legacy ~/.agent-relay/scripts still present; re-run install or uninstall"
+  FAILED=1
+else
+  echo "[OK] no legacy ~/.agent-relay/scripts helpers"
+fi
 
 if [[ "$checked" -eq 0 ]]; then
   echo "Nothing to verify (filters matched no tool/skill combinations)." >&2
@@ -430,9 +437,8 @@ if [[ "$checked" -eq 0 ]]; then
 fi
 
 if [[ "$FAILED" -eq 0 ]]; then
-  echo "Verification PASSED! Everything is set up correctly."
-  exit 0
+  echo "All checks passed."
 else
-  echo "Verification FAILED!"
+  echo "Some checks failed." >&2
   exit 1
 fi
