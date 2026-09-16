@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-09-16
+
 ### Changed
 
 - Run directory naming now uses human-sortable, readable timestamp + slug format:
@@ -19,10 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `run-migrate.sh` shapes new migrations into `{YMD}-{UNIX_TS}-{slug}/` with `slug:` in `meta.md`, without rewriting existing `{YMD}_{nanoid}` folders.
 - `skills/atry-plan/SKILL.md` documents offline Unix timestamp and slug generation.
 
+Re-install skill bundles after upgrading. Existing `{YMD}_{RUN_ID}/` folders from
+v2.0.0 still resolve; new runs use the slug format.
 
-Breaking layout change for `.agent-relay/` artifacts. New runs are
-self-contained folders; legacy flat files still resolve with a stderr note
-until migrated. Re-install skill bundles after upgrading.
+## [2.0.0] — 2026-09-16
 
 ### Added
 
