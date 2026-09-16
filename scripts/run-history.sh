@@ -37,14 +37,8 @@ case "$SUBCOMMAND" in
       RUN_DIR="$TARGET"
     fi
 
-    if [[ ! -d "$RUN_DIR" ]]; then
+    if [[ ! -d "$RUN_DIR" || "$(basename "$RUN_DIR")" == ".agent-relay" ]]; then
       echo "Error: run directory '$RUN_DIR' not found" >&2
-      exit 1
-    fi
-    # resolve-run.sh returns .agent-relay itself for legacy flat runs. Refuse
-    # to append there — migrate first so history stays inside a run folder.
-    if [[ "$(basename "$RUN_DIR")" == ".agent-relay" ]]; then
-      echo "Error: '$TARGET' resolves to legacy flat layout; run 'run-migrate.sh <id>' before appending history" >&2
       exit 1
     fi
 

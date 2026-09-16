@@ -41,14 +41,7 @@ is_run_dirname() {
   if [[ "$name" =~ ^[0-9]{8}-[0-9]{10,11}-[a-z]+(-[a-z]+)*$ ]]; then
     return 0
   fi
-  case "$name" in
-    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[A-Za-z0-9_-]*)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  return 1
 }
 
 # 1. Argument was provided
@@ -81,32 +74,6 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then
       fi
       check_dir="$(dirname "$check_dir")"
     done
-
-    # Check if arg points directly to a legacy plan file: plan-<id>.md
-    file_name="$(basename "$arg")"
-    case "$file_name" in
-      plan-*.md)
-        legacy_id="${file_name#plan-}"
-        legacy_id="${legacy_id%.md}"
-        base_dir="$(cd "$(dirname "$arg")" 2>/dev/null && pwd -P || pwd)"
-        # Check if a migrated folder exists
-        shopt -s nullglob
-        migrated=()
-        for md in "$base_dir"/*-"$legacy_id"-* "$base_dir"/*_"$legacy_id"; do
-          if [[ -d "$md" ]] && is_run_dirname "$(basename "$md")"; then
-            migrated+=("$md")
-          fi
-        done
-        shopt -u nullglob
-        if [[ ${#migrated[@]} -eq 1 ]]; then
-          cd "${migrated[0]}" && pwd -P
-          exit 0
-        fi
-        echo "Note: resolved legacy flat run '$legacy_id' at $base_dir; run 'run-migrate.sh $legacy_id' to migrate" >&2
-        printf '%s\n' "$base_dir"
-        exit 0
-        ;;
-    esac
 
     # If it's a directory matching run dir name format directly
     if is_run_dirname "$(basename "$abs_target")"; then
@@ -150,11 +117,6 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then
       if [[ "$ts" == "$id" || "$slug" == "$id" ]]; then
         matches+=("$d")
       fi
-    elif [[ "$bname" =~ ^[0-9]{8}_(.*)$ ]]; then
-      legacy_id="${BASH_REMATCH[1]}"
-      if [[ "$legacy_id" == "$id" ]]; then
-        matches+=("$d")
-      fi
     fi
   done
   shopt -u nullglob
@@ -170,15 +132,7 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then
     exit 1
   fi
 
-  # Check legacy flat plan
-  if [[ -f "$BASE_DIR/plan-$id.md" ]]; then
-    abs_base="$(cd "$BASE_DIR" && pwd -P)"
-    echo "Note: resolved legacy flat run '$id' at $abs_base; run 'run-migrate.sh $id' to migrate" >&2
-    printf '%s\n' "$abs_base"
-    exit 0
-  fi
-
-  echo "Error: no run directory or legacy plan found for '$id'" >&2
+  echo "Error: no run directory found for '$id'" >&2
   exit 1
 fi
 
@@ -207,7 +161,7 @@ if [[ ! -d "$BASE_DIR" ]]; then
 fi
 
 shopt -s nullglob
-raw_dirs=("$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-* "$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*)
+raw_dirs=("$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*)
 shopt -u nullglob
 
 run_dirs=()
@@ -224,26 +178,6 @@ fi
 
 if [[ ${#run_dirs[@]} -gt 1 ]]; then
   echo "Error: multiple run directories found in $BASE_DIR; specify RUN_ID or path" >&2
-  exit 1
-fi
-
-# Check legacy flat plans
-shopt -s nullglob
-legacy_plans=("$BASE_DIR"/plan-*.md)
-shopt -u nullglob
-
-if [[ ${#legacy_plans[@]} -eq 1 ]]; then
-  fname="$(basename "${legacy_plans[0]}")"
-  id="${fname#plan-}"
-  id="${id%.md}"
-  abs_base="$(cd "$BASE_DIR" && pwd -P)"
-  echo "Note: resolved legacy flat run '$id' at $abs_base; run 'run-migrate.sh $id' to migrate" >&2
-  printf '%s\n' "$abs_base"
-  exit 0
-fi
-
-if [[ ${#legacy_plans[@]} -gt 1 ]]; then
-  echo "Error: multiple legacy plans found in $BASE_DIR; specify RUN_ID or path" >&2
   exit 1
 fi
 

@@ -465,13 +465,6 @@ for tool in "${TOOLS[@]}"; do
   done
 done
 
-# Legacy global scripts must be gone (they now live inside skill bundles).
-if [[ -e "$HOME/.agent-relay/scripts/task-claim.sh" || -e "$HOME/.agent-relay/scripts/resolve-task-bin.sh" ]]; then
-  echo "[FAIL] legacy ~/.agent-relay/scripts still present; re-run install or uninstall"
-  FAILED=1
-else
-  echo "[OK] no legacy ~/.agent-relay/scripts helpers"
-fi
 
 if [[ "$checked" -eq 0 ]]; then
   echo "Nothing to verify (filters matched no tool/skill combinations)." >&2

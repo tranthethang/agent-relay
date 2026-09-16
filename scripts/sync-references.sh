@@ -54,7 +54,7 @@ get_skill_scripts() {
       printf '%s\n' "resolve-run.sh" "run-init.sh" "run-history.sh"
       ;;
     atry-implement)
-      printf '%s\n' "resolve-run.sh" "run-init.sh" "run-history.sh" "run-migrate.sh" "task-init.sh" "task-claim.sh"
+      printf '%s\n' "resolve-run.sh" "run-init.sh" "run-history.sh" "task-init.sh" "task-claim.sh"
       ;;
     atry-self-review|atry-cross-review)
       printf '%s\n' "resolve-run.sh" "run-history.sh" "review-section.sh"

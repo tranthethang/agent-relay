@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # scripts/task-init.sh
-# Initialize or migrate task directory for agent-relay parallel mode.
+# Initialize task directory for agent-relay parallel mode.
 # Bash 3.2+ compatible, POSIX tools only.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAIM_SH="$SCRIPT_DIR/task-claim.sh"
+RESOLVE_RUN="$SCRIPT_DIR/resolve-run.sh"
 
 usage() {
   cat <<'EOF'
 Usage:
-  task-init.sh <id>
-  task-init.sh <id> --migrate
+  task-init.sh <id-or-path>
 EOF
   exit 1
 }
@@ -33,24 +33,6 @@ validate_ident() {
       exit 1
       ;;
   esac
-}
-
-find_base_dir() {
-  local dir="$PWD"
-  while true; do
-    if [[ -d "$dir/.agent-relay" ]]; then
-      printf '%s\n' "$dir/.agent-relay"
-      return 0
-    fi
-    if [[ "$dir" == "/" ]]; then
-      break
-    fi
-    if [[ -d "$dir/.git" || -f "$dir/.git" ]]; then
-      break
-    fi
-    dir="$(dirname "$dir")"
-  done
-  printf '%s\n' ".agent-relay"
 }
 
 # Strip markdown bold/backticks from a task description remnant.
@@ -175,14 +157,9 @@ check_dep_cycles() {
   rm -rf "$tmp"
 }
 
-MIGRATE=0
 ID=""
-
 for arg in "$@"; do
   case "$arg" in
-    --migrate)
-      MIGRATE=1
-      ;;
     -h|--help)
       usage
       ;;
@@ -197,235 +174,156 @@ for arg in "$@"; do
   esac
 done
 
-RESOLVE_RUN="$SCRIPT_DIR/resolve-run.sh"
-
 [[ -n "$ID" ]] || usage
 TARGET="$ID"
-
-BASE_DIR="$(find_base_dir)"
-# Ensure the directory exists for init paths that create under it.
-mkdir -p "$BASE_DIR"
 
 RUN_DIR=""
 if [[ -x "$RESOLVE_RUN" ]]; then
   RUN_DIR="$("$RESOLVE_RUN" "$TARGET" 2>/dev/null || true)"
 fi
 
-if [[ -n "$RUN_DIR" && -d "$RUN_DIR" && "$(basename "$RUN_DIR")" != ".agent-relay" ]]; then
-  PLAN_DIR="$RUN_DIR/implement-plan"
-  ROLLUP_FILE="$RUN_DIR/implement-plan.md"
-  PLAN_FILE="$RUN_DIR/plan.md"
-  REPORT_DIR="$RUN_DIR/implement-report"
-  REPORT_ROLLUP_FILE="$RUN_DIR/implement-report.md"
-  bname="$(basename "$RUN_DIR")"
-  if [[ "$bname" =~ ^[0-9]{8}-([0-9]{10,11})-[a-z]+(-[a-z]+)*$ ]]; then
-    ID="${BASH_REMATCH[1]}"
-  elif [[ "$bname" =~ ^[0-9]{8}_(.*)$ ]]; then
-    ID="${BASH_REMATCH[1]}"
-  else
-    ID="$bname"
-  fi
-else
-  validate_ident "id" "$TARGET"
-  ID="$TARGET"
-  PLAN_DIR="$BASE_DIR/implement-plan-$ID"
-  ROLLUP_FILE="$BASE_DIR/implement-plan-$ID.md"
-  PLAN_FILE="$BASE_DIR/plan-$ID.md"
-  REPORT_DIR="$BASE_DIR/implement-report-$ID"
-  REPORT_ROLLUP_FILE="$BASE_DIR/implement-report-$ID.md"
+if [[ -z "$RUN_DIR" || ! -d "$RUN_DIR" || "$(basename "$RUN_DIR")" == ".agent-relay" ]]; then
+  echo "Error: could not resolve run directory for '$TARGET'" >&2
+  exit 1
 fi
 
-if [[ "$MIGRATE" -eq 1 ]]; then
-  if [[ ! -f "$ROLLUP_FILE" ]]; then
-    echo "Error: legacy file '$ROLLUP_FILE' does not exist to migrate." >&2
-    exit 1
-  fi
-
-  if [[ -d "$PLAN_DIR" ]]; then
-    if [[ -n "$(ls -A "$PLAN_DIR" 2>/dev/null || true)" ]]; then
-      echo "Error: destination directory '$PLAN_DIR' already exists and is not empty." >&2
-      exit 1
-    fi
-  else
-    mkdir -p "$PLAN_DIR"
-  fi
-
-  META_TMP="$PLAN_DIR/_meta.tmp"
-  ORDER_TMP="$PLAN_DIR/.order.tmp"
-  : > "$META_TMP"
-  : > "$ORDER_TMP"
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]*\[([^]]+)\][[:space:]]*([^:]+):[[:space:]]*(.*)$ ]]; then
-      status="${BASH_REMATCH[1]}"
-      tid="${BASH_REMATCH[2]}"
-      desc="${BASH_REMATCH[3]}"
-      status="$(echo "$status" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-      tid="$(echo "$tid" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-      desc="$(echo "$desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-      validate_ident "task-id" "$tid"
-      echo "$tid" >> "$ORDER_TMP"
-      printf 'status: %s\ndesc: %s\ndeps: \n' "$status" "$desc" > "$PLAN_DIR/$tid.status"
-    else
-      echo "$line" >> "$META_TMP"
-    fi
-  done < "$ROLLUP_FILE"
-
-  if grep -q '[^[:space:]]' "$META_TMP" 2>/dev/null; then
-    mv -f "$META_TMP" "$PLAN_DIR/_meta.md"
-  else
-    rm -f "$META_TMP"
-    : > "$PLAN_DIR/_meta.md"
-  fi
-
-  mv -f "$ORDER_TMP" "$PLAN_DIR/.order"
-
-  mv "$ROLLUP_FILE" "$ROLLUP_FILE.bak"
-
-  "$CLAIM_SH" rollup "$TARGET"
-  echo "Migrated '$ROLLUP_FILE' -> '$PLAN_DIR/' (backup saved to '$ROLLUP_FILE.bak')"
-
-  if [[ -f "$REPORT_ROLLUP_FILE" && ! -d "$REPORT_DIR" ]]; then
-    mkdir -p "$REPORT_DIR"
-    cp "$REPORT_ROLLUP_FILE" "$REPORT_DIR/_meta.md"
-    mv "$REPORT_ROLLUP_FILE" "$REPORT_ROLLUP_FILE.bak"
-    "$CLAIM_SH" report-rollup "$TARGET"
-    echo "Migrated '$REPORT_ROLLUP_FILE' -> '$REPORT_DIR/' (backup saved to '$REPORT_ROLLUP_FILE.bak')"
-  fi
-
+PLAN_DIR="$RUN_DIR/implement-plan"
+ROLLUP_FILE="$RUN_DIR/implement-plan.md"
+PLAN_FILE="$RUN_DIR/plan.md"
+REPORT_DIR="$RUN_DIR/implement-report"
+REPORT_ROLLUP_FILE="$RUN_DIR/implement-report.md"
+bname="$(basename "$RUN_DIR")"
+if [[ "$bname" =~ ^[0-9]{8}-([0-9]{10,11})-[a-z]+(-[a-z]+)*$ ]]; then
+  ID="${BASH_REMATCH[1]}"
 else
-  if [[ ! -f "$PLAN_FILE" ]]; then
-    if [[ -f "$BASE_DIR/plan.md" ]]; then
-      PLAN_FILE="$BASE_DIR/plan.md"
-    elif [[ -f "$BASE_DIR/plan-$ID.md" ]]; then
-      PLAN_FILE="$BASE_DIR/plan-$ID.md"
-    else
-      echo "Error: plan file '$PLAN_FILE' not found." >&2
-      exit 1
-    fi
-  fi
+  ID="$bname"
+fi
 
-  if [[ -f "$ROLLUP_FILE" ]]; then
-    echo "Error: legacy file '$ROLLUP_FILE' already exists." >&2
-    echo "Use --migrate to convert it (preserves statuses + .bak), or remove it to re-init from the plan." >&2
+if [[ ! -f "$PLAN_FILE" ]]; then
+  echo "Error: plan file '$PLAN_FILE' not found." >&2
+  exit 1
+fi
+
+if [[ -f "$ROLLUP_FILE" ]]; then
+  echo "Error: file '$ROLLUP_FILE' already exists." >&2
+  echo "Remove it to re-init from the plan." >&2
+  exit 1
+fi
+
+if [[ -d "$PLAN_DIR" ]]; then
+  if [[ -n "$(ls -A "$PLAN_DIR" 2>/dev/null || true)" ]]; then
+    echo "Error: plan directory '$PLAN_DIR' already exists and is not empty." >&2
     exit 1
   fi
+else
+  mkdir -p "$PLAN_DIR"
+fi
 
-  if [[ -d "$PLAN_DIR" ]]; then
-    if [[ -n "$(ls -A "$PLAN_DIR" 2>/dev/null || true)" ]]; then
-      echo "Error: plan directory '$PLAN_DIR' already exists and is not empty." >&2
-      exit 1
-    fi
-  else
-    mkdir -p "$PLAN_DIR"
+: > "$PLAN_DIR/_meta.md"
+ORDER_TMP="$PLAN_DIR/.order.tmp"
+: > "$ORDER_TMP"
+
+found_count=0
+task_seq=0
+
+has_tasks_section=0
+while IFS= read -r line || [[ -n "$line" ]]; do
+  if [[ "$line" =~ ^##[[:space:]]+Tasks([[:space:]]|$) ]]; then
+    has_tasks_section=1
+    break
+  fi
+done < "$PLAN_FILE"
+
+if [[ "$has_tasks_section" -eq 0 ]]; then
+  echo "Error: plan '$PLAN_FILE' has no '## Tasks' heading. Refusing to guess task lists from other sections." >&2
+  rm -rf "$PLAN_DIR"
+  exit 1
+fi
+
+in_tasks=0
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+  if [[ "$line" =~ ^##[[:space:]]+Tasks([[:space:]]|$) ]]; then
+    in_tasks=1
+    continue
+  elif [[ "$line" =~ ^##[[:space:]]+ && "$in_tasks" -eq 1 ]]; then
+    in_tasks=0
   fi
 
-  : > "$PLAN_DIR/_meta.md"
-  ORDER_TMP="$PLAN_DIR/.order.tmp"
-  : > "$ORDER_TMP"
+  [[ "$in_tasks" -eq 1 ]] || continue
 
-  found_count=0
-  task_seq=0
-
-  has_tasks_section=0
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^##[[:space:]]+Tasks([[:space:]]|$) ]]; then
-      has_tasks_section=1
-      break
-    fi
-  done < "$PLAN_FILE"
-
-  if [[ "$has_tasks_section" -eq 0 ]]; then
-    echo "Error: plan '$PLAN_FILE' has no '## Tasks' heading. Refusing to guess task lists from other sections." >&2
+  # Nested numbered lists — fail loudly (they used to be swallowed as duplicate ids).
+  if [[ "$line" =~ ^[[:space:]]+[0-9]+\. ]]; then
+    echo "Error: nested numbered list under ## Tasks is not allowed: $line" >&2
+    echo "Use a single flat numbered list. See docs/file-conventions.md." >&2
     rm -rf "$PLAN_DIR"
     exit 1
   fi
 
-  in_tasks=0
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" =~ ^##[[:space:]]+Tasks([[:space:]]|$) ]]; then
-      in_tasks=1
-      continue
-    elif [[ "$line" =~ ^##[[:space:]]+ && "$in_tasks" -eq 1 ]]; then
-      in_tasks=0
-    fi
-
-    [[ "$in_tasks" -eq 1 ]] || continue
-
-    # Nested numbered lists — fail loudly (they used to be swallowed as duplicate ids).
-    if [[ "$line" =~ ^[[:space:]]+[0-9]+\. ]]; then
-      echo "Error: nested numbered list under ## Tasks is not allowed: $line" >&2
-      echo "Use a single flat numbered list. See docs/file-conventions.md." >&2
+  if [[ "$line" =~ ^([0-9]+)\.[[:space:]]+(.*)$ ]]; then
+    rest="${BASH_REMATCH[2]}"
+    task_seq=$((task_seq + 1))
+    tid="T${task_seq}"
+    if [[ -f "$PLAN_DIR/$tid.status" ]]; then
+      echo "Error: duplicate task id '$tid' in the same init run" >&2
       rm -rf "$PLAN_DIR"
       exit 1
     fi
-
-    if [[ "$line" =~ ^([0-9]+)\.[[:space:]]+(.*)$ ]]; then
-      rest="${BASH_REMATCH[2]}"
-      task_seq=$((task_seq + 1))
-      tid="T${task_seq}"
-      if [[ -f "$PLAN_DIR/$tid.status" ]]; then
-        echo "Error: duplicate task id '$tid' in the same init run" >&2
-        rm -rf "$PLAN_DIR"
-        exit 1
-      fi
-      desc="$(clean_desc "$rest")"
-      extract_deps "$desc"
-      desc="$DESC_OUT"
-      deps="$DEPS_OUT"
-      validate_ident "task-id" "$tid"
-      echo "$tid" >> "$ORDER_TMP"
-      printf 'status: pending\ndesc: %s\ndeps: %s\n' "$desc" "$deps" > "$PLAN_DIR/$tid.status"
-      found_count=$((found_count + 1))
-    elif [[ "$line" =~ ^-[[:space:]]*\[([^]]*)\][[:space:]]*([^:]+):[[:space:]]*(.*)$ ]]; then
-      s="${BASH_REMATCH[1]}"
-      tid="${BASH_REMATCH[2]}"
-      desc="${BASH_REMATCH[3]}"
-      tid="$(echo "$tid" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-      desc="$(echo "$desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-      validate_ident "task-id" "$tid"
-      if [[ -f "$PLAN_DIR/$tid.status" ]]; then
-        echo "Error: duplicate task id '$tid' in the same init run" >&2
-        rm -rf "$PLAN_DIR"
-        exit 1
-      fi
-      extract_deps "$desc"
-      desc="$DESC_OUT"
-      deps="$DEPS_OUT"
-      [[ -n "$s" ]] || s="pending"
-      echo "$tid" >> "$ORDER_TMP"
-      printf 'status: %s\ndesc: %s\ndeps: %s\n' "$s" "$desc" "$deps" > "$PLAN_DIR/$tid.status"
-      found_count=$((found_count + 1))
+    desc="$(clean_desc "$rest")"
+    extract_deps "$desc"
+    desc="$DESC_OUT"
+    deps="$DEPS_OUT"
+    validate_ident "task-id" "$tid"
+    echo "$tid" >> "$ORDER_TMP"
+    printf 'status: pending\ndesc: %s\ndeps: %s\n' "$desc" "$deps" > "$PLAN_DIR/$tid.status"
+    found_count=$((found_count + 1))
+  elif [[ "$line" =~ ^-[[:space:]]*\[([^]]*)\][[:space:]]*([^:]+):[[:space:]]*(.*)$ ]]; then
+    s="${BASH_REMATCH[1]}"
+    tid="${BASH_REMATCH[2]}"
+    desc="${BASH_REMATCH[3]}"
+    tid="$(echo "$tid" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    desc="$(echo "$desc" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    validate_ident "task-id" "$tid"
+    if [[ -f "$PLAN_DIR/$tid.status" ]]; then
+      echo "Error: duplicate task id '$tid' in the same init run" >&2
+      rm -rf "$PLAN_DIR"
+      exit 1
     fi
-  done < "$PLAN_FILE"
-
-  # found_count must match real .status files
-  real_count=0
-  for f in "$PLAN_DIR"/*.status; do
-    [[ -f "$f" ]] || continue
-    real_count=$((real_count + 1))
-  done
-  if [[ "$found_count" -ne "$real_count" ]]; then
-    echo "Error: internal count mismatch (found_count=$found_count real_count=$real_count)" >&2
-    rm -rf "$PLAN_DIR"
-    exit 1
+    extract_deps "$desc"
+    desc="$DESC_OUT"
+    deps="$DEPS_OUT"
+    [[ -n "$s" ]] || s="pending"
+    echo "$tid" >> "$ORDER_TMP"
+    printf 'status: %s\ndesc: %s\ndeps: %s\n' "$s" "$desc" "$deps" > "$PLAN_DIR/$tid.status"
+    found_count=$((found_count + 1))
   fi
+done < "$PLAN_FILE"
 
-  if [[ "$found_count" -eq 0 ]]; then
-    echo "Error: ## Tasks section produced zero tasks" >&2
-    rm -rf "$PLAN_DIR"
-    exit 1
-  fi
-
-  mv -f "$ORDER_TMP" "$PLAN_DIR/.order"
-
-  check_dep_cycles "$PLAN_DIR"
-
-  mkdir -p "$REPORT_DIR"
-  : > "$REPORT_DIR/_meta.md"
-
-  "$CLAIM_SH" rollup "$TARGET"
-  "$CLAIM_SH" report-rollup "$TARGET"
-  echo "Initialized '$PLAN_DIR/' and '$REPORT_DIR/' with $found_count task(s)."
+# found_count must match real .status files
+real_count=0
+for f in "$PLAN_DIR"/*.status; do
+  [[ -f "$f" ]] || continue
+  real_count=$((real_count + 1))
+done
+if [[ "$found_count" -ne "$real_count" ]]; then
+  echo "Error: internal count mismatch (found_count=$found_count real_count=$real_count)" >&2
+  rm -rf "$PLAN_DIR"
+  exit 1
 fi
+
+if [[ "$found_count" -eq 0 ]]; then
+  echo "Error: ## Tasks section produced zero tasks" >&2
+  rm -rf "$PLAN_DIR"
+  exit 1
+fi
+
+mv -f "$ORDER_TMP" "$PLAN_DIR/.order"
+
+check_dep_cycles "$PLAN_DIR"
+
+mkdir -p "$REPORT_DIR"
+: > "$REPORT_DIR/_meta.md"
+
+"$CLAIM_SH" rollup "$TARGET"
+"$CLAIM_SH" report-rollup "$TARGET"
+echo "Initialized '$PLAN_DIR/' and '$REPORT_DIR/' with $found_count task(s)."

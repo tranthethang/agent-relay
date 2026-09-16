@@ -25,8 +25,7 @@ root after changing this file.
 | History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log` | `run-history.sh` / stages append events. |
 
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
-characters matching `^[a-z]+(-[a-z]+)*$`. Legacy 2.0.0 directories
-(`{YMD}_{RUN_ID}` with a 10-char nanoid) remain supported for resolution.
+characters matching `^[a-z]+(-[a-z]+)*$`.
 
 Empty templates are in [`templates/`](../templates/). Runtime files live inside
 their respective run directory.
@@ -40,14 +39,12 @@ Skills and helpers resolve the active run directory in this strict order (they
 must **never** guess via file mtime):
 
 1. The user passed a `RUN_ID`, `RUN_SLUG`, full dirname, or any path under a run directory.
-2. Else if exactly one run directory exists matching `[0-9]{8}-*` (or legacy `[0-9]{8}_*`), use that directory.
-3. Else if legacy flat `plan-*.md` files exist and exactly one matches, resolve to that run for migration.
-4. Else ask the user. Do not guess.
+2. Else if exactly one run directory exists matching `[0-9]{8}-*`, use that directory.
+3. Else ask the user. Do not guess.
 
 Directory matching rules:
 - Run directory format: `^([0-9]{8})-([0-9]{10,11})-([a-z]+(-[a-z]+)*)$`.
-- Legacy 2.0.0 run directory format: `^[0-9]{8}_[A-Za-z0-9_-]{10}$`.
-- Lookup by ID: A unique directory under `.agent-relay/` matching `*-${RUN_ID}-*` or legacy `*_${RUN_ID}`.
+- Lookup by ID: A unique directory under `.agent-relay/` matching `*-${RUN_ID}-*` or by slug.
 - Lookup by full path or dirname: Matches directly.
 
 ## `meta.md` (Source of Truth for Run Status)
@@ -120,21 +117,7 @@ appends and must not remove the self-review section:
 ## Cross-Review — YYYY-MM-DD
 ```
 
-## Legacy names and Migration
 
-Release 2.0.0 transitioned from the legacy flat layout (`.agent-relay/plan-<id>.md`
-and sibling files in `.agent-relay/`) to per-run directories.
-
-- **Legacy 2.0.0 directories**: Directories named `.agent-relay/{YMD}_{RUN_ID}/`
-  (where `RUN_ID` is a 10-char nanoid) continue to be recognized and resolved
-  by all tools. No migration is forced or required for them.
-- **Legacy 1.x flat files**: Can be resolved and migrated into per-run
-  directories using `scripts/run-migrate.sh <id>`.
-- `run-migrate.sh` moves flat files into `.agent-relay/` per-run directories
-  with short names, creates `meta.md`, and removes `.agent-relay/CURRENT` if it
-  pointed to the migrated id.
-- New runs always create per-run directories named
-  `{YMD}-{RUN_ID}-{RUN_SLUG}/`.
 
 ## Parallel task implementation (optional)
 
@@ -249,15 +232,6 @@ The claim protocol serializes **task status**, not file contents:
 | Multiple sub-agents, same `<RUN_ID>`, same task | No — second claim fails loudly |
 | Hand-editing `implement-plan.md` while parallel mode is active | No — it's generated, gets overwritten |
 
-### Migration
-
-Legacy single-file runs (`implement-plan.md`) keep working un-migrated in
-the default sequential mode. Run `scripts/task-init.sh <run-dir-or-id> --migrate`
-only when switching an existing sequential run to parallel mode. This converts the
-single file into the directory format, preserves all current statuses, and
-preserves the original file as `implement-plan.md.bak`. Plain `task-init.sh` (no
-`--migrate`) refuses if the legacy rollup file already exists, so sequential
-progress is not overwritten.
 
 ## Review notes worth flagging explicitly
 
@@ -282,8 +256,7 @@ tend to recur silently across runs otherwise:
 
 ## Notes
 
-- Put each run at `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` (or legacy
-  `.agent-relay/{YMD}_{RUN_ID}/`).
+- Put each run at `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`.
 - Commit `.agent-relay/` if you want the notes on the branch. Otherwise add
   the directory to `.gitignore`. This repo does not choose for you.
   `bin/install.sh` prints that reminder.

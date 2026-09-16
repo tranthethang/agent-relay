@@ -421,23 +421,6 @@ echo "agent-relay: uninstalling from \$HOME ($HOME)"
 removed=0
 missing=0
 
-remove_mdc() {
-  # remove_mdc <dest> [optional=0]
-  # optional=1: only remove if present; do not count as missing.
-  local dest="$1" optional="${2:-0}"
-  if [[ -e "$dest" ]]; then
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-      echo "  [dry-run] rm $dest"
-    else
-      echo "  rm $dest"
-      rm -f "$dest"
-    fi
-    removed=$((removed + 1))
-  elif [[ "$optional" -eq 0 ]]; then
-    echo "  missing: $dest"
-    missing=$((missing + 1))
-  fi
-}
 
 remove_skill_folder() {
   # remove_skill_folder <dest_folder> [optional=0]
@@ -460,16 +443,8 @@ for tool in "${TOOLS[@]}"; do
   tool_selected "$tool" || continue
   dir_var="${tool}_DIR"
   fmt_var="${tool}_FORMAT"
-  legacy_var="${tool}_LEGACY_DIRS"
   dest_dir="${!dir_var}"
   fmt="${!fmt_var}"
-
-  # Optional previous install locations (uninstall only; do not fail if absent).
-  legacy_dirs=()
-  if declare -p "$legacy_var" >/dev/null 2>&1; then
-    # shellcheck disable=SC1087
-    eval "legacy_dirs=(\"\${${legacy_var}[@]}\")"
-  fi
 
   echo "[$tool] -> $dest_dir ($fmt)"
   for skill_dir in "${skill_dirs[@]}"; do
@@ -485,28 +460,9 @@ for tool in "${TOOLS[@]}"; do
         exit 1
         ;;
     esac
-
-    # Legacy roots may use either layout (format migrations); remove both, optional.
-    if [[ ${#legacy_dirs[@]} -gt 0 ]]; then
-      for legacy_dir in "${legacy_dirs[@]}"; do
-        [[ -z "$legacy_dir" || "$legacy_dir" == "$dest_dir" ]] && continue
-        remove_mdc "$legacy_dir/$name.mdc" 1
-        remove_skill_folder "$legacy_dir/$name" 1
-      done
-    fi
   done
 done
 
-if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "  [dry-run] rm -rf $HOME/.agent-relay/scripts (legacy v0.4 helpers)"
-else
-  echo "  rm legacy task scripts under $HOME/.agent-relay/scripts"
-  rm -f "$HOME/.agent-relay/scripts"/task-*.sh \
-    "$HOME/.agent-relay/scripts/resolve-task-bin.sh" \
-    "$HOME/.agent-relay/scripts/review-section.sh"
-  rmdir "$HOME/.agent-relay/scripts" 2>/dev/null || true
-  rmdir "$HOME/.agent-relay" 2>/dev/null || true
-fi
 if [[ "$removed" -eq 0 && "$missing" -eq 0 ]]; then
   echo "Nothing to uninstall (filters matched no tool/skill combinations)." >&2
   exit 1

@@ -6,8 +6,8 @@ These are not a recorded run. There is no sample feature, no test result, and
 no claim that a review found or missed anything.
 
 Copy a template into a target repo under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`
-(or legacy `.agent-relay/{YMD}_{RUN_ID}/`) only as a starting outline. Do not
-commit the placeholder lines as if they described work that happened.
+only as a starting outline. Do not commit the placeholder lines as if they
+described work that happened.
 
 | File | Runtime name |
 | --- | --- |

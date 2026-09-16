@@ -47,32 +47,11 @@ validate_ident() {
   esac
 }
 
-# Walk up from cwd looking for .agent-relay/ (stop at / or git root).
-find_base_dir() {
-  local dir="$PWD"
-  while true; do
-    if [[ -d "$dir/.agent-relay" ]]; then
-      printf '%s\n' "$dir/.agent-relay"
-      return 0
-    fi
-    if [[ "$dir" == "/" ]]; then
-      break
-    fi
-    if [[ -d "$dir/.git" || -f "$dir/.git" ]]; then
-      break
-    fi
-    dir="$(dirname "$dir")"
-  done
-  # Fallback: relative .agent-relay under cwd (may not exist yet).
-  printf '%s\n' ".agent-relay"
-}
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVE_RUN="$SCRIPT_DIR/resolve-run.sh"
 
 resolve_paths() {
   local target="$1"
-  BASE_DIR="$(find_base_dir)"
   local run_dir=""
   if [[ -x "$RESOLVE_RUN" ]]; then
     run_dir="$("$RESOLVE_RUN" "$target" 2>/dev/null || true)"
@@ -87,19 +66,12 @@ resolve_paths() {
     local bname="$(basename "$RUN_DIR")"
     if [[ "$bname" =~ ^[0-9]{8}-([0-9]{10,11})-[a-z]+(-[a-z]+)*$ ]]; then
       ID="${BASH_REMATCH[1]}"
-    elif [[ "$bname" =~ ^[0-9]{8}_(.*)$ ]]; then
-      ID="${BASH_REMATCH[1]}"
     else
       ID="$bname"
     fi
   else
-    validate_ident "id" "$target"
-    ID="$target"
-    RUN_DIR="$BASE_DIR"
-    PLAN_DIR="$BASE_DIR/implement-plan-$target"
-    ROLLUP_FILE="$BASE_DIR/implement-plan-$target.md"
-    REPORT_DIR="$BASE_DIR/implement-report-$target"
-    REPORT_ROLLUP_FILE="$BASE_DIR/implement-report-$target.md"
+    echo "Error: could not resolve run directory for '$target'" >&2
+    exit 1
   fi
 }
 
@@ -310,8 +282,6 @@ regenerate_report_rollup() {
       plan_dir="$report_dir/../implement-plan"
     elif [[ -d "$base_dir/implement-plan" ]]; then
       plan_dir="$base_dir/implement-plan"
-    elif [[ -d "$base_dir/implement-plan-$id" ]]; then
-      plan_dir="$base_dir/implement-plan-$id"
     fi
     if [[ -n "$plan_dir" && -d "$plan_dir" ]]; then
       while IFS= read -r tid || [[ -n "$tid" ]]; do
