@@ -1,6 +1,6 @@
 ---
 name: atry-self-review
-description: Self-review code produced from .agent-relay/plan-<id>.md using implement-plan-<id>.md and implement-report-<id>.md; fix confirmed bugs; write dated sections in review-report-<id>.md and review-walkthrough-<id>.md. Use after an agent-relay implement step, or when the user asks to self-review that implementation — not for unrelated refactors.
+description: Self-review code produced from an agent-relay plan using implement-plan.md and implement-report.md in the run directory; fix confirmed bugs; write dated sections in review-report.md and review-walkthrough.md. Use after an agent-relay implement step.
 ---
 
 # Self-Review
@@ -11,25 +11,29 @@ not a fact.
 
 ## Run discovery
 
-Resolve the shared run `<id>` before reading or writing artifacts. Follow
-`references/file-conventions.md` (installed next to this skill) for the full
-order (user id → CURRENT → single plan-*.md → ask).
+Resolve the run directory before reading or writing artifacts. Call the helper
+shipped beside this skill:
 
-Legacy unsuffixed names (`plan.md`, etc.) are only allowed when no `plan-*.md`
-exists; after review, write suffixed review files.
+```bash
+RUN_DIR="$(scripts/resolve-run.sh [RUN_ID or path])"
+```
 
-**Only write `.agent-relay/CURRENT` when you create a new id.** Resolving an
-existing id must not overwrite `CURRENT`.
+If the user passed a `RUN_ID` or a path under a run directory, pass it to the
+helper. If no argument is passed and exactly one run directory exists,
+`resolve-run.sh` will resolve it automatically. If it exits non-zero (ambiguous
+or not found), ask the user for the `RUN_ID` or path.
+
+There is no `CURRENT` file — each run is self-contained.
 
 ## Inputs
 
-- Plan file: `.agent-relay/plan-<id>.md` (use its `base:` ref when present)
-- Implementation plan: `.agent-relay/implement-plan-<id>.md`. If
-  `implement-plan-<id>/` exists, prefer listing via the claim helper over a
+- Plan file: `$RUN_DIR/plan.md` (use its `base:` ref when present)
+- Implementation plan: `$RUN_DIR/implement-plan.md`. If
+  `$RUN_DIR/implement-plan/` exists, prefer listing via the claim helper over a
   possibly-stale rollup file.
-- Implementation report: if `implement-report-<id>/` exists, prefer per-task
+- Implementation report: if `$RUN_DIR/implement-report/` exists, prefer per-task
   files in that dir over the generated rollup. Otherwise read
-  `.agent-relay/implement-report-<id>.md`.
+  `$RUN_DIR/implement-report.md`.
 - Current uncommitted changes (`git status` / `git diff`). If the work was
   already committed, diff from the plan's `base:` ref (or ask the user).
 - Project rules (same precedence as implement: `AGENTS.md`, then tool rules,
@@ -58,8 +62,11 @@ cross-review is skipped.
 
 ## Instructions
 
-1. Resolve `<id>` as above (write `CURRENT` only if you created the id). Read the
-   plan, implementation plan, and implementation report first.
+1. Resolve `$RUN_DIR` as above. Record stage start in `history.log`:
+   ```bash
+   scripts/run-history.sh append "$RUN_DIR" self-review started tool=<tool>
+   ```
+   Read the plan, implementation plan, and implementation report first.
 
 1. Inspect the actual changes with git. The diff is the source of truth; the
    implementation report may be incomplete or wrong.
@@ -90,14 +97,21 @@ cross-review is skipped.
    TODAY="$(date +%F)"
    # body file must start with the provenance HTML comment, then the section body
    scripts/review-section.sh upsert \
-     .agent-relay/review-report-<id>.md \
+     "$RUN_DIR/review-report.md" \
      Self-Review "$TODAY" body.md
    scripts/review-section.sh upsert \
-     .agent-relay/review-walkthrough-<id>.md \
+     "$RUN_DIR/review-walkthrough.md" \
      Self-Review "$TODAY" walk-body.md
    ```
 
    Never remove `## Cross-Review` sections or Self-Review sections from other
-   dates. The report lists issues found, what was fixed, what was left as a
-   note, and test/build results. The walkthrough is a short narrative for the
-   next reviewer.
+   dates. Inside the body file, use `###` (not bare `##`) for subsections —
+   unfenced `## ` is a section boundary for `review-section.sh`, so a same-day
+   re-upsert would truncate. The report lists issues found, what was fixed,
+   what was left as a note, and test/build results. The walkthrough is a short
+   narrative for the next reviewer.
+
+1. Once self-review is complete, record completion in `history.log`:
+   ```bash
+   scripts/run-history.sh append "$RUN_DIR" self-review completed tool=<tool>
+   ```

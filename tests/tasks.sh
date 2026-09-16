@@ -10,6 +10,10 @@ cd "$ROOT"
 
 TASK_CLAIM="$ROOT/scripts/task-claim.sh"
 TASK_INIT="$ROOT/scripts/task-init.sh"
+RESOLVE_RUN="$ROOT/scripts/resolve-run.sh"
+RUN_INIT="$ROOT/scripts/run-init.sh"
+RUN_HISTORY="$ROOT/scripts/run-history.sh"
+RUN_MIGRATE="$ROOT/scripts/run-migrate.sh"
 
 FAIL=0
 pass() { echo "PASS: $1"; }
@@ -24,9 +28,14 @@ trap cleanup EXIT
 
 cd "$T"
 
-# 1. Happy path: task-init -> claim -> update -> release -> list
-mkdir -p .agent-relay
-cat <<'EOF' > .agent-relay/plan-happy.md
+# 1. Happy path: run-init -> task-init -> claim -> update -> release -> list
+HAPPY_DIR="$("$RUN_INIT" happy --title "Happy Plan" --base main)"
+[[ -d "$HAPPY_DIR" ]] && pass "run-init creates directory" || fail "run-init creates directory"
+[[ -f "$HAPPY_DIR/meta.md" ]] && pass "run-init creates meta.md" || fail "run-init creates meta.md"
+[[ -f "$HAPPY_DIR/history.log" ]] && pass "run-init creates history.log" || fail "run-init creates history.log"
+[[ ! -f .agent-relay/CURRENT ]] && pass "no CURRENT created" || fail "no CURRENT created"
+
+cat <<'EOF' > "$HAPPY_DIR/plan.md"
 base: main
 id: happy
 
@@ -39,19 +48,19 @@ id: happy
 EOF
 
 "$TASK_INIT" happy >/dev/null
-[[ -d .agent-relay/implement-plan-happy ]] && pass "task-init creates directory" || fail "task-init creates directory"
-[[ -f .agent-relay/implement-plan-happy/T1.status ]] && pass "task-init creates T1.status" || fail "task-init creates T1.status"
-[[ -f .agent-relay/implement-plan-happy/T2.status ]] && pass "task-init creates T2.status" || fail "task-init creates T2.status"
-[[ -f .agent-relay/implement-plan-happy.md ]] && pass "task-init generates rollup" || fail "task-init generates rollup"
+[[ -d "$HAPPY_DIR/implement-plan" ]] && pass "task-init creates directory" || fail "task-init creates directory"
+[[ -f "$HAPPY_DIR/implement-plan/T1.status" ]] && pass "task-init creates T1.status" || fail "task-init creates T1.status"
+[[ -f "$HAPPY_DIR/implement-plan/T2.status" ]] && pass "task-init creates T2.status" || fail "task-init creates T2.status"
+[[ -f "$HAPPY_DIR/implement-plan.md" ]] && pass "task-init generates rollup" || fail "task-init generates rollup"
 
-grep -q -- "- \[pending\] T1:" .agent-relay/implement-plan-happy.md && pass "initial rollup pending" || fail "initial rollup pending"
+grep -q -- "- \[pending\] T1:" "$HAPPY_DIR/implement-plan.md" && pass "initial rollup pending" || fail "initial rollup pending"
 
 # Claim T1
 "$TASK_CLAIM" claim happy T1 agent-1 >/dev/null
-[[ -d .agent-relay/implement-plan-happy/.lock-T1 ]] && pass "claim creates lock dir" || fail "claim creates lock dir"
-grep -q -- "agent-1" .agent-relay/implement-plan-happy/.lock-T1/owner && pass "claim writes owner" || fail "claim writes owner"
-grep -q -- "status: in-progress" .agent-relay/implement-plan-happy/T1.status && pass "claim sets in-progress" || fail "claim sets in-progress"
-grep -q -- "- \[in-progress\] T1:" .agent-relay/implement-plan-happy.md && pass "claim updates rollup" || fail "claim updates rollup"
+[[ -d "$HAPPY_DIR/implement-plan/.lock-T1" ]] && pass "claim creates lock dir" || fail "claim creates lock dir"
+grep -q -- "agent-1" "$HAPPY_DIR/implement-plan/.lock-T1/owner" && pass "claim writes owner" || fail "claim writes owner"
+grep -q -- "status: in-progress" "$HAPPY_DIR/implement-plan/T1.status" && pass "claim sets in-progress" || fail "claim sets in-progress"
+grep -q -- "- \[in-progress\] T1:" "$HAPPY_DIR/implement-plan.md" && pass "claim updates rollup" || fail "claim updates rollup"
 
 # Wrong owner update must fail loudly
 if "$TASK_CLAIM" update happy T1 agent-impostor done >/dev/null 2>&1; then
@@ -62,13 +71,13 @@ fi
 
 # Right owner update
 "$TASK_CLAIM" update happy T1 agent-1 done >/dev/null
-grep -q -- "status: done" .agent-relay/implement-plan-happy/T1.status && pass "update sets done" || fail "update sets done"
-grep -q -- "- \[done\] T1:" .agent-relay/implement-plan-happy.md && pass "update updates rollup" || fail "update updates rollup"
+grep -q -- "status: done" "$HAPPY_DIR/implement-plan/T1.status" && pass "update sets done" || fail "update sets done"
+grep -q -- "- \[done\] T1:" "$HAPPY_DIR/implement-plan.md" && pass "update updates rollup" || fail "update updates rollup"
 
 # Release lock
 "$TASK_CLAIM" release happy T1 agent-1 >/dev/null
-[[ ! -d .agent-relay/implement-plan-happy/.lock-T1 ]] && pass "release removes lock dir" || fail "release removes lock dir"
-grep -q -- "status: done" .agent-relay/implement-plan-happy/T1.status && pass "release leaves status done" || fail "release leaves status done"
+[[ ! -d "$HAPPY_DIR/implement-plan/.lock-T1" ]] && pass "release removes lock dir" || fail "release removes lock dir"
+grep -q -- "status: done" "$HAPPY_DIR/implement-plan/T1.status" && pass "release leaves status done" || fail "release leaves status done"
 
 # List
 LIST_OUT="$("$TASK_CLAIM" list happy)"
@@ -84,8 +93,8 @@ fi
 
 # Hand-edit the rollup directly (bypassing task-claim.sh) the same way the
 # real-world run that motivated this subcommand did -- check must catch it.
-cp .agent-relay/implement-plan-happy.md "$T/happy-rollup.bak"
-printf '# implement-plan (happy)\n\n- [done] T1: Setup DB.\n- [done] T2: Add API.\n' > .agent-relay/implement-plan-happy.md
+cp "$HAPPY_DIR/implement-plan.md" "$T/happy-rollup.bak"
+printf '# implement-plan (happy)\n\n- [done] T1: Setup DB.\n- [done] T2: Add API.\n' > "$HAPPY_DIR/implement-plan.md"
 CHECK_OUT="$("$TASK_CLAIM" check happy 2>&1 || true)"
 if "$TASK_CLAIM" check happy >/dev/null 2>&1; then
   fail "check detects a hand-edited rollup"
@@ -93,7 +102,7 @@ else
   pass "check detects a hand-edited rollup"
 fi
 echo "$CHECK_OUT" | grep -q "MISMATCH" && pass "check output names the mismatch" || fail "check output names the mismatch"
-cp "$T/happy-rollup.bak" .agent-relay/implement-plan-happy.md
+cp "$T/happy-rollup.bak" "$HAPPY_DIR/implement-plan.md"
 if "$TASK_CLAIM" check happy >/dev/null 2>&1; then
   pass "check is OK again once the rollup is restored"
 else
@@ -831,6 +840,20 @@ fi
 # --- T17: review-section.sh upsert preserves other sections ---
 REVIEW_SH="$ROOT/scripts/review-section.sh"
 TODAY="$(date +%F)"
+
+# Missing walkthrough path must create review-walkthrough.md, not clobber report.
+RW_DIR="$T/rw-run/.agent-relay/20260916_rwtestid01"
+mkdir -p "$RW_DIR"
+echo 'id: rwtestid01' > "$RW_DIR/meta.md"
+printf '%s\n' 'report body only' > "$T/rw-report-body.md"
+printf '%s\n' 'walk body only' > "$T/rw-walk-body.md"
+"$REVIEW_SH" upsert "$RW_DIR/review-report.md" Cross-Review "$TODAY" "$T/rw-report-body.md"
+"$REVIEW_SH" upsert "$RW_DIR/review-walkthrough.md" Cross-Review "$TODAY" "$T/rw-walk-body.md"
+[[ -f "$RW_DIR/review-walkthrough.md" ]] && pass "upsert creates walkthrough file" || fail "upsert creates walkthrough file"
+grep -q 'walk body only' "$RW_DIR/review-walkthrough.md" && pass "upsert walkthrough keeps basename" || fail "upsert walkthrough keeps basename"
+grep -q 'report body only' "$RW_DIR/review-report.md" && pass "upsert walkthrough does not clobber report" || fail "upsert walkthrough does not clobber report"
+grep -q 'walk body only' "$RW_DIR/review-report.md" && fail "upsert walkthrough does not clobber report" || pass "upsert walkthrough leaves report body"
+
 RF="$T/review-upsert.md"
 cat > "$RF" <<EOF
 ## Self-Review — $TODAY
@@ -960,6 +983,100 @@ printf '<!-- relay: stage=self-review tool=gemini model=weak-model base=abc date
 printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=abc date=%s -->\nCross body.\n' "$TODAY" > "$T/warn-cross-fenced.md"
 WARN_OUT3="$("$REVIEW_SH" upsert "$WARN_FILE3" Cross-Review "$TODAY" "$T/warn-cross-fenced.md" 2>&1 >/dev/null)"
 [[ -z "$WARN_OUT3" ]] && pass "fenced example provenance is not mistaken for the real prior self-review" || fail "fenced example provenance is not mistaken for the real prior self-review"
+
+# --- Per-run folder helper tests (resolve-run, run-migrate, run-history) ---
+
+# 1. Resolve by id
+RESOLVED="$("$RESOLVE_RUN" happy)"
+[[ "$RESOLVED" == "$HAPPY_DIR" ]] && pass "resolve-run by id matches" || fail "resolve-run by id matches"
+
+# 2. Resolve by dir path
+RESOLVED_PATH="$("$RESOLVE_RUN" "$HAPPY_DIR")"
+[[ "$RESOLVED_PATH" == "$HAPPY_DIR" ]] && pass "resolve-run by dir path matches" || fail "resolve-run by dir path matches"
+
+# 3. Resolve by file path inside run dir
+RESOLVED_FILE="$("$RESOLVE_RUN" "$HAPPY_DIR/plan.md")"
+[[ "$RESOLVED_FILE" == "$HAPPY_DIR" ]] && pass "resolve-run by file path matches" || fail "resolve-run by file path matches"
+
+# 4. Resolve with no args from run dir
+(
+  cd "$HAPPY_DIR"
+  RESOLVED_INSIDE="$("$RESOLVE_RUN")"
+  [[ "$RESOLVED_INSIDE" == "$HAPPY_DIR" ]] && pass "resolve-run with no args from inside run dir" || fail "resolve-run with no args from inside run dir"
+)
+
+# 5. Resolve with no args when multiple runs exist -> ambiguous failure
+RUN2_DIR="$("$RUN_INIT" run2 --title "Second Run" --base main)"
+(
+  cd "$T"
+  if "$RESOLVE_RUN" >/dev/null 2>&1; then
+    fail "resolve-run with multiple runs should fail as ambiguous"
+  else
+    pass "resolve-run with multiple runs fails as ambiguous"
+  fi
+)
+rm -rf "$RUN2_DIR"
+
+# 6. Resolve legacy flat plan
+LEGACY_DIR="$T/legacy-test"
+mkdir -p "$LEGACY_DIR/.agent-relay"
+cat <<'EOF' > "$LEGACY_DIR/.agent-relay/plan-leg1.md"
+base: main
+id: leg1
+
+# Legacy Plan
+EOF
+(
+  cd "$LEGACY_DIR"
+  RESOLVED_LEGACY="$("$RESOLVE_RUN" leg1 2>/dev/null)"
+  LEGACY_BASE="$(cd "$LEGACY_DIR/.agent-relay" && pwd -P)"
+  [[ "$RESOLVED_LEGACY" == "$LEGACY_BASE" ]] && pass "resolve-run legacy resolves to base .agent-relay" || fail "resolve-run legacy resolves to base .agent-relay"
+)
+
+# 7. run-migrate.sh moves files and cleans CURRENT
+cat <<'EOF' > "$LEGACY_DIR/.agent-relay/implement-plan-leg1.md"
+- [done] T1: Task 1
+- [pending] T2: Task 2
+EOF
+mkdir -p "$LEGACY_DIR/.agent-relay/implement-plan-leg1"
+printf 'status: done\ndesc: Task 1\ndeps:\n' > "$LEGACY_DIR/.agent-relay/implement-plan-leg1/T1.status"
+printf 'status: pending\ndesc: Task 2\ndeps:\n' > "$LEGACY_DIR/.agent-relay/implement-plan-leg1/T2.status"
+echo "leg1" > "$LEGACY_DIR/.agent-relay/CURRENT"
+
+(
+  cd "$LEGACY_DIR"
+  MIGRATED_DIR="$("$RUN_MIGRATE" leg1)"
+  [[ -d "$MIGRATED_DIR" ]] && pass "run-migrate creates run directory" || fail "run-migrate creates run directory"
+  [[ -f "$MIGRATED_DIR/plan.md" ]] && pass "run-migrate moves plan.md" || fail "run-migrate moves plan.md"
+  [[ -f "$MIGRATED_DIR/implement-plan.md" ]] && pass "run-migrate moves implement-plan.md" || fail "run-migrate moves implement-plan.md"
+  [[ -d "$MIGRATED_DIR/implement-plan" ]] && pass "run-migrate moves implement-plan/" || fail "run-migrate moves implement-plan/"
+  [[ -f "$MIGRATED_DIR/meta.md" ]] && pass "run-migrate creates meta.md" || fail "run-migrate creates meta.md"
+  [[ -f "$MIGRATED_DIR/history.log" ]] && pass "run-migrate creates history.log" || fail "run-migrate creates history.log"
+  [[ ! -f "$LEGACY_DIR/.agent-relay/CURRENT" ]] && pass "run-migrate cleans CURRENT" || fail "run-migrate cleans CURRENT"
+  [[ ! -f "$LEGACY_DIR/.agent-relay/plan-leg1.md" ]] && pass "run-migrate removes legacy plan-leg1.md" || fail "run-migrate removes legacy plan-leg1.md"
+)
+
+# 8. run-history.sh append & show
+"$RUN_HISTORY" append "$HAPPY_DIR" implement started tool=cursor
+grep -q "stage=implement action=started tool=cursor" "$HAPPY_DIR/history.log" && pass "history append writes log" || fail "history append writes log"
+grep -q "stage: implement" "$HAPPY_DIR/meta.md" && pass "history append updates meta.md stage" || fail "history append updates meta.md stage"
+
+HIST_SHOW="$("$RUN_HISTORY" show "$HAPPY_DIR")"
+echo "$HIST_SHOW" | grep -q "action=started" && pass "history show displays events" || fail "history show displays events"
+
+# 9. run-history refuses legacy flat resolve (no root history.log)
+LEGACY_HIST="$T/legacy-hist"
+mkdir -p "$LEGACY_HIST/.agent-relay"
+echo 'base: x' > "$LEGACY_HIST/.agent-relay/plan-leghist01.md"
+if (
+  cd "$LEGACY_HIST"
+  "$RUN_HISTORY" append leghist01 implement started tool=test
+) >/dev/null 2>&1; then
+  fail "history refuses legacy flat layout"
+else
+  pass "history refuses legacy flat layout"
+fi
+[[ ! -f "$LEGACY_HIST/.agent-relay/history.log" ]] && pass "history does not write root history.log" || fail "history does not write root history.log"
 
 # --- CR-2: skill bundle copies must not drift from their sources ---
 # atry-plan has no scripts/; this also covers bash 3.2 + set -u on empty arrays.

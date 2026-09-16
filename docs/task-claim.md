@@ -1,7 +1,8 @@
 # Parallel task helpers (`task-claim` / `task-init`)
 
 Optional protocol for several agents sharing one run `<id>`. Default implement
-flow stays sequential (single `implement-plan-<id>.md` / `implement-report-<id>.md`).
+flow stays sequential (single `implement-plan.md` / `implement-report.md` inside
+the run folder).
 
 Canonical sources: `scripts/task-init.sh`, `scripts/task-claim.sh`. Bundled
 copies under `skills/atry-implement/scripts/` must match
@@ -30,9 +31,9 @@ scripts/task-init.sh <id>
 scripts/task-init.sh <id> --migrate
 ```
 
-Creates `implement-plan-<id>/` (`*.status`, `.order`, optional `_meta.md`) and
-generates `implement-plan-<id>.md` as a rollup. Plain `task-init` without
-`--migrate` refuses if the legacy rollup file already exists.
+Creates `implement-plan/` (or legacy `implement-plan-<id>/`) (`*.status`, `.order`, optional `_meta.md`) and
+generates `implement-plan.md` as a rollup. Plain `task-init` without
+`--migrate` refuses if the rollup file already exists.
 
 ## `task-claim.sh` subcommands
 
@@ -59,7 +60,7 @@ task-claim.sh [--session <tag>] <subcommand> ...
 | `list` | Print tasks; pending + unmet deps get `[blocked: …]` |
 | `rollup` | Regenerate the plan rollup on demand. Every state-changing subcommand above already does this as its last step, so this is mostly for manual recovery |
 | `check` | Regenerate expected rollups into temps beside the plan/report dirs; `cmp` to on-disk rollups; `MISMATCH` → exit non-zero. **Does not repair** |
-| `report-*` | Per-task report files + generated `implement-report-<id>.md` |
+| `report-*` | Per-task report files + generated `implement-report.md` |
 
 `--session` may appear before the subcommand or (for `update`/`release`) after
 it. Ambient `SESSION` / `SESSION_TAG` env vars are **never** used for auth.
@@ -68,18 +69,18 @@ Ids and task-ids must match `^[A-Za-z0-9._-]+$` (no path separators).
 
 ## Locks
 
-- Per-task lock: `implement-plan-<id>/.lock-<task-id>/` (`mkdir` is the mutex)  
+- Per-task lock: `implement-plan/.lock-<task-id>/` (or legacy `implement-plan-<id>/.lock-<task-id>/`; `mkdir` is the mutex)  
 - Owner file records `session-tag` + timestamp  
 - Stale locks: `claim` fails and prints the `steal` command — human/agent
   decision, not a timer  
 
 ## `check` and rollup drift
 
-Hand-editing `implement-plan-<id>.md` while the directory exists desyncs
+Hand-editing `implement-plan.md` while the directory exists desyncs
 `.status` files from the rollup (seen in real runs). `check` compares
 **content** (what regenerate would produce) to the on-disk rollup — not mtime.
 
-If `implement-plan-<id>/` exists, `atry-implement` skill text requires using
+If `implement-plan/` (or legacy `implement-plan-<id>/`) exists, `atry-implement` skill text requires using
 `task-claim.sh` for further status/report writes. That is instruction only;
 nothing filesystem-locks the rollup `.md` against editors.
 

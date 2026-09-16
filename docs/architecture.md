@@ -21,7 +21,8 @@ tree, not a roadmap.
                             │ agent writes under target repo
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  <target-repo>/.agent-relay/plan-<id>.md                    │
+│  <target-repo>/.agent-relay/{YMD}_{RUN_ID}/plan.md          │
+│                   meta.md / history.log                     │
 │                   implement-plan / report / review-*        │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -34,8 +35,8 @@ skill directories. It does not call agents, pick models, or watch `.agent-relay/
 | Layer | Location | Job |
 | --- | --- | --- |
 | Skill text | `skills/<name>/SKILL.md` | Tell an agent what to do; **record**, rarely enforce |
-| Shared conventions | `docs/file-conventions.md` | Artifact names / id / parallel layout (copied into every bundle) |
-| Helpers | `scripts/*.sh` (canonical) → `skills/*/scripts/` (copies) | Optional bash the agent runs (`task-claim`, `review-section`, …) |
+| Shared conventions | `docs/file-conventions.md` | Artifact names / id / per-run layout (copied into every bundle) |
+| Helpers | `scripts/*.sh` (canonical) → `skills/*/scripts/` (copies) | Optional bash the agent runs (`resolve-run`, `task-claim`, `review-section`, …) |
 | Installer | `bin/install.sh`, `uninstall.sh`, `verify.sh` | Copy / remove / check files under `$HOME` |
 | Shared install logic | `lib/bootstrap.sh` | Download, checksum verify, `validate_targets_conf` (inlined into bin via `sync-bootstrap.sh`) |
 | Manifest | `targets.conf` | Per-tool install roots; still `source`d after allowlist validation |
@@ -43,9 +44,9 @@ skill directories. It does not call agents, pick models, or watch `.agent-relay/
 
 ## Stage flow (expected usage)
 
-1. **plan** → write `plan-<id>.md`, set `CURRENT` only when creating the id  
-2. **implement** → code + `implement-plan-*` / `implement-report-*`  
-3. **self-review** → upsert dated Self-Review section  
+1. **plan** → create run directory via `run-init.sh`, write `plan.md`  
+2. **implement** → code + `implement-plan.md` / `implement-report.md` (or parallel dirs)  
+3. **self-review** → upsert dated Self-Review section in review reports  
 4. **cross-review** → upsert Cross-Review (skill asks for a different tool; nothing enforces it)
 
 Nothing in this repo schedules that order. Skipping a stage is always possible.

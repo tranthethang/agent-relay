@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+# scripts/resolve-run.sh
+# Resolves the absolute path of an agent-relay run directory.
+# Bash 3.2+ compatible, POSIX tools only.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  resolve-run.sh [<RUN_ID> | <path>]
+
+Resolves and prints the absolute path of an agent-relay run directory.
+If no argument is given, resolves if exactly one run directory exists.
+Exits non-zero if not found or ambiguous.
+EOF
+  exit 1
+}
+
+# Walk up from cwd looking for .agent-relay/ (stop at / or git root).
+find_base_dir() {
+  local dir="$PWD"
+  while true; do
+    if [[ -d "$dir/.agent-relay" ]]; then
+      printf '%s\n' "$dir/.agent-relay"
+      return 0
+    fi
+    if [[ "$dir" == "/" ]]; then
+      break
+    fi
+    if [[ -d "$dir/.git" || -f "$dir/.git" ]]; then
+      break
+    fi
+    dir="$(dirname "$dir")"
+  done
+  # Fallback: relative .agent-relay under cwd
+  printf '%s\n' ".agent-relay"
+}
+
+is_run_dirname() {
+  local name="$1"
+  case "$name" in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[A-Za-z0-9_-]*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# 1. Argument was provided
+if [[ $# -ge 1 && -n "${1:-}" ]]; then
+  arg="$1"
+
+  # Check if argument is a path or an existing file/directory
+  if [[ "$arg" == *"/"* || "$arg" == "."* || -e "$arg" ]]; then
+    # Resolve directory part
+    if [[ -d "$arg" ]]; then
+      target_dir="$arg"
+    else
+      target_dir="$(dirname "$arg")"
+    fi
+    abs_target="$(cd "$target_dir" 2>/dev/null && pwd -P || pwd)"
+
+    # Check if target is or is inside a run directory
+    check_dir="$abs_target"
+    while true; do
+      base_name="$(basename "$check_dir")"
+      parent_name="$(basename "$(dirname "$check_dir")")"
+
+      if is_run_dirname "$base_name" && [[ "$parent_name" == ".agent-relay" ]]; then
+        printf '%s\n' "$check_dir"
+        exit 0
+      fi
+
+      if [[ "$check_dir" == "/" ]]; then
+        break
+      fi
+      check_dir="$(dirname "$check_dir")"
+    done
+
+    # Check if arg points directly to a legacy plan file: plan-<id>.md
+    file_name="$(basename "$arg")"
+    case "$file_name" in
+      plan-*.md)
+        legacy_id="${file_name#plan-}"
+        legacy_id="${legacy_id%.md}"
+        base_dir="$(cd "$(dirname "$arg")" 2>/dev/null && pwd -P || pwd)"
+        # Check if a migrated folder exists
+        shopt -s nullglob
+        migrated=("$base_dir"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_"$legacy_id")
+        shopt -u nullglob
+        if [[ ${#migrated[@]} -eq 1 ]]; then
+          cd "${migrated[0]}" && pwd -P
+          exit 0
+        fi
+        echo "Note: resolved legacy flat run '$legacy_id' at $base_dir; run 'run-migrate.sh $legacy_id' to migrate" >&2
+        printf '%s\n' "$base_dir"
+        exit 0
+        ;;
+    esac
+
+    # If it's a directory matching run dir name format directly
+    if is_run_dirname "$(basename "$abs_target")"; then
+      printf '%s\n' "$abs_target"
+      exit 0
+    fi
+
+    echo "Error: path '$arg' is not inside an agent-relay run directory" >&2
+    exit 1
+  fi
+
+  # Argument is a RUN_ID
+  id="$arg"
+  case "$id" in
+    *[!A-Za-z0-9._-]*|"")
+      echo "Error: invalid RUN_ID '$id'" >&2
+      exit 1
+      ;;
+  esac
+
+  BASE_DIR="$(find_base_dir)"
+  if [[ ! -d "$BASE_DIR" ]]; then
+    echo "Error: .agent-relay directory not found" >&2
+    exit 1
+  fi
+
+  # Search for directory ending in _$id
+  shopt -s nullglob
+  matches=("$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_"$id")
+  if [[ ${#matches[@]} -eq 0 ]]; then
+    matches=("$BASE_DIR"/*_"$id")
+  fi
+  shopt -u nullglob
+
+  if [[ ${#matches[@]} -eq 1 ]]; then
+    abs_path="$(cd "${matches[0]}" && pwd -P)"
+    printf '%s\n' "$abs_path"
+    exit 0
+  fi
+
+  if [[ ${#matches[@]} -gt 1 ]]; then
+    echo "Error: ambiguous RUN_ID '$id' matches multiple run directories" >&2
+    exit 1
+  fi
+
+  # Check legacy flat plan
+  if [[ -f "$BASE_DIR/plan-$id.md" ]]; then
+    abs_base="$(cd "$BASE_DIR" && pwd -P)"
+    echo "Note: resolved legacy flat run '$id' at $abs_base; run 'run-migrate.sh $id' to migrate" >&2
+    printf '%s\n' "$abs_base"
+    exit 0
+  fi
+
+  echo "Error: no run directory or legacy plan found for '$id'" >&2
+  exit 1
+fi
+
+# 2. No argument provided: check if cwd is inside a run directory
+check_dir="$PWD"
+while true; do
+  base_name="$(basename "$check_dir")"
+  parent_name="$(basename "$(dirname "$check_dir")")"
+
+  if is_run_dirname "$base_name" && [[ "$parent_name" == ".agent-relay" ]]; then
+    cd "$check_dir" && pwd -P
+    exit 0
+  fi
+
+  if [[ "$check_dir" == "/" ]]; then
+    break
+  fi
+  check_dir="$(dirname "$check_dir")"
+done
+
+# Check run directories under .agent-relay
+BASE_DIR="$(find_base_dir)"
+if [[ ! -d "$BASE_DIR" ]]; then
+  echo "Error: .agent-relay directory not found" >&2
+  exit 1
+fi
+
+shopt -s nullglob
+raw_dirs=("$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*)
+shopt -u nullglob
+
+run_dirs=()
+for d in "${raw_dirs[@]}"; do
+  if [[ -d "$d" ]]; then
+    run_dirs+=("$d")
+  fi
+done
+
+if [[ ${#run_dirs[@]} -eq 1 ]]; then
+  cd "${run_dirs[0]}" && pwd -P
+  exit 0
+fi
+
+if [[ ${#run_dirs[@]} -gt 1 ]]; then
+  echo "Error: multiple run directories found in $BASE_DIR; specify RUN_ID or path" >&2
+  exit 1
+fi
+
+# Check legacy flat plans
+shopt -s nullglob
+legacy_plans=("$BASE_DIR"/plan-*.md)
+shopt -u nullglob
+
+if [[ ${#legacy_plans[@]} -eq 1 ]]; then
+  fname="$(basename "${legacy_plans[0]}")"
+  id="${fname#plan-}"
+  id="${id%.md}"
+  abs_base="$(cd "$BASE_DIR" && pwd -P)"
+  echo "Note: resolved legacy flat run '$id' at $abs_base; run 'run-migrate.sh $id' to migrate" >&2
+  printf '%s\n' "$abs_base"
+  exit 0
+fi
+
+if [[ ${#legacy_plans[@]} -gt 1 ]]; then
+  echo "Error: multiple legacy plans found in $BASE_DIR; specify RUN_ID or path" >&2
+  exit 1
+fi
+
+echo "Error: no run directory found in $BASE_DIR" >&2
+exit 1

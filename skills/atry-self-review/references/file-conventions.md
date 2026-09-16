@@ -1,8 +1,11 @@
 # File conventions
 
-Skills read and write files under `.agent-relay/` in the target repo. One run
-uses one id on every file so two features do not overwrite each other. Nothing
-in this repo enforces the names except the skill text.
+Skills read and write files under `.agent-relay/{YMD}_{RUN_ID}/` in the target
+repo, where `{YMD}` is the run creation date (`date +%Y%m%d`, never renamed) and
+`{RUN_ID}` is a 10-character identifier (`^[A-Za-z0-9_-]{10}$`). All run
+artifacts live inside this per-run directory using short, stable names (no `<id>`
+suffixes inside filenames). Nothing in this repo enforces the names except the
+skill text and bash helpers.
 
 This file is the **source of truth** for those names. Maintainer docs that
 point here (architecture, task-claim, skill authoring, …):
@@ -12,49 +15,88 @@ root after changing this file.
 
 | Purpose | Path | Written by |
 | --- | --- | --- |
-| Plan | `.agent-relay/plan-<id>.md` | You, or `atry-plan`. |
-| Task list | `.agent-relay/implement-plan-<id>.md` (or `implement-plan-<id>/` in parallel mode) | `atry-implement` |
-| Implement notes | `.agent-relay/implement-report-<id>.md` (or `implement-report-<id>/` in parallel mode) | `atry-implement` |
-| Review report | `.agent-relay/review-report-<id>.md` | `atry-self-review` creates or overwrites. `atry-cross-review` appends. |
-| Review walkthrough | `.agent-relay/review-walkthrough-<id>.md` | Same as the review report. |
-| Active id | `.agent-relay/CURRENT` | Written only when a stage **creates** a new id. |
+| Plan | `.agent-relay/{YMD}_{RUN_ID}/plan.md` | You, or `atry-plan`. |
+| Task list | `.agent-relay/{YMD}_{RUN_ID}/implement-plan.md` (or `implement-plan/` in parallel mode) | `atry-implement` |
+| Implement notes | `.agent-relay/{YMD}_{RUN_ID}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement` |
+| Review report | `.agent-relay/{YMD}_{RUN_ID}/review-report.md` | `atry-self-review` creates or overwrites. `atry-cross-review` appends. |
+| Review walkthrough | `.agent-relay/{YMD}_{RUN_ID}/review-walkthrough.md` | Same as the review report. |
+| Metadata | `.agent-relay/{YMD}_{RUN_ID}/meta.md` | `run-init.sh` creates; stages update `stage:` and `status:`. |
+| History (optional) | `.agent-relay/{YMD}_{RUN_ID}/history.log` | `run-history.sh` / stages append events. |
 
-`<id>` is 10 characters from `A-Za-z0-9_-`. The same id is used for all five
-role files.
+`<RUN_ID>` is 10 characters from `A-Za-z0-9_-`.
 
-Empty templates are in [`templates/`](../templates/). They are not a completed
-run. Runtime files must use the `-<id>` suffix. The templates keep short names
-so the links stay stable.
+Empty templates are in [`templates/`](../templates/). Runtime files live inside
+their respective `{YMD}_{RUN_ID}/` directory.
 
-## CURRENT
+## No CURRENT / No Central Index
 
-`.agent-relay/CURRENT` is one line: the active id, trimmed, no quotes. A stage
-writes it **only when it creates a new id**. Resolving an existing id (from the
-user, from `CURRENT`, or from a single `plan-*.md`) must not overwrite
-`CURRENT` — that was overwriting an in-progress feature's pointer.
+There is **no** `.agent-relay/CURRENT` file and **no** root index (such as
+`composer.csv` or `runs.md`). Each run directory is self-contained.
 
-Skills resolve the id in this order. They are told not to use mtime:
+Skills and helpers resolve the active run directory in this strict order (they
+must **never** guess via file mtime):
 
-1. The user passed a plan path or an id. From a path, take the id with
-   `^plan-(.+)\.md$`.
-2. Else read `.agent-relay/CURRENT`.
-3. Else if exactly one `plan-*.md` exists, take the id from that name.
-4. Else ask. Do not guess.
+1. The user passed a `RUN_ID` or any path under a run directory.
+2. Else if exactly one run directory exists matching `[0-9]{8}_*`, use that directory.
+3. Else if legacy flat `plan-*.md` files exist and exactly one matches, resolve to that run for migration.
+4. Else ask the user. Do not guess.
+
+Directory matching rules:
+- Run directory format: `^[0-9]{8}_[A-Za-z0-9_-]{10}$`.
+- Lookup by ID: A unique directory under `.agent-relay/` ending in `_${RUN_ID}`.
+
+## `meta.md` (Source of Truth for Run Status)
+
+Every run directory contains `meta.md` created at plan time:
+
+```markdown
+id: <RUN_ID>
+created: <YYYY-MM-DD>
+title: <short>
+stage: plan|implement|self-review|cross-review|done
+status: active|done|abandoned
+base: <git-ref>
+```
+
+Field definitions:
+- `id`: The 10-character run identifier.
+- `created`: Date the run was initialized (`YYYY-MM-DD`).
+- `title`: Short summary of the run's goal.
+- `stage`: Current workflow stage (`plan`, `implement`, `self-review`, `cross-review`, or `done`).
+- `status`: Lifecycle status (`active`, `done`, or `abandoned`).
+- `base`: Git commit ref from which the work branches or diffs.
+
+## `history.log` (Append-Only Event Log)
+
+An optional, append-only log file `history.log` records stage transitions and
+major actions. Each line is formatted as:
+
+`<TIMESTAMP> stage=<stage> action=<action> [key=value ...]`
+
+Example:
+```text
+2026-09-16T03:05:00Z stage=plan action=created tool=cursor
+2026-09-16T03:15:22Z stage=implement action=started tool=cursor
+2026-09-16T03:45:10Z stage=implement action=completed tool=cursor
+```
+
+Timestamp must be ISO8601 UTC. Use `scripts/run-history.sh` to safely append to
+this file.
 
 ## Plan header
 
-`plan-<id>.md` should start with the git ref you will diff from, and the id:
+`plan.md` starts with the git ref you will diff from, and the id:
 
 ```markdown
 base: <git-ref>
-id: <id>
+id: <RUN_ID>
 
 # <title>
 ```
 
-If those lines are missing, `atry-implement` is instructed to add them before
-coding. `base` should be a real ref in that repo (`HEAD` before the work, or
-the branch tip). Do not invent one.
+If those lines are missing, `atry-implement` adds them before coding. `base`
+should be a real ref in that repo (`HEAD` before the work, or the branch tip).
+Do not invent one.
 
 ## Review headings
 
@@ -71,30 +113,37 @@ appends and must not remove the self-review section:
 ## Cross-Review — YYYY-MM-DD
 ```
 
-## Legacy names
+## Legacy names and Migration
 
-If `.agent-relay/plan.md` exists and no `plan-*.md` exists, a skill may read
-the unsuffixed set once (`implement-plan.md`, and so on). New writes go to
-`*-<id>.md` and `CURRENT`. Do not create new unsuffixed names.
+Release 2.0.0 transitions from the legacy flat layout (`.agent-relay/plan-<id>.md`
+and sibling files in `.agent-relay/`) to the per-run directory layout.
+
+- **Read & Migrate**: Legacy flat files can be resolved and migrated into the
+  per-run folder layout using `scripts/run-migrate.sh <id>`.
+- `run-migrate.sh` moves flat files into `.agent-relay/{YMD}_{RUN_ID}/` with short
+  names, creates `meta.md`, and removes `.agent-relay/CURRENT` if it pointed to
+  the migrated id.
+- New runs always create per-run directories.
 
 ## Parallel task implementation (optional)
 
-Default implement/review skills still use one shared markdown file for the
-plan checklist and one for the report. That is fine for a single agent.
+Default implement/review skills use one shared markdown file for the plan
+checklist (`implement-plan.md`) and one for the report (`implement-report.md`).
+That is fine for a single agent.
 
-When several agents update the **same** run `<id>` at once, those shared files
-tend to lose updates. An **opt-in** directory layout plus small bash helpers
-avoid that for **status and per-task notes only**. They do not schedule agents,
-create worktrees, or protect overlapping source-file edits. See
+When several agents update the **same** run `<RUN_ID>` at once, those shared
+files tend to lose updates. An **opt-in** directory layout plus small bash
+helpers avoid that for **status and per-task notes only**. They do not schedule
+agents, create worktrees, or protect overlapping source-file edits. See
 [Working-tree isolation](#working-tree-isolation).
 
 ### Directory format
 
-Instead of hand-editing a single `implement-plan-<id>.md` or
-`implement-report-<id>.md`, parallel mode uses
-`.agent-relay/implement-plan-<id>/` and `.agent-relay/implement-report-<id>/`:
+Instead of hand-editing a single `implement-plan.md` or `implement-report.md`,
+parallel mode uses `implement-plan/` and `implement-report/` inside the run
+directory:
 
-- `implement-plan-<id>/<task-id>.status` — three lines:
+- `implement-plan/<task-id>.status` — three lines:
   ```text
   status: pending|in-progress|done|skipped (<reason>)
   desc: <short description>
@@ -102,37 +151,37 @@ Instead of hand-editing a single `implement-plan-<id>.md` or
   ```
   `deps:` is optional; omit or leave empty for no dependencies. Tokens are
   whitespace-separated task ids in the same plan.
-- `implement-plan-<id>/_meta.md` — free-text notes not tied to one task.
-- `implement-plan-<id>.md` — a generated, read-only rollup file.
-- `implement-report-<id>/<task-id>.md` — execution notes for a specific task.
-- `implement-report-<id>/_meta.md` — shared architectural notes.
-- `implement-report-<id>.md` — a generated, read-only rollup file of execution notes.
+- `implement-plan/_meta.md` — free-text notes not tied to one task.
+- `implement-plan.md` — a generated, read-only rollup file.
+- `implement-report/<task-id>.md` — execution notes for a specific task.
+- `implement-report/_meta.md` — shared architectural notes.
+- `implement-report.md` — a generated, read-only rollup file of execution notes.
 
 ### `task-claim.sh` contract
 
 The script `scripts/task-claim.sh` manages atomic task claiming, status updates,
-dependency validation, and rollup generation. Ids and task-ids must match
-`^[A-Za-z0-9._-]+$` (no path separators).
+dependency validation, and rollup generation within the run directory. Ids and
+task-ids must match `^[A-Za-z0-9._-]+$` (no path separators).
 
 ```bash
 task-claim.sh [--session <tag>] <subcommand> ...
-task-claim.sh claim [--allow-skipped-deps] <id> <task-id> <session-tag>
-task-claim.sh steal <id> <task-id> <session-tag>
-task-claim.sh update [--session <tag>] <id> <task-id> [<session-tag>] <status> [<reason>]
-task-claim.sh release [--force] [--session <tag>] <id> <task-id> [<session-tag>]
-task-claim.sh list <id>
-task-claim.sh rollup <id>
-task-claim.sh check <id>
-task-claim.sh report-write <id> <task-id> <path-or-->
-task-claim.sh report-list <id>
-task-claim.sh report-rollup <id>
+task-claim.sh claim [--allow-skipped-deps] <run-dir-or-id> <task-id> <session-tag>
+task-claim.sh steal <run-dir-or-id> <task-id> <session-tag>
+task-claim.sh update [--session <tag>] <run-dir-or-id> <task-id> [<session-tag>] <status> [<reason>]
+task-claim.sh release [--force] [--session <tag>] <run-dir-or-id> <task-id> [<session-tag>]
+task-claim.sh list <run-dir-or-id>
+task-claim.sh rollup <run-dir-or-id>
+task-claim.sh check <run-dir-or-id>
+task-claim.sh report-write <run-dir-or-id> <task-id> <path-or-->
+task-claim.sh report-list <run-dir-or-id>
+task-claim.sh report-rollup <run-dir-or-id>
 ```
 
 `--session <tag>` may appear before the subcommand or (for `update`/`release`)
 after it. An explicit `--session` wins over a positional session-tag. Ambient
 `SESSION` / `SESSION_TAG` environment variables are never used for auth.
 
-- `claim`: Atomically creates `implement-plan-<id>/.lock-<task-id>` (`mkdir` is
+- `claim`: Atomically creates `implement-plan/.lock-<task-id>` (`mkdir` is
   atomic on POSIX). Verifies every `deps:` entry is exactly `done` before
   locking (`skipped` does **not** satisfy a dep unless `--allow-skipped-deps`).
   On success, writes `<session-tag> <ISO8601>` inside the lock and sets status
@@ -151,26 +200,23 @@ after it. An explicit `--session` wins over a positional session-tag. Ambient
 - `list`: Prints current state of all tasks. Pending tasks whose deps are unmet
   include a `[blocked: …]` suffix explaining why.
 - `report-write`: Writes stdin (`-`) or a file to
-  `implement-report-<id>/<task-id>.md` and regenerates the report rollup.
+  `implement-report/<task-id>.md` and regenerates the report rollup.
 - `report-list`: Prints paths of per-task report files in plan order.
-- `report-rollup`: Regenerates `implement-report-<id>.md`.
+- `report-rollup`: Regenerates `implement-report.md`.
 - `check`: Regenerates the expected plan/report rollups into temp files and
   compares them to what is on disk; prints `MISMATCH` and exits non-zero on
   drift (does not repair). See [task-claim.md](task-claim.md).
 - Every state-changing plan subcommand regenerates the plan rollup as its last
-  step. Base dir is found by walking up from cwd for `.agent-relay/` (stops at
-  `/` or the git root), so running from a subdirectory does not create a second
-  `.agent-relay/`.
+  step.
 
 ### Script resolution
 
 Helpers ship **inside each installed skill bundle** as `scripts/` next to
 `SKILL.md` (for example `~/.cursor/skills/atry-implement/scripts/task-claim.sh`).
-Call them by path relative to the skill directory. There is no
-`~/.agent-relay/scripts/` indirection and no `resolve-task-bin.sh`.
+Call them by path relative to the skill directory.
 
-Prefer reading `implement-report-<id>/` (or `report-list`) over the generated
-`implement-report-<id>.md` rollup when the directory exists.
+Prefer reading `implement-report/` (or `report-list`) over the generated
+`implement-report.md` rollup when the directory exists.
 
 ### Working-tree isolation
 
@@ -181,24 +227,24 @@ The claim protocol serializes **task status**, not file contents:
 | Different tasks, **disjoint** file sets, same worktree | Yes (protocol + skill scoping) |
 | Different tasks, overlapping files, same worktree | No — git/content races; claim does not protect |
 | One agent per git worktree/branch, then merge | Yes (recommended when files overlap) |
-| Multiple features (different `<id>`) and `CURRENT` | Safe if stages only write `CURRENT` when creating an id; pass an explicit id when switching features |
+| Multiple features (different `<RUN_ID>`) | Yes, completely isolated in separate `{YMD}_{RUN_ID}/` dirs |
 
 ### Concurrency
 
 | Scenario | Safe? |
 |---|---|
-| Multiple runs (different `<id>`) in parallel | Yes |
-| Multiple sub-agents, same `<id>`, different tasks, via `task-claim.sh` | Yes (for status/report; see isolation above for files) |
-| Multiple sub-agents, same `<id>`, same task | No — second claim fails loudly |
-| Hand-editing `implement-plan-<id>.md` while parallel mode is active | No — it's generated, gets overwritten |
+| Multiple runs (different `<RUN_ID>`) in parallel | Yes |
+| Multiple sub-agents, same `<RUN_ID>`, different tasks, via `task-claim.sh` | Yes (for status/report; see isolation above for files) |
+| Multiple sub-agents, same `<RUN_ID>`, same task | No — second claim fails loudly |
+| Hand-editing `implement-plan.md` while parallel mode is active | No — it's generated, gets overwritten |
 
 ### Migration
 
-Legacy single-file runs (`implement-plan-<id>.md`) keep working un-migrated in
-the default sequential mode. Run `scripts/task-init.sh <id> --migrate` only when
-switching an existing sequential run to parallel mode. This converts the single
-file into the directory format, preserves all current statuses, and preserves the
-original file as `implement-plan-<id>.md.bak`. Plain `task-init.sh <id>` (no
+Legacy single-file runs (`implement-plan.md`) keep working un-migrated in
+the default sequential mode. Run `scripts/task-init.sh <run-dir-or-id> --migrate`
+only when switching an existing sequential run to parallel mode. This converts the
+single file into the directory format, preserves all current statuses, and
+preserves the original file as `implement-plan.md.bak`. Plain `task-init.sh` (no
 `--migrate`) refuses if the legacy rollup file already exists, so sequential
 progress is not overwritten.
 
@@ -216,21 +262,19 @@ tend to recur silently across runs otherwise:
   drifts the moment someone forgets to update it by hand. Note it explicitly
   in the review report even if fixing it is out of scope for the current
   plan.
-- **Directory/rollup drift.** If `implement-plan-<id>/` or
-  `implement-report-<id>/` exists for the run under review, run
-  `scripts/task-claim.sh check <id>` before writing the review. A
+- **Directory/rollup drift.** If `implement-plan/` or
+  `implement-report/` exists for the run under review, run
+  `scripts/task-claim.sh check <run-dir-or-id>` before writing the review. A
   `MISMATCH` means the rollup `.md` was hand-edited outside the claim
   protocol and the per-task `.status`/report files are stale — call this out
   in the review rather than treating the rollup `.md` as ground truth.
 
 ## Notes
 
-- Put the plan at `.agent-relay/plan-<id>.md`. Write `CURRENT` when creating a
-  new id (see above). Prefer an explicit id when switching features.
+- Put each run at `.agent-relay/{YMD}_{RUN_ID}/`.
 - Commit `.agent-relay/` if you want the notes on the branch. Otherwise add
   the directory to `.gitignore`. This repo does not choose for you.
   `bin/install.sh` prints that reminder.
 - Id generation: `npx --yes nanoid@5 --size 10` needs network/npm. The
   `openssl` fallback must be checked for exactly 10 characters after filtering;
-  regenerate if shorter. Use the same id on every file for that run.
-
+  regenerate if shorter.

@@ -88,6 +88,14 @@ if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verif
   pass "bundle task-init" || fail "bundle task-init"
 [[ -x "$HOME/.cursor/skills/atry-self-review/scripts/review-section.sh" ]] && \
   pass "bundle review-section" || fail "bundle review-section"
+[[ -x "$HOME/.cursor/skills/atry-implement/scripts/resolve-run.sh" ]] && \
+  pass "bundle resolve-run" || fail "bundle resolve-run"
+[[ -x "$HOME/.cursor/skills/atry-implement/scripts/run-init.sh" ]] && \
+  pass "bundle run-init" || fail "bundle run-init"
+[[ -x "$HOME/.cursor/skills/atry-implement/scripts/run-history.sh" ]] && \
+  pass "bundle run-history" || fail "bundle run-history"
+[[ -x "$HOME/.cursor/skills/atry-implement/scripts/run-migrate.sh" ]] && \
+  pass "bundle run-migrate" || fail "bundle run-migrate"
 [[ -f "$HOME/.cursor/skills/atry-plan/SKILL.md" ]] && pass "atry-plan installed" || fail "atry-plan installed"
 [[ ! -e "$HOME/.agent-relay/scripts/task-claim.sh" ]] && \
   pass "no legacy global scripts" || fail "no legacy global scripts"

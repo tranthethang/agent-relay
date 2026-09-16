@@ -67,12 +67,38 @@ find_base_dir() {
   printf '%s\n' ".agent-relay"
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RESOLVE_RUN="$SCRIPT_DIR/resolve-run.sh"
+
 resolve_paths() {
-  local id="$1"
-  validate_ident "id" "$id"
+  local target="$1"
   BASE_DIR="$(find_base_dir)"
-  PLAN_DIR="$BASE_DIR/implement-plan-$id"
-  ROLLUP_FILE="$BASE_DIR/implement-plan-$id.md"
+  local run_dir=""
+  if [[ -x "$RESOLVE_RUN" ]]; then
+    run_dir="$("$RESOLVE_RUN" "$target" 2>/dev/null || true)"
+  fi
+
+  if [[ -n "$run_dir" && -d "$run_dir" && "$(basename "$run_dir")" != ".agent-relay" ]]; then
+    RUN_DIR="$run_dir"
+    PLAN_DIR="$RUN_DIR/implement-plan"
+    ROLLUP_FILE="$RUN_DIR/implement-plan.md"
+    REPORT_DIR="$RUN_DIR/implement-report"
+    REPORT_ROLLUP_FILE="$RUN_DIR/implement-report.md"
+    local bname="$(basename "$RUN_DIR")"
+    if [[ "$bname" =~ ^[0-9]{8}_(.*)$ ]]; then
+      ID="${BASH_REMATCH[1]}"
+    else
+      ID="$bname"
+    fi
+  else
+    validate_ident "id" "$target"
+    ID="$target"
+    RUN_DIR="$BASE_DIR"
+    PLAN_DIR="$BASE_DIR/implement-plan-$target"
+    ROLLUP_FILE="$BASE_DIR/implement-plan-$target.md"
+    REPORT_DIR="$BASE_DIR/implement-report-$target"
+    REPORT_ROLLUP_FILE="$BASE_DIR/implement-report-$target.md"
+  fi
 }
 
 get_lock_age() {
@@ -277,8 +303,15 @@ regenerate_report_rollup() {
 
     local base_dir
     base_dir="$(dirname "$report_dir")"
-    local plan_dir="$base_dir/implement-plan-$id"
-    if [[ -d "$plan_dir" ]]; then
+    local plan_dir=""
+    if [[ -d "$report_dir/../implement-plan" ]]; then
+      plan_dir="$report_dir/../implement-plan"
+    elif [[ -d "$base_dir/implement-plan" ]]; then
+      plan_dir="$base_dir/implement-plan"
+    elif [[ -d "$base_dir/implement-plan-$id" ]]; then
+      plan_dir="$base_dir/implement-plan-$id"
+    fi
+    if [[ -n "$plan_dir" && -d "$plan_dir" ]]; then
       while IFS= read -r tid || [[ -n "$tid" ]]; do
         [[ -n "$tid" ]] || continue
         if [[ -f "$report_dir/$tid.md" ]]; then
@@ -313,12 +346,11 @@ check_consistency() {
   # mismatch means the rollup was hand-edited (or is stale) instead of being
   # written by task-claim.sh -- the directory-based per-task files are the
   # source of truth, so this only ever flags, never repairs, the drift.
-  local base_dir="$1"
-  local id="$2"
-  local plan_dir="$base_dir/implement-plan-$id"
-  local rollup_file="$base_dir/implement-plan-$id.md"
-  local report_dir="$base_dir/implement-report-$id"
-  local report_rollup="$base_dir/implement-report-$id.md"
+  local plan_dir="$1"
+  local rollup_file="$2"
+  local report_dir="$3"
+  local report_rollup="$4"
+  local id="$5"
   local mismatch=0
 
   if [[ -d "$plan_dir" ]]; then
@@ -470,13 +502,12 @@ shift
 case "$SUBCMD" in
   claim)
     [[ $# -eq 3 ]] || usage
-    ID="$1"
+    TARGET="$1"
     TASK_ID="$2"
     SESSION_TAG="$3"
-    validate_ident "id" "$ID"
     validate_ident "task-id" "$TASK_ID"
 
-    resolve_paths "$ID"
+    resolve_paths "$TARGET"
     [[ -d "$PLAN_DIR" ]] || {
       echo "Error: plan directory '$PLAN_DIR' does not exist. Run task-init.sh first." >&2
       exit 1
@@ -508,7 +539,7 @@ case "$SUBCMD" in
       OLD_OWNER="$(cat "$LOCK_DIR/owner" 2>/dev/null || echo "unknown")"
       if [[ "$LOCK_AGE" -ge "$STALE_THRESHOLD" ]]; then
         echo "Error: lock on task '$TASK_ID' is stale (held by $OLD_OWNER for ${LOCK_AGE}s > ${STALE_THRESHOLD}s)." >&2
-        echo "Run: task-claim.sh steal $ID $TASK_ID $SESSION_TAG" >&2
+        echo "Run: task-claim.sh steal $TARGET $TASK_ID $SESSION_TAG" >&2
         exit 1
       fi
       retries=5
@@ -526,13 +557,12 @@ case "$SUBCMD" in
 
   steal)
     [[ $# -eq 3 ]] || usage
-    ID="$1"
+    TARGET="$1"
     TASK_ID="$2"
     SESSION_TAG="$3"
-    validate_ident "id" "$ID"
     validate_ident "task-id" "$TASK_ID"
 
-    resolve_paths "$ID"
+    resolve_paths "$TARGET"
     [[ -d "$PLAN_DIR" ]] || {
       echo "Error: plan directory '$PLAN_DIR' does not exist. Run task-init.sh first." >&2
       exit 1
@@ -607,13 +637,12 @@ case "$SUBCMD" in
     done
 
     [[ $# -ge 3 ]] || usage
-    ID="$1"
+    TARGET="$1"
     TASK_ID="$2"
     shift 2
-    validate_ident "id" "$ID"
     validate_ident "task-id" "$TASK_ID"
 
-    resolve_paths "$ID"
+    resolve_paths "$TARGET"
     [[ -d "$PLAN_DIR" ]] || {
       echo "Error: plan directory '$PLAN_DIR' does not exist." >&2
       exit 1
@@ -711,10 +740,9 @@ case "$SUBCMD" in
     done
 
     [[ $# -ge 2 ]] || usage
-    ID="$1"
+    TARGET="$1"
     TASK_ID="$2"
     shift 2
-    validate_ident "id" "$ID"
     validate_ident "task-id" "$TASK_ID"
 
     ARG_SESSION=""
@@ -723,7 +751,7 @@ case "$SUBCMD" in
     fi
     CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
 
-    resolve_paths "$ID"
+    resolve_paths "$TARGET"
     LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
 
     if [[ -d "$LOCK_DIR" ]]; then
@@ -748,9 +776,8 @@ case "$SUBCMD" in
 
   list)
     [[ $# -eq 1 ]] || usage
-    ID="$1"
-    validate_ident "id" "$ID"
-    resolve_paths "$ID"
+    TARGET="$1"
+    resolve_paths "$TARGET"
     [[ -d "$PLAN_DIR" ]] || {
       echo "Error: plan directory '$PLAN_DIR' does not exist." >&2
       exit 1
@@ -760,46 +787,41 @@ case "$SUBCMD" in
 
   report-write)
     [[ $# -eq 3 ]] || usage
-    ID="$1"
+    TARGET="$1"
     TASK_ID="$2"
     IN_FILE="$3"
-    validate_ident "id" "$ID"
     validate_ident "task-id" "$TASK_ID"
 
-    resolve_paths "$ID"
-    report_dir="$BASE_DIR/implement-report-$ID"
-    mkdir -p "$report_dir"
+    resolve_paths "$TARGET"
+    mkdir -p "$REPORT_DIR"
 
     if [[ "$IN_FILE" == "-" ]]; then
-      cat > "$report_dir/$TASK_ID.md"
+      cat > "$REPORT_DIR/$TASK_ID.md"
     else
-      cp "$IN_FILE" "$report_dir/$TASK_ID.md"
+      cp "$IN_FILE" "$REPORT_DIR/$TASK_ID.md"
     fi
 
-    regenerate_report_rollup "$report_dir" "$BASE_DIR/implement-report-$ID.md" "$ID"
+    regenerate_report_rollup "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
     ;;
 
   report-list)
     [[ $# -eq 1 ]] || usage
-    ID="$1"
-    validate_ident "id" "$ID"
-    resolve_paths "$ID"
-    report_dir="$BASE_DIR/implement-report-$ID"
-    [[ -d "$report_dir" ]] || {
-      echo "Error: report directory '$report_dir' does not exist." >&2
+    TARGET="$1"
+    resolve_paths "$TARGET"
+    [[ -d "$REPORT_DIR" ]] || {
+      echo "Error: report directory '$REPORT_DIR' does not exist." >&2
       exit 1
     }
 
-    plan_dir="$BASE_DIR/implement-plan-$ID"
-    if [[ -d "$plan_dir" ]]; then
+    if [[ -d "$PLAN_DIR" ]]; then
       while IFS= read -r tid || [[ -n "$tid" ]]; do
         [[ -n "$tid" ]] || continue
-        if [[ -f "$report_dir/$tid.md" ]]; then
-          echo "$report_dir/$tid.md"
+        if [[ -f "$REPORT_DIR/$tid.md" ]]; then
+          echo "$REPORT_DIR/$tid.md"
         fi
-      done < <(get_ordered_tasks "$plan_dir")
+      done < <(get_ordered_tasks "$PLAN_DIR")
     else
-      for f in "$report_dir"/*.md; do
+      for f in "$REPORT_DIR"/*.md; do
         [[ -f "$f" ]] || continue
         fname="${f##*/}"
         [[ "$fname" == "_meta.md" ]] && continue
@@ -811,22 +833,19 @@ case "$SUBCMD" in
 
   report-rollup)
     [[ $# -eq 1 ]] || usage
-    ID="$1"
-    validate_ident "id" "$ID"
-    resolve_paths "$ID"
-    report_dir="$BASE_DIR/implement-report-$ID"
-    [[ -d "$report_dir" ]] || {
-      echo "Error: report directory '$report_dir' does not exist." >&2
+    TARGET="$1"
+    resolve_paths "$TARGET"
+    [[ -d "$REPORT_DIR" ]] || {
+      echo "Error: report directory '$REPORT_DIR' does not exist." >&2
       exit 1
     }
-    regenerate_report_rollup "$report_dir" "$BASE_DIR/implement-report-$ID.md" "$ID"
+    regenerate_report_rollup "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
     ;;
 
   rollup)
     [[ $# -eq 1 ]] || usage
-    ID="$1"
-    validate_ident "id" "$ID"
-    resolve_paths "$ID"
+    TARGET="$1"
+    resolve_paths "$TARGET"
     [[ -d "$PLAN_DIR" ]] || {
       echo "Error: plan directory '$PLAN_DIR' does not exist." >&2
       exit 1
@@ -836,15 +855,14 @@ case "$SUBCMD" in
 
   check)
     [[ $# -eq 1 ]] || usage
-    ID="$1"
-    validate_ident "id" "$ID"
-    resolve_paths "$ID"
-    if [[ ! -d "$PLAN_DIR" && ! -d "$BASE_DIR/implement-report-$ID" ]]; then
-      echo "Error: neither '$PLAN_DIR' nor an implement-report-$ID directory exists for id '$ID'." >&2
+    TARGET="$1"
+    resolve_paths "$TARGET"
+    if [[ ! -d "$PLAN_DIR" && ! -d "$REPORT_DIR" ]]; then
+      echo "Error: neither '$PLAN_DIR' nor an implement-report directory exists for id '$ID'." >&2
       echo "Nothing to check (this id has no parallel-mode directories)." >&2
       exit 1
     fi
-    check_consistency "$BASE_DIR" "$ID"
+    check_consistency "$PLAN_DIR" "$ROLLUP_FILE" "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
     ;;
 
   *)

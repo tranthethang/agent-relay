@@ -32,12 +32,12 @@ Maintainer docs (architecture, installer, tests, release, …):
 
 | Order | Skill | What it is expected to do |
 | ----- | ----- | ------------------------- |
-| 1 | [`skills/atry-plan/`](skills/atry-plan/) | Write `.agent-relay/plan-<id>.md` (schema + `CURRENT`) |
-| 2 | [`skills/atry-implement/`](skills/atry-implement/) | Implement that plan; write implement-plan / implement-report |
+| 1 | [`skills/atry-plan/`](skills/atry-plan/) | Write `.agent-relay/{YMD}_{RUN_ID}/plan.md` (schema + `run-init.sh`) |
+| 2 | [`skills/atry-implement/`](skills/atry-implement/) | Implement that plan; write `implement-plan` / `implement-report` |
 | 3 | [`skills/atry-self-review/`](skills/atry-self-review/) | Review the diff; upsert a dated `Self-Review` section |
 | 4 | [`skills/atry-cross-review/`](skills/atry-cross-review/) | Upsert a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that. |
 
-Names, `CURRENT`, and the run id:
+Names, run directory layout, and id resolution:
 [`docs/file-conventions.md`](docs/file-conventions.md) (also shipped as
 `references/file-conventions.md` inside every installed bundle). Empty outlines
 are in [`templates/`](templates/). Writing or changing skills:
@@ -49,11 +49,11 @@ with `bash scripts/sync-references.sh` (CI runs `--check`).
 
 ## Working files
 
-Skills read and write under `.agent-relay/` in the **target** repo. Whether you
-commit that directory is your choice.
+Skills read and write under `.agent-relay/{YMD}_{RUN_ID}/` in the **target** repo.
+Whether you commit that directory is your choice.
 
-Default mode is sequential: one shared `implement-plan-<id>.md` and
-`implement-report-<id>.md`.
+Default mode is sequential: one shared `implement-plan.md` and
+`implement-report.md` inside the run folder.
 
 ## Parallel helpers
 
@@ -78,7 +78,7 @@ Still true:
 
 - Serializes **task status** (and per-task reports), not overlapping source edits
 - Use disjoint paths or separate worktrees when files overlap
-- If `implement-plan-<id>/` already exists, `atry-implement` tells the agent to
+- If `implement-plan/` (or legacy `implement-plan-<id>/`) already exists, `atry-implement` tells the agent to
   use `task-claim.sh` and not hand-edit the rollup `.md` files — that is skill
   text, not a lock on the filesystem
 
@@ -120,6 +120,21 @@ shasum -a 256 -c SHA256SUMS
 bash ./install.sh --ref "$REF"
 ```
 
+### Migration v1.x → v2.0
+
+- Per-run folder layout: all artifacts live in `.agent-relay/{YMD}_{RUN_ID}/`.
+- Artifacts inside the run folder use short names: `plan.md`, `meta.md`,
+  `history.log`, `implement-plan.md`, `implement-report.md`, `review-report.md`,
+  `review-walkthrough.md`.
+- Parallel task directories live inside the run directory: `implement-plan/` and
+  `implement-report/`.
+- There is no `.agent-relay/CURRENT` file and no central index; each run folder is
+  self-contained.
+- Shared Bash 3.2 helpers: `resolve-run.sh`, `run-init.sh`, `run-history.sh`,
+  `run-migrate.sh`.
+- Legacy flat runs (`plan-<id>.md`) can be migrated into the per-run layout:
+  `bash skills/atry-implement/scripts/run-migrate.sh <id>`.
+
 ### Migration v0.4 → v1.0
 
 - Skills are directories (`skills/<name>/SKILL.md`), not flat `skills/<name>.md`.
@@ -160,7 +175,7 @@ bash scripts/sync-references.sh --check
 | [`docs/architecture.md`](docs/architecture.md) | How layers fit; non-goals |
 | [`docs/installer.md`](docs/installer.md) | Install/uninstall/verify mechanics, `targets.conf`, adding a tool |
 | [`docs/skills-authoring.md`](docs/skills-authoring.md) | Bundle layout, sync workflow, adding a skill |
-| [`docs/file-conventions.md`](docs/file-conventions.md) | `.agent-relay/` artifact names, `CURRENT`, id resolution |
+| [`docs/file-conventions.md`](docs/file-conventions.md) | `.agent-relay/` artifact names, per-run directory layout, id resolution |
 | [`docs/task-claim.md`](docs/task-claim.md) | Parallel task helpers, locks, `check` |
 | [`docs/testing.md`](docs/testing.md) | Suites, CI, adding regressions |
 | [`docs/release.md`](docs/release.md) | `VERSION`, tag, `dist/` assets |

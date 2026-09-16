@@ -24,7 +24,28 @@ EOF
 
 [[ $# -eq 5 ]] || usage
 [[ "$1" == "upsert" ]] || usage
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RESOLVE_RUN="$SCRIPT_DIR/resolve-run.sh"
+
 FILE="$2"
+# When the target path does not exist yet, resolve the run dir but keep the
+# caller's basename (review-report.md vs review-walkthrough.md). Previously
+# any missing path was rewritten to review-report.md, so the first walkthrough
+# upsert clobbered the report.
+if [[ -d "$FILE" ]]; then
+  FILE="$FILE/review-report.md"
+elif [[ ! -f "$FILE" && -x "$RESOLVE_RUN" ]]; then
+  want_name="$(basename "$FILE")"
+  case "$want_name" in
+    review-report.md|review-walkthrough.md) ;;
+    *) want_name="review-report.md" ;;
+  esac
+  resolved="$("$RESOLVE_RUN" "$FILE" 2>/dev/null || true)"
+  if [[ -n "$resolved" && -d "$resolved" && "$(basename "$resolved")" != ".agent-relay" ]]; then
+    FILE="$resolved/$want_name"
+  fi
+fi
+
 KIND="$3"
 DATE="$4"
 BODY_SRC="$5"

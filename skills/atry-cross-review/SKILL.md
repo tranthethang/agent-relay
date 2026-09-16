@@ -1,6 +1,6 @@
 ---
 name: atry-cross-review
-description: Second-opinion cross-review of an agent-relay change using plan-<id>.md, implement artifacts, and the prior Self-Review sections; append dated Cross-Review sections. Use when the user asks for a cross-check, second-opinion review, or final review in a different tool/model than the self-review.
+description: Second-opinion cross-review of an agent-relay change using artifacts in the run directory and prior Self-Review sections; append dated Cross-Review sections. Use when the user asks for a cross-check or second-opinion review in a different tool/model.
 ---
 
 # Cross-Review
@@ -11,22 +11,26 @@ previous review — it's to catch what a same-family model/tool is likely to mis
 
 ## Run discovery
 
-Resolve the shared run `<id>` before reading or writing artifacts. Follow
-`references/file-conventions.md` (installed next to this skill) for the full
-order (user id → CURRENT → single plan-*.md → ask).
+Resolve the run directory before reading or writing artifacts. Call the helper
+shipped beside this skill:
 
-Legacy unsuffixed names are only allowed when no `plan-*.md` exists; append to
-suffixed review files once an id is resolved.
+```bash
+RUN_DIR="$(scripts/resolve-run.sh [RUN_ID or path])"
+```
 
-**Only write `.agent-relay/CURRENT` when you create a new id.** Resolving an
-existing id must not overwrite `CURRENT`.
+If the user passed a `RUN_ID` or a path under a run directory, pass it to the
+helper. If no argument is passed and exactly one run directory exists,
+`resolve-run.sh` will resolve it automatically. If it exits non-zero (ambiguous
+or not found), ask the user for the `RUN_ID` or path.
+
+There is no `CURRENT` file — each run is self-contained.
 
 ## Inputs
 
-- Plan file: `.agent-relay/plan-<id>.md`
+- Plan file: `$RUN_DIR/plan.md`
 - Implementation plan / report (prefer directory layout + helpers when present)
-- Prior review report: `.agent-relay/review-report-<id>.md`
-- Prior review walkthrough: `.agent-relay/review-walkthrough-<id>.md`
+- Prior review report: `$RUN_DIR/review-report.md`
+- Prior review walkthrough: `$RUN_DIR/review-walkthrough.md`
 - Full diff from the plan's `base:` git ref to the current tree
 - Project rules (same precedence as implement)
 
@@ -43,8 +47,11 @@ enforcement — nothing here can verify which tool is running you.
 
 ## Instructions
 
-1. Resolve `<id>` as above (write `CURRENT` only if you created the id). Read the
-   full chain (plan → implement → prior review).
+1. Resolve `$RUN_DIR` as above. Record stage start in `history.log`:
+   ```bash
+   scripts/run-history.sh append "$RUN_DIR" cross-review started tool=<tool>
+   ```
+   Read the full chain (plan → implement → prior review).
 
 1. Diff from the plan `base:` (or ask), not just uncommitted changes.
 
@@ -76,11 +83,18 @@ enforcement — nothing here can verify which tool is running you.
    ```bash
    TODAY="$(date +%F)"
    scripts/review-section.sh upsert \
-     .agent-relay/review-report-<id>.md \
+     "$RUN_DIR/review-report.md" \
      Cross-Review "$TODAY" body.md
    scripts/review-section.sh upsert \
-     .agent-relay/review-walkthrough-<id>.md \
+     "$RUN_DIR/review-walkthrough.md" \
      Cross-Review "$TODAY" walk-body.md
    ```
 
-   Keep prior `## Self-Review — ...` sections intact.
+   Keep prior `## Self-Review — ...` sections intact. Inside the body file, use
+   `###` (not bare `##`) for subsections — unfenced `## ` is a section boundary
+   for `review-section.sh`, so a same-day re-upsert would truncate.
+
+1. Once cross-review is complete, record completion in `history.log`:
+   ```bash
+   scripts/run-history.sh append "$RUN_DIR" cross-review completed tool=<tool>
+   ```

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-09-16
+
+### Added
+
+- Per-run folder layout: all artifacts for a run live in `.agent-relay/{YMD}_{RUN_ID}/`.
+- Run metadata and history logging: `meta.md` tracks structured run attributes and `history.log` provides an append-only event audit trail.
+- Shared Bash 3.2 helpers:
+  - `resolve-run.sh`: resolves run directory paths, run IDs, or single-run folders without `CURRENT`. Supports backwards-compatible resolution of legacy flat runs with stderr warnings.
+  - `run-init.sh`: creates the `{YMD}_{RUN_ID}` folder, seeds `meta.md`, and creates `history.log`.
+  - `run-history.sh`: appends timestamped events to `history.log` and keeps `stage:` and `status:` in `meta.md` synchronized.
+  - `run-migrate.sh`: migrates legacy flat `.agent-relay/plan-<id>.md` runs and sibling artifacts into the per-run folder layout and cleans matching `CURRENT`.
+- New artifact templates: `templates/meta.md` and `templates/history.log`.
+- Updated test suites: `tests/tasks.sh` covers per-run directory structure, `run-init.sh`, `run-history.sh`, `run-migrate.sh`, and `resolve-run.sh`.
+
+### Changed
+
+- Artifacts inside run directories now use clean short names: `plan.md`, `meta.md`, `history.log`, `implement-plan.md`, `implement-report.md`, `review-report.md`, and `review-walkthrough.md`.
+- Parallel task directories live inside the run folder: `implement-plan/` and `implement-report/`.
+- `task-init.sh`, `task-claim.sh`, and `review-section.sh` resolve run directories via `resolve-run.sh` and default to short artifact names under `$RUN_DIR`, with fallback to legacy flat paths.
+- Four skills (`atry-plan`, `atry-implement`, `atry-self-review`, `atry-cross-review`) updated to use per-run folders and shared helpers.
+- Maintainer and user documentation aligned with per-run folder conventions.
+
+### Removed
+
+- Removed `.agent-relay/CURRENT` file requirement; each run is self-contained.
+- Removed central index files (`composer.csv`, `runs.md`).
+
 ## [1.0.1] — 2026-09-12
 
 ### Added
