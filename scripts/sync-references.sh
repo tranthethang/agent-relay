@@ -47,33 +47,75 @@ for d in "${skill_dirs[@]}"; do
   fi
 done
 
+get_skill_scripts() {
+  local skill_name="$1"
+  case "$skill_name" in
+    atry-plan)
+      printf '%s\n' "resolve-run.sh" "run-init.sh" "run-history.sh"
+      ;;
+    atry-implement)
+      printf '%s\n' "resolve-run.sh" "run-init.sh" "run-history.sh" "run-migrate.sh" "task-init.sh" "task-claim.sh"
+      ;;
+    atry-self-review|atry-cross-review)
+      printf '%s\n' "resolve-run.sh" "run-history.sh" "review-section.sh"
+      ;;
+  esac
+}
+
 # Bundle scripts must match scripts/<name> byte-for-byte. The bundle copy is
 # what users actually run, so a silent divergence ships broken helpers.
 for d in "${skill_dirs[@]}"; do
-  shopt -s nullglob
-  bundle_scripts=("$d"scripts/*.sh)
-  shopt -u nullglob
-  # bash 3.2 + set -u errors on an empty "${arr[@]}" (atry-plan has no scripts/)
-  [[ ${#bundle_scripts[@]} -eq 0 ]] && continue
-  for bs in "${bundle_scripts[@]}"; do
-    base="${bs##*/}"
-    src="$ROOT_DIR/scripts/$base"
-    if [[ ! -f "$src" ]]; then
-      echo "Orphan: $bs has no source at scripts/$base" >&2
-      drift=1
-      continue
-    fi
-    if [[ "$CHECK_ONLY" -eq 1 ]]; then
-      if ! cmp -s "$src" "$bs"; then
-        echo "Drift: $bs differs from scripts/$base" >&2
+  skill_name="$(basename "$d")"
+  expected_scripts=()
+  while IFS= read -r s; do
+    [[ -n "$s" ]] && expected_scripts+=("$s")
+  done < <(get_skill_scripts "$skill_name")
+
+  if [[ "$CHECK_ONLY" -eq 1 ]]; then
+    for s in "${expected_scripts[@]}"; do
+      dest="$d/scripts/$s"
+      src="$ROOT_DIR/scripts/$s"
+      if [[ ! -f "$dest" ]]; then
+        echo "Missing: $dest" >&2
+        drift=1
+        continue
+      fi
+      if ! cmp -s "$src" "$dest"; then
+        echo "Drift: $dest differs from scripts/$s" >&2
         drift=1
       fi
-    else
-      cp "$src" "$bs"
-      chmod +x "$bs"
-      echo "synced $bs"
+    done
+
+    # Check for orphan scripts in bundle
+    shopt -s nullglob
+    actual_scripts=("$d"scripts/*.sh)
+    shopt -u nullglob
+    for as in "${actual_scripts[@]}"; do
+      base="${as##*/}"
+      found=0
+      for exp in "${expected_scripts[@]}"; do
+        if [[ "$exp" == "$base" ]]; then
+          found=1
+          break
+        fi
+      done
+      if [[ "$found" -eq 0 ]]; then
+        echo "Orphan: $as is not in expected scripts for $skill_name" >&2
+        drift=1
+      fi
+    done
+  else
+    if [[ ${#expected_scripts[@]} -gt 0 ]]; then
+      mkdir -p "$d/scripts"
+      for s in "${expected_scripts[@]}"; do
+        src="$ROOT_DIR/scripts/$s"
+        dest="$d/scripts/$s"
+        cp "$src" "$dest"
+        chmod +x "$dest"
+        echo "synced $dest"
+      done
     fi
-  done
+  fi
 done
 
 if [[ "$CHECK_ONLY" -eq 1 ]]; then

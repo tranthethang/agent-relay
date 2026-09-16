@@ -1,6 +1,6 @@
 ---
 name: atry-plan
-description: Create a new .agent-relay/plan-<id>.md with the required schema (base/id header, Goal, Constraints, flat Tasks list) and set CURRENT. Use when the user asks to plan work for agent-relay before implement.
+description: Create a new run directory under .agent-relay/{YMD}_{RUN_ID}/ with plan.md and meta.md. Use when the user asks to plan work for agent-relay before implement.
 ---
 
 # Plan
@@ -31,9 +31,15 @@ git rev-parse HEAD
 
 Do not invent a ref. If git is unavailable, ask the user.
 
-Because you are creating the id, write `.agent-relay/CURRENT` with that id
-(one line, trimmed). Other stages that only resolve an existing id must not
-overwrite `CURRENT`.
+Initialize the run directory with the helper shipped next to this skill:
+
+```bash
+# from skill directory or repo root:
+RUN_DIR="$(scripts/run-init.sh "$id" --title "<short title>" --base "<base-ref>")"
+```
+
+This creates `.agent-relay/{YMD}_{RUN_ID}/`, writes `meta.md`, and starts `history.log`.
+There is no `CURRENT` file — each run is self-contained.
 
 ## Provenance
 
@@ -45,11 +51,11 @@ Today's date: `date +%F`. Use `unknown` for tool/model when you cannot know.
 
 ## Plan schema
 
-Write `.agent-relay/plan-<id>.md`:
+Write `$RUN_DIR/plan.md`:
 
 ```markdown
 base: <git-rev-parse-HEAD>
-id: <id>
+id: <RUN_ID>
 
 # <short title>
 
@@ -90,7 +96,7 @@ if available in this environment:
 
 ```bash
 # from a checkout of agent-relay, or after install from the implement bundle:
-scripts/task-init.sh <id>
+scripts/task-init.sh "$RUN_DIR"
 ```
 
 `task-init` must create exactly as many `.status` files as numbered tasks.

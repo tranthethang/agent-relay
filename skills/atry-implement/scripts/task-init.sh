@@ -197,18 +197,41 @@ for arg in "$@"; do
   esac
 done
 
+RESOLVE_RUN="$SCRIPT_DIR/resolve-run.sh"
+
 [[ -n "$ID" ]] || usage
-validate_ident "id" "$ID"
+TARGET="$ID"
 
 BASE_DIR="$(find_base_dir)"
 # Ensure the directory exists for init paths that create under it.
 mkdir -p "$BASE_DIR"
 
-PLAN_DIR="$BASE_DIR/implement-plan-$ID"
-ROLLUP_FILE="$BASE_DIR/implement-plan-$ID.md"
-PLAN_FILE="$BASE_DIR/plan-$ID.md"
-REPORT_DIR="$BASE_DIR/implement-report-$ID"
-REPORT_ROLLUP_FILE="$BASE_DIR/implement-report-$ID.md"
+RUN_DIR=""
+if [[ -x "$RESOLVE_RUN" ]]; then
+  RUN_DIR="$("$RESOLVE_RUN" "$TARGET" 2>/dev/null || true)"
+fi
+
+if [[ -n "$RUN_DIR" && -d "$RUN_DIR" && "$(basename "$RUN_DIR")" != ".agent-relay" ]]; then
+  PLAN_DIR="$RUN_DIR/implement-plan"
+  ROLLUP_FILE="$RUN_DIR/implement-plan.md"
+  PLAN_FILE="$RUN_DIR/plan.md"
+  REPORT_DIR="$RUN_DIR/implement-report"
+  REPORT_ROLLUP_FILE="$RUN_DIR/implement-report.md"
+  bname="$(basename "$RUN_DIR")"
+  if [[ "$bname" =~ ^[0-9]{8}_(.*)$ ]]; then
+    ID="${BASH_REMATCH[1]}"
+  else
+    ID="$bname"
+  fi
+else
+  validate_ident "id" "$TARGET"
+  ID="$TARGET"
+  PLAN_DIR="$BASE_DIR/implement-plan-$ID"
+  ROLLUP_FILE="$BASE_DIR/implement-plan-$ID.md"
+  PLAN_FILE="$BASE_DIR/plan-$ID.md"
+  REPORT_DIR="$BASE_DIR/implement-report-$ID"
+  REPORT_ROLLUP_FILE="$BASE_DIR/implement-report-$ID.md"
+fi
 
 if [[ "$MIGRATE" -eq 1 ]]; then
   if [[ ! -f "$ROLLUP_FILE" ]]; then
@@ -257,14 +280,14 @@ if [[ "$MIGRATE" -eq 1 ]]; then
 
   mv "$ROLLUP_FILE" "$ROLLUP_FILE.bak"
 
-  "$CLAIM_SH" rollup "$ID"
+  "$CLAIM_SH" rollup "$TARGET"
   echo "Migrated '$ROLLUP_FILE' -> '$PLAN_DIR/' (backup saved to '$ROLLUP_FILE.bak')"
 
   if [[ -f "$REPORT_ROLLUP_FILE" && ! -d "$REPORT_DIR" ]]; then
     mkdir -p "$REPORT_DIR"
     cp "$REPORT_ROLLUP_FILE" "$REPORT_DIR/_meta.md"
     mv "$REPORT_ROLLUP_FILE" "$REPORT_ROLLUP_FILE.bak"
-    "$CLAIM_SH" report-rollup "$ID"
+    "$CLAIM_SH" report-rollup "$TARGET"
     echo "Migrated '$REPORT_ROLLUP_FILE' -> '$REPORT_DIR/' (backup saved to '$REPORT_ROLLUP_FILE.bak')"
   fi
 
@@ -272,6 +295,8 @@ else
   if [[ ! -f "$PLAN_FILE" ]]; then
     if [[ -f "$BASE_DIR/plan.md" ]]; then
       PLAN_FILE="$BASE_DIR/plan.md"
+    elif [[ -f "$BASE_DIR/plan-$ID.md" ]]; then
+      PLAN_FILE="$BASE_DIR/plan-$ID.md"
     else
       echo "Error: plan file '$PLAN_FILE' not found." >&2
       exit 1
@@ -398,7 +423,7 @@ else
   mkdir -p "$REPORT_DIR"
   : > "$REPORT_DIR/_meta.md"
 
-  "$CLAIM_SH" rollup "$ID"
-  "$CLAIM_SH" report-rollup "$ID"
+  "$CLAIM_SH" rollup "$TARGET"
+  "$CLAIM_SH" report-rollup "$TARGET"
   echo "Initialized '$PLAN_DIR/' and '$REPORT_DIR/' with $found_count task(s)."
 fi
