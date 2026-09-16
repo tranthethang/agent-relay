@@ -29,7 +29,7 @@ trap cleanup EXIT
 cd "$T"
 
 # 1. Happy path: run-init -> task-init -> claim -> update -> release -> list
-HAPPY_DIR="$("$RUN_INIT" happy --title "Happy Plan" --base main)"
+HAPPY_DIR="$("$RUN_INIT" 1700000000 --slug happy --title "Happy Plan" --base main)"
 [[ -d "$HAPPY_DIR" ]] && pass "run-init creates directory" || fail "run-init creates directory"
 [[ -f "$HAPPY_DIR/meta.md" ]] && pass "run-init creates meta.md" || fail "run-init creates meta.md"
 [[ -f "$HAPPY_DIR/history.log" ]] && pass "run-init creates history.log" || fail "run-init creates history.log"
@@ -37,7 +37,7 @@ HAPPY_DIR="$("$RUN_INIT" happy --title "Happy Plan" --base main)"
 
 cat <<'EOF' > "$HAPPY_DIR/plan.md"
 base: main
-id: happy
+id: 1700000000
 
 # Happy Plan
 
@@ -47,7 +47,7 @@ id: happy
 2. **Add API.** Implement endpoints.
 EOF
 
-"$TASK_INIT" happy >/dev/null
+"$TASK_INIT" 1700000000 >/dev/null
 [[ -d "$HAPPY_DIR/implement-plan" ]] && pass "task-init creates directory" || fail "task-init creates directory"
 [[ -f "$HAPPY_DIR/implement-plan/T1.status" ]] && pass "task-init creates T1.status" || fail "task-init creates T1.status"
 [[ -f "$HAPPY_DIR/implement-plan/T2.status" ]] && pass "task-init creates T2.status" || fail "task-init creates T2.status"
@@ -94,7 +94,7 @@ fi
 # Hand-edit the rollup directly (bypassing task-claim.sh) the same way the
 # real-world run that motivated this subcommand did -- check must catch it.
 cp "$HAPPY_DIR/implement-plan.md" "$T/happy-rollup.bak"
-printf '# implement-plan (happy)\n\n- [done] T1: Setup DB.\n- [done] T2: Add API.\n' > "$HAPPY_DIR/implement-plan.md"
+printf '# implement-plan (1700000000)\n\n- [done] T1: Setup DB.\n- [done] T2: Add API.\n' > "$HAPPY_DIR/implement-plan.md"
 CHECK_OUT="$("$TASK_CLAIM" check happy 2>&1 || true)"
 if "$TASK_CLAIM" check happy >/dev/null 2>&1; then
   fail "check detects a hand-edited rollup"
@@ -986,9 +986,19 @@ WARN_OUT3="$("$REVIEW_SH" upsert "$WARN_FILE3" Cross-Review "$TODAY" "$T/warn-cr
 
 # --- Per-run folder helper tests (resolve-run, run-migrate, run-history) ---
 
-# 1. Resolve by id
-RESOLVED="$("$RESOLVE_RUN" happy)"
+# 1. Resolve by id and slug
+RESOLVED="$("$RESOLVE_RUN" 1700000000)"
 [[ "$RESOLVED" == "$HAPPY_DIR" ]] && pass "resolve-run by id matches" || fail "resolve-run by id matches"
+RESOLVED_SLUG="$("$RESOLVE_RUN" happy)"
+[[ "$RESOLVED_SLUG" == "$HAPPY_DIR" ]] && pass "resolve-run by slug matches" || fail "resolve-run by slug matches"
+
+# 1b. Resolve legacy 2.0.0 nanoid-shaped dirname
+mkdir -p "$T/.agent-relay/20260101_abcdefghij"
+touch "$T/.agent-relay/20260101_abcdefghij/meta.md"
+LEGACY_20_DIR="$(cd "$T/.agent-relay/20260101_abcdefghij" && pwd -P)"
+RESOLVED_LEGACY_20="$("$RESOLVE_RUN" abcdefghij)"
+[[ "$RESOLVED_LEGACY_20" == "$LEGACY_20_DIR" ]] && pass "resolve-run legacy YMD_nanoid matches" || fail "resolve-run legacy YMD_nanoid matches"
+rm -rf "$T/.agent-relay/20260101_abcdefghij"
 
 # 2. Resolve by dir path
 RESOLVED_PATH="$("$RESOLVE_RUN" "$HAPPY_DIR")"
@@ -1006,7 +1016,7 @@ RESOLVED_FILE="$("$RESOLVE_RUN" "$HAPPY_DIR/plan.md")"
 )
 
 # 5. Resolve with no args when multiple runs exist -> ambiguous failure
-RUN2_DIR="$("$RUN_INIT" run2 --title "Second Run" --base main)"
+RUN2_DIR="$("$RUN_INIT" 1700000001 --slug second-run --title "Second Run" --base main)"
 (
   cd "$T"
   if "$RESOLVE_RUN" >/dev/null 2>&1; then

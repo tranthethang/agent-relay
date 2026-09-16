@@ -32,7 +32,7 @@ Maintainer docs (architecture, installer, tests, release, …):
 
 | Order | Skill | What it is expected to do |
 | ----- | ----- | ------------------------- |
-| 1 | [`skills/atry-plan/`](skills/atry-plan/) | Write `.agent-relay/{YMD}_{RUN_ID}/plan.md` (schema + `run-init.sh`) |
+| 1 | [`skills/atry-plan/`](skills/atry-plan/) | Write `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md` (schema + `run-init.sh`) |
 | 2 | [`skills/atry-implement/`](skills/atry-implement/) | Implement that plan; write `implement-plan` / `implement-report` |
 | 3 | [`skills/atry-self-review/`](skills/atry-self-review/) | Review the diff; upsert a dated `Self-Review` section |
 | 4 | [`skills/atry-cross-review/`](skills/atry-cross-review/) | Upsert a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that. |
@@ -49,7 +49,8 @@ with `bash scripts/sync-references.sh` (CI runs `--check`).
 
 ## Working files
 
-Skills read and write under `.agent-relay/{YMD}_{RUN_ID}/` in the **target** repo.
+Skills read and write under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` (or legacy
+`.agent-relay/{YMD}_{RUN_ID}/`) in the **target** repo.
 Whether you commit that directory is your choice.
 
 Default mode is sequential: one shared `implement-plan.md` and

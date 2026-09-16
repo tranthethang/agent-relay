@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.0] — 2026-09-16
+### Changed
+
+- Run directory naming now uses human-sortable, readable timestamp + slug format:
+  `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` (e.g. `20260916-1789539317-create-new-home-page`).
+- `RUN_ID` is generated offline via `date +%s` (Unix epoch seconds) without requiring `npx nanoid` or network.
+- `RUN_SLUG` is an agent-authored descriptive slug (3–48 chars, lowercase `a-z` and single hyphens).
+- `meta.md` records `id: <UNIX_TS>` and adds `slug: <RUN_SLUG>`.
+- `run-init.sh` requires `--slug <slug>`, validates timestamp and slug, and automatically handles same-second collision retries (+1 bump up to 5 retries).
+- `resolve-run.sh` recognizes both `{YMD}-{RUN_ID}-{RUN_SLUG}` and legacy 2.0.0 `{YMD}_{RUN_ID}` formats, supporting lookup by timestamp, slug, full dirname, or legacy id.
+- `run-migrate.sh` shapes new migrations into `{YMD}-{UNIX_TS}-{slug}/` with `slug:` in `meta.md`, without rewriting existing `{YMD}_{nanoid}` folders.
+- `skills/atry-plan/SKILL.md` documents offline Unix timestamp and slug generation.
+
 
 Breaking layout change for `.agent-relay/` artifacts. New runs are
 self-contained folders; legacy flat files still resolve with a stderr note

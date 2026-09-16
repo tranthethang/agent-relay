@@ -103,12 +103,66 @@ if [[ -z "$YMD" ]]; then
   YMD="$(date +%Y%m%d)"
 fi
 
-RUN_DIR="$BASE_DIR/${YMD}_${ID}"
+# Derive title if plan exists
+title="(migrated run $ID)"
+if [[ -f "$PLAN_LEGACY" ]]; then
+  parsed_title="$(sed -n 's/^#[[:space:]]*//p' "$PLAN_LEGACY" | head -n 1)"
+  if [[ -n "$parsed_title" ]]; then
+    title="$parsed_title"
+  fi
+fi
+
+# Derive slug from title or ID
+slug_raw="$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z]/-/g' -e 's/-\{2,\}/-/g' -e 's/^-//' -e 's/-$//')"
+if [[ ${#slug_raw} -ge 3 && ${#slug_raw} -le 48 && "$slug_raw" =~ ^[a-z]+(-[a-z]+)*$ ]]; then
+  SLUG="$slug_raw"
+else
+  id_raw="$(echo "$ID" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z]/-/g' -e 's/-\{2,\}/-/g' -e 's/^-//' -e 's/-$//')"
+  if [[ ${#id_raw} -ge 3 && ${#id_raw} -le 48 && "$id_raw" =~ ^[a-z]+(-[a-z]+)*$ ]]; then
+    SLUG="$id_raw"
+  else
+    SLUG="migrated-run"
+  fi
+fi
+
+if [[ "$ID" =~ ^[0-9]{10,11}$ ]]; then
+  UNIX_TS="$ID"
+else
+  target_for_mtime="$PLAN_LEGACY"
+  [[ -f "$target_for_mtime" ]] || target_for_mtime="$IMP_PLAN_LEGACY"
+  UNIX_TS=""
+  if [[ -f "$target_for_mtime" ]]; then
+    UNIX_TS="$(stat -f "%m" "$target_for_mtime" 2>/dev/null || stat -c "%Y" "$target_for_mtime" 2>/dev/null || true)"
+  fi
+  if [[ -z "$UNIX_TS" || ! "$UNIX_TS" =~ ^[0-9]{10,11}$ ]]; then
+    UNIX_TS="$(date +%s)"
+  fi
+fi
+
+MAX_RETRIES=5
+attempt=0
+RUN_DIR=""
+while true; do
+  RUN_DIR_NAME="${YMD}-${UNIX_TS}-${SLUG}"
+  CANDIDATE="$BASE_DIR/$RUN_DIR_NAME"
+  if [[ ! -e "$CANDIDATE" ]]; then
+    RUN_DIR="$CANDIDATE"
+    break
+  fi
+  attempt=$((attempt + 1))
+  if [[ $attempt -gt $MAX_RETRIES ]]; then
+    echo "Error: run directory already exists at $CANDIDATE (collision retry limit reached)" >&2
+    exit 1
+  fi
+  UNIX_TS=$((UNIX_TS + 1))
+done
+
 mkdir -p "$RUN_DIR"
 
 # Move files to short names inside RUN_DIR
 if [[ -f "$PLAN_LEGACY" ]]; then
   mv "$PLAN_LEGACY" "$RUN_DIR/plan.md"
+  sed -e "s/^id:.*/id: $UNIX_TS/" "$RUN_DIR/plan.md" > "$RUN_DIR/plan.md.tmp" && mv "$RUN_DIR/plan.md.tmp" "$RUN_DIR/plan.md"
 fi
 if [[ -f "$IMP_PLAN_LEGACY" ]]; then
   mv "$IMP_PLAN_LEGACY" "$RUN_DIR/implement-plan.md"
@@ -140,15 +194,10 @@ fi
 # Create meta.md if not exists
 if [[ ! -f "$RUN_DIR/meta.md" ]]; then
   base_ref="unknown"
-  title="(migrated run $ID)"
   if [[ -f "$RUN_DIR/plan.md" ]]; then
     parsed_base="$(sed -n 's/^base:[[:space:]]*//p' "$RUN_DIR/plan.md" | head -n 1)"
     if [[ -n "$parsed_base" ]]; then
       base_ref="$parsed_base"
-    fi
-    parsed_title="$(sed -n 's/^#[[:space:]]*//p' "$RUN_DIR/plan.md" | head -n 1)"
-    if [[ -n "$parsed_title" ]]; then
-      title="$parsed_title"
     fi
   fi
 
@@ -167,7 +216,8 @@ if [[ ! -f "$RUN_DIR/meta.md" ]]; then
 
   created_date="${YMD:0:4}-${YMD:4:2}-${YMD:6:2}"
   cat <<EOF > "$RUN_DIR/meta.md"
-id: $ID
+id: $UNIX_TS
+slug: $SLUG
 created: $created_date
 title: $title
 stage: $stage

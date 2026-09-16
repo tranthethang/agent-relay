@@ -38,6 +38,9 @@ find_base_dir() {
 
 is_run_dirname() {
   local name="$1"
+  if [[ "$name" =~ ^[0-9]{8}-[0-9]{10,11}-[a-z]+(-[a-z]+)*$ ]]; then
+    return 0
+  fi
   case "$name" in
     [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_[A-Za-z0-9_-]*)
       return 0
@@ -88,7 +91,12 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then
         base_dir="$(cd "$(dirname "$arg")" 2>/dev/null && pwd -P || pwd)"
         # Check if a migrated folder exists
         shopt -s nullglob
-        migrated=("$base_dir"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_"$legacy_id")
+        migrated=()
+        for md in "$base_dir"/*-"$legacy_id"-* "$base_dir"/*_"$legacy_id"; do
+          if [[ -d "$md" ]] && is_run_dirname "$(basename "$md")"; then
+            migrated+=("$md")
+          fi
+        done
         shopt -u nullglob
         if [[ ${#migrated[@]} -eq 1 ]]; then
           cd "${migrated[0]}" && pwd -P
@@ -125,12 +133,30 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then
     exit 1
   fi
 
-  # Search for directory ending in _$id
+  # Search for matching run directory
   shopt -s nullglob
-  matches=("$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_"$id")
-  if [[ ${#matches[@]} -eq 0 ]]; then
-    matches=("$BASE_DIR"/*_"$id")
-  fi
+  matches=()
+  for d in "$BASE_DIR"/*; do
+    [[ -d "$d" ]] || continue
+    bname="$(basename "$d")"
+    if ! is_run_dirname "$bname"; then
+      continue
+    fi
+    if [[ "$bname" == "$id" ]]; then
+      matches+=("$d")
+    elif [[ "$bname" =~ ^[0-9]{8}-([0-9]{10,11})-([a-z]+(-[a-z]+)*)$ ]]; then
+      ts="${BASH_REMATCH[1]}"
+      slug="${BASH_REMATCH[2]}"
+      if [[ "$ts" == "$id" || "$slug" == "$id" ]]; then
+        matches+=("$d")
+      fi
+    elif [[ "$bname" =~ ^[0-9]{8}_(.*)$ ]]; then
+      legacy_id="${BASH_REMATCH[1]}"
+      if [[ "$legacy_id" == "$id" ]]; then
+        matches+=("$d")
+      fi
+    fi
+  done
   shopt -u nullglob
 
   if [[ ${#matches[@]} -eq 1 ]]; then
@@ -181,12 +207,12 @@ if [[ ! -d "$BASE_DIR" ]]; then
 fi
 
 shopt -s nullglob
-raw_dirs=("$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*)
+raw_dirs=("$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-* "$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*)
 shopt -u nullglob
 
 run_dirs=()
 for d in "${raw_dirs[@]}"; do
-  if [[ -d "$d" ]]; then
+  if [[ -d "$d" ]] && is_run_dirname "$(basename "$d")"; then
     run_dirs+=("$d")
   fi
 done

@@ -33,7 +33,7 @@ description: One or two sentences; tools use this for discovery.
    `tool=` / `model=` when known, else `unknown`. Do not invent. Date via
    `date +%F`.  
 3. **Id resolution** — follow [file-conventions.md](file-conventions.md):
-   user path/id → single `{YMD}_{id}` folder → ask. Use `scripts/resolve-run.sh`.
+   user path/id → single `{YMD}-{id}-{slug}` folder (or legacy `{YMD}_{id}`) → ask. Use `scripts/resolve-run.sh`.
    There is no `CURRENT` file; each run is self-contained.  
 4. **Project rules in the target repo** — typical precedence called out in
    implement skill: `AGENTS.md`, then tool-native rules, then `CLAUDE.md`-like
