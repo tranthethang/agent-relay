@@ -29,7 +29,7 @@ cause over disabling sync/CI checks.
 | --- | --- | --- |
 | `resolve-run.sh`: multiple run directories / legacy plans | Ambiguous `.agent-relay/` | Pass an explicit `RUN_ID` or path under the run folder |
 | `resolve-run.sh` Note: legacy flat run | Still on `plan-<id>.md` layout | `bash scripts/run-migrate.sh <id>` (or the copy next to the skill) |
-| `run-history.sh` refuses legacy flat layout | History belongs inside `{YMD}_{id}/` | Migrate first, then append |
+| `run-history.sh` refuses legacy flat layout | History belongs inside `{YMD}-{id}-{slug}/` (or legacy `{YMD}_{id}/`) | Migrate first, then append |
 | Skills still look for `CURRENT` / `plan-<id>.md` | Installed bundles pre-2.0 | Re-run `./bin/install.sh` (or release install) to refresh skills |
 
 ## Parallel tasks

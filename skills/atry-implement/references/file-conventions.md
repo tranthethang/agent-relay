@@ -1,11 +1,12 @@
 # File conventions
 
-Skills read and write files under `.agent-relay/{YMD}_{RUN_ID}/` in the target
-repo, where `{YMD}` is the run creation date (`date +%Y%m%d`, never renamed) and
-`{RUN_ID}` is a 10-character identifier (`^[A-Za-z0-9_-]{10}$`). All run
-artifacts live inside this per-run directory using short, stable names (no `<id>`
-suffixes inside filenames). Nothing in this repo enforces the names except the
-skill text and bash helpers.
+Skills read and write files under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` in
+the target repo, where `{YMD}` is the run creation date (`date +%Y%m%d`, never
+renamed), `{RUN_ID}` is the Unix timestamp in seconds (`date +%s`, 10–11
+digits), and `{RUN_SLUG}` is a short agent-authored slug (lowercase `a-z` and
+hyphens, length 3–48 inclusive). All run artifacts live inside this per-run
+directory using short, stable names (no `<id>` suffixes inside filenames).
+Nothing in this repo enforces the names except the skill text and bash helpers.
 
 This file is the **source of truth** for those names. Maintainer docs that
 point here (architecture, task-claim, skill authoring, …):
@@ -15,18 +16,20 @@ root after changing this file.
 
 | Purpose | Path | Written by |
 | --- | --- | --- |
-| Plan | `.agent-relay/{YMD}_{RUN_ID}/plan.md` | You, or `atry-plan`. |
-| Task list | `.agent-relay/{YMD}_{RUN_ID}/implement-plan.md` (or `implement-plan/` in parallel mode) | `atry-implement` |
-| Implement notes | `.agent-relay/{YMD}_{RUN_ID}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement` |
-| Review report | `.agent-relay/{YMD}_{RUN_ID}/review-report.md` | `atry-self-review` creates or overwrites. `atry-cross-review` appends. |
-| Review walkthrough | `.agent-relay/{YMD}_{RUN_ID}/review-walkthrough.md` | Same as the review report. |
-| Metadata | `.agent-relay/{YMD}_{RUN_ID}/meta.md` | `run-init.sh` creates; stages update `stage:` and `status:`. |
-| History (optional) | `.agent-relay/{YMD}_{RUN_ID}/history.log` | `run-history.sh` / stages append events. |
+| Plan | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md` | You, or `atry-plan`. |
+| Task list | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-plan.md` (or `implement-plan/` in parallel mode) | `atry-implement` |
+| Implement notes | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement` |
+| Review report | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-report.md` | `atry-self-review` creates or overwrites. `atry-cross-review` appends. |
+| Review walkthrough | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md` | Same as the review report. |
+| Metadata | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md` | `run-init.sh` creates; stages update `stage:` and `status:`. |
+| History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log` | `run-history.sh` / stages append events. |
 
-`<RUN_ID>` is 10 characters from `A-Za-z0-9_-`.
+`<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
+characters matching `^[a-z]+(-[a-z]+)*$`. Legacy 2.0.0 directories
+(`{YMD}_{RUN_ID}` with a 10-char nanoid) remain supported for resolution.
 
 Empty templates are in [`templates/`](../templates/). Runtime files live inside
-their respective `{YMD}_{RUN_ID}/` directory.
+their respective run directory.
 
 ## No CURRENT / No Central Index
 
@@ -36,14 +39,16 @@ There is **no** `.agent-relay/CURRENT` file and **no** root index (such as
 Skills and helpers resolve the active run directory in this strict order (they
 must **never** guess via file mtime):
 
-1. The user passed a `RUN_ID` or any path under a run directory.
-2. Else if exactly one run directory exists matching `[0-9]{8}_*`, use that directory.
+1. The user passed a `RUN_ID`, `RUN_SLUG`, full dirname, or any path under a run directory.
+2. Else if exactly one run directory exists matching `[0-9]{8}-*` (or legacy `[0-9]{8}_*`), use that directory.
 3. Else if legacy flat `plan-*.md` files exist and exactly one matches, resolve to that run for migration.
 4. Else ask the user. Do not guess.
 
 Directory matching rules:
-- Run directory format: `^[0-9]{8}_[A-Za-z0-9_-]{10}$`.
-- Lookup by ID: A unique directory under `.agent-relay/` ending in `_${RUN_ID}`.
+- Run directory format: `^([0-9]{8})-([0-9]{10,11})-([a-z]+(-[a-z]+)*)$`.
+- Legacy 2.0.0 run directory format: `^[0-9]{8}_[A-Za-z0-9_-]{10}$`.
+- Lookup by ID: A unique directory under `.agent-relay/` matching `*-${RUN_ID}-*` or legacy `*_${RUN_ID}`.
+- Lookup by full path or dirname: Matches directly.
 
 ## `meta.md` (Source of Truth for Run Status)
 
@@ -51,6 +56,7 @@ Every run directory contains `meta.md` created at plan time:
 
 ```markdown
 id: <RUN_ID>
+slug: <RUN_SLUG>
 created: <YYYY-MM-DD>
 title: <short>
 stage: plan|implement|self-review|cross-review|done
@@ -59,7 +65,8 @@ base: <git-ref>
 ```
 
 Field definitions:
-- `id`: The 10-character run identifier.
+- `id`: The Unix timestamp run identifier (`date +%s`).
+- `slug`: Short slug (lowercase letters and hyphens, 3–48 characters).
 - `created`: Date the run was initialized (`YYYY-MM-DD`).
 - `title`: Short summary of the run's goal.
 - `stage`: Current workflow stage (`plan`, `implement`, `self-review`, `cross-review`, or `done`).
@@ -115,15 +122,19 @@ appends and must not remove the self-review section:
 
 ## Legacy names and Migration
 
-Release 2.0.0 transitions from the legacy flat layout (`.agent-relay/plan-<id>.md`
-and sibling files in `.agent-relay/`) to the per-run directory layout.
+Release 2.0.0 transitioned from the legacy flat layout (`.agent-relay/plan-<id>.md`
+and sibling files in `.agent-relay/`) to per-run directories.
 
-- **Read & Migrate**: Legacy flat files can be resolved and migrated into the
-  per-run folder layout using `scripts/run-migrate.sh <id>`.
-- `run-migrate.sh` moves flat files into `.agent-relay/{YMD}_{RUN_ID}/` with short
-  names, creates `meta.md`, and removes `.agent-relay/CURRENT` if it pointed to
-  the migrated id.
-- New runs always create per-run directories.
+- **Legacy 2.0.0 directories**: Directories named `.agent-relay/{YMD}_{RUN_ID}/`
+  (where `RUN_ID` is a 10-char nanoid) continue to be recognized and resolved
+  by all tools. No migration is forced or required for them.
+- **Legacy 1.x flat files**: Can be resolved and migrated into per-run
+  directories using `scripts/run-migrate.sh <id>`.
+- `run-migrate.sh` moves flat files into `.agent-relay/` per-run directories
+  with short names, creates `meta.md`, and removes `.agent-relay/CURRENT` if it
+  pointed to the migrated id.
+- New runs always create per-run directories named
+  `{YMD}-{RUN_ID}-{RUN_SLUG}/`.
 
 ## Parallel task implementation (optional)
 
@@ -227,7 +238,7 @@ The claim protocol serializes **task status**, not file contents:
 | Different tasks, **disjoint** file sets, same worktree | Yes (protocol + skill scoping) |
 | Different tasks, overlapping files, same worktree | No — git/content races; claim does not protect |
 | One agent per git worktree/branch, then merge | Yes (recommended when files overlap) |
-| Multiple features (different `<RUN_ID>`) | Yes, completely isolated in separate `{YMD}_{RUN_ID}/` dirs |
+| Multiple features (different `<RUN_ID>`) | Yes, completely isolated in separate `{YMD}-{RUN_ID}-{RUN_SLUG}/` dirs |
 
 ### Concurrency
 
@@ -271,10 +282,11 @@ tend to recur silently across runs otherwise:
 
 ## Notes
 
-- Put each run at `.agent-relay/{YMD}_{RUN_ID}/`.
+- Put each run at `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` (or legacy
+  `.agent-relay/{YMD}_{RUN_ID}/`).
 - Commit `.agent-relay/` if you want the notes on the branch. Otherwise add
   the directory to `.gitignore`. This repo does not choose for you.
   `bin/install.sh` prints that reminder.
-- Id generation: `npx --yes nanoid@5 --size 10` needs network/npm. The
-  `openssl` fallback must be checked for exactly 10 characters after filtering;
-  regenerate if shorter.
+- Id generation: `RUN_ID` is generated offline via `date +%s` (Unix epoch
+  seconds). No npm or network required.
+

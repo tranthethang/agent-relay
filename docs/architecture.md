@@ -21,8 +21,8 @@ tree, not a roadmap.
                             │ agent writes under target repo
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  <target-repo>/.agent-relay/{YMD}_{RUN_ID}/plan.md          │
-│                   meta.md / history.log                     │
+│  <target-repo>/.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/      │
+│                   plan.md / meta.md / history.log           │
 │                   implement-plan / report / review-*        │
 └─────────────────────────────────────────────────────────────┘
 ```

@@ -1,6 +1,6 @@
 ---
 name: atry-plan
-description: Create a new run directory under .agent-relay/{YMD}_{RUN_ID}/ with plan.md and meta.md. Use when the user asks to plan work for agent-relay before implement.
+description: Create a new run directory under .agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/ with plan.md and meta.md. Use when the user asks to plan work for agent-relay before implement.
 ---
 
 # Plan
@@ -14,13 +14,14 @@ file that `scripts/task-init.sh` can parse without guessing.
 Follow `references/file-conventions.md`. For a **new** plan you always create a
 new id (unless the user passed an explicit id to reuse).
 
-Generate an id:
+Generate an id and slug:
 
 ```bash
-npx --yes nanoid@5 --size 10
-# fallback — must be exactly 10 chars after filtering; regenerate if shorter:
-id="$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9_-' | head -c 10)"
-[[ ${#id} -eq 10 ]] || exit 1
+# RUN_ID is the Unix epoch timestamp in seconds (offline, no network):
+id="$(date +%s)"
+
+# RUN_SLUG is a short agent-authored slug (3–48 chars, lowercase letters and single hyphens):
+slug="<short-descriptive-slug>"
 ```
 
 Record `base:` with a real git ref:
@@ -35,10 +36,13 @@ Initialize the run directory with the helper shipped next to this skill:
 
 ```bash
 # from skill directory or repo root:
-RUN_DIR="$(scripts/run-init.sh "$id" --title "<short title>" --base "<base-ref>")"
+RUN_DIR="$(scripts/run-init.sh "$id" --slug "$slug" --title "<short title>" --base "<base-ref>")"
+# run-init may bump id on same-second collision; meta.md is canonical:
+id="$(grep -E '^id:' "$RUN_DIR/meta.md" | head -1 | sed 's/^id:[[:space:]]*//')"
 ```
 
-This creates `.agent-relay/{YMD}_{RUN_ID}/`, writes `meta.md`, and starts `history.log`.
+This creates `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`, writes `meta.md`, and starts `history.log`.
+Use the `id` read back from `meta.md` (not the pre-init `date +%s` value) when writing `plan.md`.
 There is no `CURRENT` file — each run is self-contained.
 
 ## Provenance
