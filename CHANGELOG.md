@@ -9,30 +9,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] — 2026-09-16
 
+Breaking layout change for `.agent-relay/` artifacts. New runs are
+self-contained folders; legacy flat files still resolve with a stderr note
+until migrated. Re-install skill bundles after upgrading.
+
 ### Added
 
-- Per-run folder layout: all artifacts for a run live in `.agent-relay/{YMD}_{RUN_ID}/`.
-- Run metadata and history logging: `meta.md` tracks structured run attributes and `history.log` provides an append-only event audit trail.
-- Shared Bash 3.2 helpers:
-  - `resolve-run.sh`: resolves run directory paths, run IDs, or single-run folders without `CURRENT`. Supports backwards-compatible resolution of legacy flat runs with stderr warnings.
-  - `run-init.sh`: creates the `{YMD}_{RUN_ID}` folder, seeds `meta.md`, and creates `history.log`.
-  - `run-history.sh`: appends timestamped events to `history.log` and keeps `stage:` and `status:` in `meta.md` synchronized.
-  - `run-migrate.sh`: migrates legacy flat `.agent-relay/plan-<id>.md` runs and sibling artifacts into the per-run folder layout and cleans matching `CURRENT`.
+- Per-run folder layout: all artifacts for a run live in
+  `.agent-relay/{YMD}_{RUN_ID}/` (eight-digit date prefix + run id).
+- Run metadata and history logging: `meta.md` tracks structured run attributes
+  (`stage:`, `status:`, …) and `history.log` is an append-only event audit trail.
+- Shared Bash 3.2 helpers (canonical under `scripts/`, synced into skill
+  bundles via `sync-references.sh`):
+  - `resolve-run.sh`: resolves a run directory from a path, run id, or the
+    single run folder under `.agent-relay/` — no `CURRENT`. Legacy flat
+    `plan-<id>.md` layouts still resolve with a stderr migration hint.
+  - `run-init.sh`: creates `{YMD}_{RUN_ID}/`, seeds `meta.md`, creates
+    `history.log`.
+  - `run-history.sh`: appends timestamped events to `history.log` and keeps
+    `stage:` / `status:` in `meta.md` in sync.
+  - `run-migrate.sh`: moves a legacy flat `plan-<id>.md` run (and sibling
+    artifacts / parallel dirs) into the per-run folder layout; removes a
+    matching `.agent-relay/CURRENT` when present.
 - New artifact templates: `templates/meta.md` and `templates/history.log`.
-- Updated test suites: `tests/tasks.sh` covers per-run directory structure, `run-init.sh`, `run-history.sh`, `run-migrate.sh`, and `resolve-run.sh`.
+- Tests: `tests/tasks.sh` covers per-run dirs, `run-init`, `run-history`,
+  `run-migrate`, and `resolve-run`; `tests/smoke.sh` checks that installed
+  implement bundles ship `run-migrate.sh`.
+- README / troubleshooting notes for Migration v1.x → v2.0 and common
+  legacy-layout errors.
 
 ### Changed
 
-- Artifacts inside run directories now use clean short names: `plan.md`, `meta.md`, `history.log`, `implement-plan.md`, `implement-report.md`, `review-report.md`, and `review-walkthrough.md`.
-- Parallel task directories live inside the run folder: `implement-plan/` and `implement-report/`.
-- `task-init.sh`, `task-claim.sh`, and `review-section.sh` resolve run directories via `resolve-run.sh` and default to short artifact names under `$RUN_DIR`, with fallback to legacy flat paths.
-- Four skills (`atry-plan`, `atry-implement`, `atry-self-review`, `atry-cross-review`) updated to use per-run folders and shared helpers.
-- Maintainer and user documentation aligned with per-run folder conventions.
+- Artifact names inside a run directory are short and stable: `plan.md`,
+  `meta.md`, `history.log`, `implement-plan.md`, `implement-report.md`,
+  `review-report.md`, `review-walkthrough.md` (no longer
+  `plan-<id>.md` / `implement-plan-<id>.md` at the `.agent-relay/` root for
+  new runs).
+- Parallel task directories live inside the run folder: `implement-plan/` and
+  `implement-report/` (not `implement-plan-<id>/` at the root).
+- `task-init.sh`, `task-claim.sh`, and `review-section.sh` resolve the run
+  via `resolve-run.sh`, write short names under `$RUN_DIR`, and still fall
+  back to legacy flat paths when needed.
+- All four skills (`atry-plan`, `atry-implement`, `atry-self-review`,
+  `atry-cross-review`) document and use the per-run layout and shared helpers.
+- `sync-references.sh` copies the new run helpers into the skill bundles that
+  need them; maintainer docs (`file-conventions`, architecture, task-claim,
+  skills-authoring, troubleshooting) match the new conventions.
 
 ### Removed
 
-- Removed `.agent-relay/CURRENT` file requirement; each run is self-contained.
-- Removed central index files (`composer.csv`, `runs.md`).
+- `.agent-relay/CURRENT` is no longer required or written for new runs; each
+  run directory is self-contained.
+- Central index files (`composer.csv`, `runs.md`) are not part of the layout.
+
+### Migration
+
+See README “Migration v1.x → v2.0”. Short form:
+
+1. Re-run `./bin/install.sh` (or install from the `v2.0.0` release) so skill
+   bundles pick up the new helpers and `SKILL.md` text.
+2. For each legacy flat run: `bash scripts/run-migrate.sh <id>` (or the copy
+   next to `atry-implement`’s `SKILL.md`).
+3. New work uses `run-init.sh` / skill plan stage — no `CURRENT` file.
 
 ## [1.0.1] — 2026-09-12
 

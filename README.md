@@ -113,7 +113,7 @@ redirects, and control operators refused. That is a mitigation, not a proof
 that sourcing is safe. Treat release trust like any other script you download.
 
 ```bash
-REF="v1.0.1"
+REF="v2.0.0"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 shasum -a 256 -c SHA256SUMS
