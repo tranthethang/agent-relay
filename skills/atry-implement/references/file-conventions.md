@@ -23,6 +23,7 @@ root after changing this file.
 | Review walkthrough | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md` | Same as the review report. |
 | Metadata | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md` | `run-init.sh` creates; stages update `stage:` and `status:`. |
 | History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log` | `run-history.sh` / stages append events. |
+| Distillation (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distillation.md` | `atry-distill`, run after cross-review (or self-review if cross-review was skipped). |
 
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
 characters matching `^[a-z]+(-[a-z]+)*$`.
@@ -57,7 +58,7 @@ id: <RUN_ID>
 slug: <RUN_SLUG>
 created: <YYYY-MM-DD>
 title: <short>
-stage: plan|implement|self-review|cross-review|done
+stage: plan|implement|self-review|cross-review|distill|done
 status: active|done|abandoned
 base: <git-ref>
 ```
@@ -67,7 +68,7 @@ Field definitions:
 - `slug`: Short slug (lowercase letters and hyphens, 3–48 characters).
 - `created`: Date the run was initialized (`YYYY-MM-DD`).
 - `title`: Short summary of the run's goal.
-- `stage`: Current workflow stage (`plan`, `implement`, `self-review`, `cross-review`, or `done`).
+- `stage`: Current workflow stage (`plan`, `implement`, `self-review`, `cross-review`, `distill`, or `done`).
 - `status`: Lifecycle status (`active`, `done`, or `abandoned`).
 - `base`: Git commit ref from which the work branches or diffs.
 
@@ -269,6 +270,16 @@ tend to recur silently across runs otherwise:
   `MISMATCH` means the rollup `.md` was hand-edited outside the claim
   protocol and the per-task `.status`/report files are stale — call this out
   in the review rather than treating the rollup `.md` as ground truth.
+
+## Knowledge bank (optional, project-level)
+
+`.agent-relay/bank.conf` and `.agent-relay/bank-status.md` live at the
+`.agent-relay/` root, **not** inside a per-run directory — a bank connection
+is a property of the target repo, not of one run. `bank.conf` is parsed
+line-by-line (never sourced/eval'd) by `scripts/bank-check.sh`; see
+[bank.md](bank.md) for the format, supported `BANK_TYPE` values, and what
+"reachable" does and does not mean. `atry-distill` is the only skill that
+reads/writes these files.
 
 ## Notes
 

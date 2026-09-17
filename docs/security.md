@@ -14,6 +14,7 @@ installer plus markdown instructions — not a hardened supply-chain product.
 | Same-tool cross-review warning | stderr heads-up when recorded `tool=`/`model=` match | Blocking cross-review or detecting spoofed provenance |
 | Parallel `claim` locks | Serialization of task **status** / report files via per-task mutex + ownership lock | Protection of application source edits |
 | Installer `.agent-relay-owned` | Uninstall/verify know which skill folders this installer wrote | Proof against a malicious tree that plants a forged marker |
+| `bank.conf` line parser | Refuse to source; only `BANK_KEY=value` lines accepted, values rejecting shell metacharacters, parsing stops at first bad line | Proof the referenced vault path/endpoint is itself safe, or that pushed note content is sound |
 
 ## Installer specifics
 
@@ -44,6 +45,13 @@ For installer / smoke failures, follow `CONTRIBUTING.md` (OS, bash version,
 command, output). Security-sensitive findings about the allowlist or release
 path should describe a concrete bypass against current `validate_targets_conf`
 or checksum handling — not generic “please make it secure.”
+
+## Knowledge bank
+
+See [bank.md](bank.md) for the full trust-boundary table on `bank.conf` /
+`bank-check.sh` / `bank-push.sh` — same posture as `targets.conf`: refuse to
+parse rather than guess, and no proof about what happens after the file is
+written.
 
 ## Related docs
 

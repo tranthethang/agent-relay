@@ -54,6 +54,14 @@ cause over disabling sync/CI checks.
 | smoke cannot mkdir under fake `HOME` | Sandbox / OS permission on temp | Run outside restrictive sandboxes; suite uses `mktemp` under `$TMPDIR` |
 | `smoke-remote` missing fixtures | `tests/fixtures/` incomplete | Restore fixtures from the repo; script exits with a clear message |
 
+## Knowledge bank
+
+| Symptom | Likely cause | What to try |
+| --- | --- | --- |
+| `bank-push.sh` exits 2 (`skipped`) | Bank not configured or reachable per `bank-status.md` | Run `scripts/bank-check.sh` first to probe reachability; verify path/endpoint in `.agent-relay/bank.conf` |
+| `bank-push.sh` exits 1 | Missing arguments or `bank-status.md` missing | Run `scripts/bank-check.sh` before pushing, and supply all four required arguments |
+| `bank-check.sh` exits 1 | Malformed `.agent-relay/bank.conf` | Check `bank.conf`: lines must strictly match `BANK_KEY=value` with no shell metacharacters |
+
 ## Still stuck
 
 Collect OS, `bash --version`, exact command, and relevant stderr (see

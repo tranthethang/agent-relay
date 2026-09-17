@@ -49,7 +49,10 @@ skill directories. It does not call agents, pick models, or watch `.agent-relay/
 3. **self-review** → upsert dated Self-Review section; broad-vision analysis;
    escalate tradeoffs per `reviewer-conduct.md`  
 4. **cross-review** → upsert Cross-Review with inverted-question framing
-   (skill asks for a different tool; nothing enforces it)
+   (skill asks for a different tool; nothing enforces it)  
+5. **distill** → summarize reusable patterns/lessons into `distillation.md`;
+   optionally push a condensed case-study note to an external knowledge bank
+   (e.g., Obsidian vault) via `bank-push.sh`
 
 Nothing in this repo schedules that order. Skipping a stage is always possible.
 
@@ -69,7 +72,8 @@ CI runs both with `--check`.
 
 - No message bus, orchestrator, or agent runtime  
 - No cryptographic proof of which tool/model wrote a provenance line  
-- No protection of overlapping source-file edits in parallel mode (only task **status** / report files)
+- No protection of overlapping source-file edits in parallel mode (only task **status** / report files)  
+- No automatic prompt enrichment from the knowledge bank (bank is an external, write-only sink in this MVP)
 
 For trust detail see [security.md](security.md). For install mechanics see
 [installer.md](installer.md).

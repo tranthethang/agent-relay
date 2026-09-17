@@ -91,13 +91,16 @@ get_skill_scripts() {
   local skill_name="$1"
   case "$skill_name" in
     atry-plan)
-      printf '%s\n' "resolve-run.sh" "run-init.sh" "run-history.sh"
+      printf '%s\n' "find-agent-relay-dir.sh" "resolve-run.sh" "run-init.sh" "run-history.sh"
       ;;
     atry-implement)
-      printf '%s\n' "resolve-run.sh" "run-init.sh" "run-history.sh" "task-init.sh" "task-claim.sh"
+      printf '%s\n' "find-agent-relay-dir.sh" "resolve-run.sh" "run-init.sh" "run-history.sh" "task-init.sh" "task-claim.sh"
       ;;
     atry-self-review|atry-cross-review)
-      printf '%s\n' "resolve-run.sh" "run-history.sh" "review-section.sh"
+      printf '%s\n' "find-agent-relay-dir.sh" "resolve-run.sh" "run-history.sh" "review-section.sh"
+      ;;
+    atry-distill)
+      printf '%s\n' "find-agent-relay-dir.sh" "resolve-run.sh" "run-history.sh" "bank-check.sh" "bank-push.sh"
       ;;
   esac
 }

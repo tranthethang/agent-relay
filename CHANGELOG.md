@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `atry-distill` skill (stage 5): after cross-review (or self-review if
+  cross-review was skipped), distills lessons/case-study notes from a run's
+  plan/implement-report/review files into `distillation.md`. Calls
+  `scripts/bank-check.sh "$RUN_DIR"` directly to probe reachability.
+- Optional, project-level knowledge-bank connection: `.agent-relay/bank.conf`
+  (parsed line-by-line via bash-3.2-safe scalar variables without associative
+  arrays, never sourced; blank lines and whole-line `#` comments are ignored,
+  keys must start at column 0, and anything else is refused rather than
+  silently skipped), `scripts/bank-check.sh` (probes reachability into
+  `.agent-relay/bank-status.md`), and `scripts/bank-push.sh` (writes a condensed
+  note; overwrites idempotently for the same run id/title). Schema in
+  `bank-status.md` splits `bank_path:` and `bank_endpoint:`. Only the
+  `obsidian-vault` backend has a driver; `lightrag-http` / `agentmemory-cli` are
+  recorded as reserved, no-op types. Docs: `docs/bank.md`.
+- Shared `.agent-relay/` root finder in `scripts/find-agent-relay-dir.sh`,
+  unified across `resolve-run.sh`, `run-init.sh`, `bank-check.sh`, and
+  `bank-push.sh`.
+- `meta.md` / `history.log` `stage:` enum gains `distill` between
+  `cross-review` and `done`.
+- Stage 5 and bank documentation in `docs/architecture.md`,
+  `docs/skills-authoring.md`, and `docs/troubleshooting.md`.
+
 ## [3.1.1] — 2026-09-17
 
 ### Changed

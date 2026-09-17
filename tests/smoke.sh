@@ -81,6 +81,8 @@ if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verif
   pass "bundle run-init" || fail "bundle run-init"
 [[ -x "$HOME/.cursor/skills/atry-implement/scripts/run-history.sh" ]] && \
   pass "bundle run-history" || fail "bundle run-history"
+[[ -x "$HOME/.cursor/skills/atry-implement/scripts/find-agent-relay-dir.sh" ]] && \
+  pass "bundle find-agent-relay-dir" || fail "bundle find-agent-relay-dir"
 [[ -f "$HOME/.cursor/skills/atry-plan/SKILL.md" ]] && pass "atry-plan installed" || fail "atry-plan installed"
 
 # Each installed skill ships its artifact empty-outline templates under references/
