@@ -10,6 +10,7 @@ skills/<name>/
   SKILL.md              # required — front matter + instructions
   references/           # optional but every current skill ships file-conventions.md
     file-conventions.md # MUST match docs/file-conventions.md (sync script)
+    *-template.md       # empty outlines for artifacts that skill writes
   scripts/              # optional — copies of repo scripts/<same-name>.sh
 ```
 
@@ -51,9 +52,10 @@ description: One or two sentences; tools use this for discovery.
 | --- | --- |
 | `docs/file-conventions.md` | `skills/*/references/file-conventions.md` |
 | `scripts/<file>.sh` | `skills/<skill>/scripts/<file>.sh` (only if the bundle lists that script) |
+| `skills/atry-self-review/references/review-*-template.md` | `skills/atry-cross-review/references/review-*-template.md` (must stay byte-identical) |
 
 ```bash
-# after editing docs/file-conventions.md or scripts/*.sh
+# after editing docs/file-conventions.md, scripts/*.sh, or review templates
 bash scripts/sync-references.sh
 bash scripts/sync-references.sh --check
 ```
@@ -63,8 +65,14 @@ will be overwritten or fail CI `--check`. Add a new helper by placing it in
 `scripts/` first, then copying into the skill(s) that need it (or extend the
 sync script’s expectations by adding the file under the bundle and syncing).
 
-Skills with **no** `scripts/` (e.g. `atry-plan`) are fine; sync skips empty
-script dirs (bash 3.2 + `set -u` safe).
+Empty artifact outlines live in each skill's `references/*-template.md`.
+`SKILL.md` should tell the agent to read those files before writing the
+matching runtime artifact. Review report/walkthrough templates are duplicated
+under `atry-self-review` and `atry-cross-review`; edit the self-review copy and
+re-run sync so both stay identical.
+
+Skills with **no** `scripts/` (e.g. historical empty bundles) are fine; sync
+skips empty script dirs (bash 3.2 + `set -u` safe).
 
 ## Adding a skill
 

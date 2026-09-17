@@ -83,6 +83,28 @@ if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verif
   pass "bundle run-history" || fail "bundle run-history"
 [[ -f "$HOME/.cursor/skills/atry-plan/SKILL.md" ]] && pass "atry-plan installed" || fail "atry-plan installed"
 
+# Each installed skill ships its artifact empty-outline templates under references/
+[[ -f "$HOME/.cursor/skills/atry-plan/references/plan-template.md" ]] && \
+  pass "atry-plan plan-template" || fail "atry-plan plan-template"
+[[ -f "$HOME/.cursor/skills/atry-plan/references/meta-template.md" ]] && \
+  pass "atry-plan meta-template" || fail "atry-plan meta-template"
+[[ -f "$HOME/.cursor/skills/atry-plan/references/history-log-template.md" ]] && \
+  pass "atry-plan history-log-template" || fail "atry-plan history-log-template"
+[[ -f "$HOME/.cursor/skills/atry-implement/references/implement-plan-template.md" ]] && \
+  pass "atry-implement implement-plan-template" || fail "atry-implement implement-plan-template"
+[[ -f "$HOME/.cursor/skills/atry-implement/references/implement-report-template.md" ]] && \
+  pass "atry-implement implement-report-template" || fail "atry-implement implement-report-template"
+[[ -f "$HOME/.cursor/skills/atry-implement/references/task-status-template.md" ]] && \
+  pass "atry-implement task-status-template" || fail "atry-implement task-status-template"
+[[ -f "$HOME/.cursor/skills/atry-self-review/references/review-report-template.md" ]] && \
+  pass "atry-self-review review-report-template" || fail "atry-self-review review-report-template"
+[[ -f "$HOME/.cursor/skills/atry-self-review/references/review-walkthrough-template.md" ]] && \
+  pass "atry-self-review review-walkthrough-template" || fail "atry-self-review review-walkthrough-template"
+[[ -f "$HOME/.cursor/skills/atry-cross-review/references/review-report-template.md" ]] && \
+  pass "atry-cross-review review-report-template" || fail "atry-cross-review review-report-template"
+[[ -f "$HOME/.cursor/skills/atry-cross-review/references/review-walkthrough-template.md" ]] && \
+  pass "atry-cross-review review-walkthrough-template" || fail "atry-cross-review review-walkthrough-template"
+
 "$INSTALL" --dry-run --only CURSOR >/dev/null
 pass "--only CURSOR"
 

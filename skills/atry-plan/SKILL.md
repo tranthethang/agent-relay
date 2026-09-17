@@ -55,6 +55,10 @@ Today's date: `date +%F`. Use `unknown` for tool/model when you cannot know.
 
 ## Plan schema
 
+Before writing `$RUN_DIR/plan.md`, read `references/plan-template.md` and use
+it as the literal copy-and-fill outline. The schema below is the explanation;
+the template file is what you fill in.
+
 Write `$RUN_DIR/plan.md`:
 
 ```markdown
@@ -83,6 +87,10 @@ id: <RUN_ID>
 2. <short description> (deps: T1)
 3. <short description> (deps: T1 T2)
 ```
+
+`run-init.sh` also seeds `meta.md` and `history.log`; see
+`references/meta-template.md` and `references/history-log-template.md` for the
+empty outlines of those files.
 
 Rules for `## Tasks`:
 

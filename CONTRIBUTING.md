@@ -58,7 +58,8 @@ Include:
 - Install destinations: [`targets.conf`](targets.conf) (sourced after
   `validate_targets_conf`)
 - Artifact names: [`docs/file-conventions.md`](docs/file-conventions.md)
-- Empty outlines (not a sample run): [`templates/`](templates/)
+- Empty outlines (not a sample run): each skill's
+  `skills/<name>/references/*-template.md`
 - Task helpers (repo + bundled copies): `scripts/task-*.sh`,
   `scripts/review-section.sh`
 - Release version: [`VERSION`](VERSION) (must match the `v*` tag)

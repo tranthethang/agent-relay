@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the top-level `templates/` directory. Empty artifact outlines now live
+  in each skill's `references/*-template.md` (installed with the bundle).
+
+### Changed
+
+- `run-init.sh` writes `tool=<tool>` on the `history.log` `action=created` line
+  (optional `--tool`, default `unknown`).
+- `plan-template.md` includes `## Non-goals` and a `(deps: T1 T2)` task example.
+- Implement-report template uses neutral placeholders (no fabricated sample work).
+- `scripts/sync-references.sh` keeps review `*-template.md` files byte-identical
+  between `atry-self-review` and `atry-cross-review`.
+
 ## [3.0.0] — 2026-09-16
 
 ### Removed

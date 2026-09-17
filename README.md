@@ -39,8 +39,9 @@ Maintainer docs (architecture, installer, tests, release, …):
 
 Names, run directory layout, and id resolution:
 [`docs/file-conventions.md`](docs/file-conventions.md) (also shipped as
-`references/file-conventions.md` inside every installed bundle). Empty outlines
-are in [`templates/`](templates/). Writing or changing skills:
+`references/file-conventions.md` inside every installed bundle). Empty
+outlines for each artifact live in that skill's `references/*-template.md`
+(installed with the bundle). Writing or changing skills:
 [`docs/skills-authoring.md`](docs/skills-authoring.md).
 
 After you change files under `skills/`, run `./bin/install.sh` again. Keep

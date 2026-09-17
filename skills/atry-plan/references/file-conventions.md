@@ -27,8 +27,9 @@ root after changing this file.
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
 characters matching `^[a-z]+(-[a-z]+)*$`.
 
-Empty templates are in [`templates/`](../templates/). Runtime files live inside
-their respective run directory.
+Empty outlines for each artifact live in that skill's
+`references/*-template.md` (installed with the bundle). Runtime files live
+inside their respective run directory.
 
 ## No CURRENT / No Central Index
 

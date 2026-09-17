@@ -78,7 +78,11 @@ enforcement — nothing here can verify which tool is running you.
    - Why that should stick for future work
    ```
 
-1. Upsert today's Cross-Review section with the helper beside this skill:
+1. Upsert today's Cross-Review section with the helper beside this skill.
+   Before writing the body files, read
+   `references/review-report-template.md` and
+   `references/review-walkthrough-template.md` and use them as the
+   copy-and-fill outlines:
 
    ```bash
    TODAY="$(date +%F)"

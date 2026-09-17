@@ -91,7 +91,10 @@ cross-review is skipped.
    - If a fix requires deviating from the original plan, say so explicitly.
 
 1. Upsert today's Self-Review section with the helper beside this skill (do not
-   hand-edit other sections):
+   hand-edit other sections). Before writing the body files, read
+   `references/review-report-template.md` and
+   `references/review-walkthrough-template.md` and use them as the
+   copy-and-fill outlines:
 
    ```bash
    TODAY="$(date +%F)"
