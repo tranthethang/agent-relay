@@ -32,6 +32,8 @@ HAPPY_DIR="$("$RUN_INIT" 1700000000 --slug happy --title "Happy Plan" --base mai
 [[ -d "$HAPPY_DIR" ]] && pass "run-init creates directory" || fail "run-init creates directory"
 [[ -f "$HAPPY_DIR/meta.md" ]] && pass "run-init creates meta.md" || fail "run-init creates meta.md"
 [[ -f "$HAPPY_DIR/history.log" ]] && pass "run-init creates history.log" || fail "run-init creates history.log"
+grep -q 'stage=plan action=created tool=' "$HAPPY_DIR/history.log" && \
+  pass "run-init created line includes tool=" || fail "run-init created line includes tool="
 [[ ! -f .agent-relay/CURRENT ]] && pass "no CURRENT created" || fail "no CURRENT created"
 
 cat <<'EOF' > "$HAPPY_DIR/plan.md"

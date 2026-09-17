@@ -78,8 +78,9 @@ directory, not the `.md` file) already exists for the resolved run.
    of the plan. If the plan has no `id:` line, add `id: <RUN_ID>` next to `base:`.
 
 1. Break the plan into an explicit task list and write it to
-   `$RUN_DIR/implement-plan.md` **before** starting implementation. Use
-   one line per task in this exact form:
+   `$RUN_DIR/implement-plan.md` **before** starting implementation. Read
+   `references/implement-plan-template.md` first and use it as the
+   copy-and-fill outline. Use one line per task in this exact form:
 
    `- [<status>] <task id>: <short description>`
 
@@ -96,6 +97,9 @@ directory, not the `.md` file) already exists for the resolved run.
    - files changed
    - key assumptions made (anything the plan left ambiguous)
    - known risks or open issues left for the reviewer
+
+   Read `references/implement-report-template.md` before writing the report
+   and use it as the copy-and-fill outline.
 
 1. If a task in the plan is unclear, contradictory, or infeasible, do not silently
    reinterpret it — mark it `skipped (<reason>)` in `implement-plan.md`
@@ -128,7 +132,8 @@ TASK_CLAIM="scripts/task-claim.sh"
 
 1. **Setup**: Run `"$TASK_INIT" "$RUN_DIR"` instead of hand-writing
    `implement-plan.md`. This creates `implement-plan/`, `implement-report/`, and
-   their rollup files.
+   their rollup files. Per-task `.status` files follow
+   `references/task-status-template.md`.
 
 2. **Per sub-agent loop**:
    - Run `"$TASK_CLAIM" list "$RUN_DIR"`.

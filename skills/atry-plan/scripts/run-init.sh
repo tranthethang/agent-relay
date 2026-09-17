@@ -7,7 +7,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  run-init.sh <RUN_ID> --slug <slug> [--title <title>] [--base <base-ref>]
+  run-init.sh <RUN_ID> --slug <slug> [--title <title>] [--base <base-ref>] [--tool <tool>]
 EOF
   exit 1
 }
@@ -40,12 +40,18 @@ ID=""
 SLUG=""
 TITLE="(untitled)"
 BASE=""
+TOOL="unknown"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --slug)
       [[ $# -ge 2 ]] || { echo "Error: --slug requires an argument" >&2; exit 1; }
       SLUG="$2"
+      shift 2
+      ;;
+    --tool)
+      [[ $# -ge 2 ]] || { echo "Error: --tool requires an argument" >&2; exit 1; }
+      TOOL="$2"
       shift 2
       ;;
     --title)
@@ -149,7 +155,7 @@ base: $BASE
 EOF
 
 NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '%s stage=plan action=created\n' "$NOW_ISO" >> "$RUN_DIR/history.log"
+printf '%s stage=plan action=created tool=%s\n' "$NOW_ISO" "$TOOL" >> "$RUN_DIR/history.log"
 
 abs_run_dir="$(cd "$RUN_DIR" && pwd -P)"
 printf '%s\n' "$abs_run_dir"
