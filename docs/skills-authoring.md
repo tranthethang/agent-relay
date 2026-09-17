@@ -44,7 +44,10 @@ description: One or two sentences; tools use this for discovery.
    [task-claim.md](task-claim.md).  
 6. **Cross-review** — ask for a different tool/model than self-review.
    `review-section.sh` may **warn** on matching provenance; it must not hard-
-   fail the upsert (project philosophy).  
+   fail the upsert (project philosophy). Both review skills share
+   `reviewer-conduct.md` (escalate genuine tradeoffs; re-derive evidence
+   before accepting claims). Self-review adds a broad-vision lens; cross-review
+   uses inverted-question framing — see those `SKILL.md` files.  
 
 ## Sync workflow
 

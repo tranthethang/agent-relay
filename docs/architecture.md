@@ -46,8 +46,10 @@ skill directories. It does not call agents, pick models, or watch `.agent-relay/
 
 1. **plan** → create run directory via `run-init.sh`, write `plan.md`  
 2. **implement** → code + `implement-plan.md` / `implement-report.md` (or parallel dirs)  
-3. **self-review** → upsert dated Self-Review section in review reports  
-4. **cross-review** → upsert Cross-Review (skill asks for a different tool; nothing enforces it)
+3. **self-review** → upsert dated Self-Review section; broad-vision analysis;
+   escalate tradeoffs per `reviewer-conduct.md`  
+4. **cross-review** → upsert Cross-Review with inverted-question framing
+   (skill asks for a different tool; nothing enforces it)
 
 Nothing in this repo schedules that order. Skipping a stage is always possible.
 
@@ -55,7 +57,10 @@ Nothing in this repo schedules that order. Skipping a stage is always possible.
 
 Two copy-vs-source checks keep installable bundles from silently diverging:
 
-- `scripts/sync-references.sh` — `docs/file-conventions.md` and `scripts/<name>.sh` → skill bundle copies  
+- `scripts/sync-references.sh` — `docs/file-conventions.md` and `scripts/<name>.sh`
+  → skill bundle copies; also keeps review `*-template.md` and
+  `reviewer-conduct.md` byte-identical between `atry-self-review` and
+  `atry-cross-review`
 - `scripts/sync-bootstrap.sh` — `lib/bootstrap.sh` body → marked regions in `bin/*.sh`
 
 CI runs both with `--check`.

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1] — 2026-09-17
+
 ### Removed
 
 - Removed the top-level `templates/` directory. Empty artifact outlines now live

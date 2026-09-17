@@ -74,7 +74,8 @@ See [security.md](security.md).
 
 ## Patch vs minor
 
-This project uses SemVer. Recent patch example (1.0.1): installer allowlist,
-`task-claim check`, advisory cross-review warning, docs — no intentional
-breakage of the v1.0.0 skill-folder layout. Re-install refreshes bundles;
-no separate migration doc beyond “run install again.”
+This project uses SemVer. Recent patch example (3.0.1): shared
+`reviewer-conduct.md`, review persona framing, templates moved into skill
+`references/`, docs — no intentional breakage of the v3.0.0 run-directory
+layout. Re-install refreshes bundles; no separate migration doc beyond “run
+install again.”

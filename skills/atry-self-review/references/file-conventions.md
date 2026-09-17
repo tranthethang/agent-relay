@@ -101,7 +101,8 @@ id: <RUN_ID>
 
 If those lines are missing, `atry-implement` adds them before coding. `base`
 should be a real ref in that repo (`HEAD` before the work, or the branch tip).
-Do not invent one.
+Do not invent one. The plan skill's `references/plan-template.md` also outlines
+`## Non-goals` and numbered tasks that may list `(deps: T1 T2)`.
 
 ## Review headings
 
@@ -117,6 +118,12 @@ appends and must not remove the self-review section:
 ```markdown
 ## Cross-Review — YYYY-MM-DD
 ```
+
+Both review skills read shared `references/reviewer-conduct.md` (kept
+byte-identical by `sync-references.sh`). When a genuine tradeoff cannot be
+resolved interactively, record it as an optional `### Open decisions`
+subsection **inside** that day's Self-Review or Cross-Review body — not a new
+top-level `##` kind.
 
 
 
