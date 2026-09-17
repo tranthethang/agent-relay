@@ -63,7 +63,7 @@ implement skill bundle (`scripts/task-init.sh`, `scripts/task-claim.sh` next to
 `SKILL.md`). They use per-task files and `mkdir` locks. Protocol detail:
 [`docs/task-claim.md`](docs/task-claim.md).
 
-Covered by `tests/tasks.sh` (including concurrent steal with a try-once mutex,
+Covered by `tests/tasks.sh` (including concurrent steal with a per-task mutex,
 ident validation, dependency cycles, and portable sorting):
 
 - Exactly one winner when two agents race a `steal`
@@ -114,17 +114,25 @@ redirects, and control operators refused. That is a mitigation, not a proof
 that sourcing is safe. Treat release trust like any other script you download.
 
 ```bash
-REF="v3.0.1"
+REF="v3.1.1"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 shasum -a 256 -c SHA256SUMS
 bash ./install.sh --ref "$REF"
 ```
-### Upgrading from pre-3.0
 
-Re-run `./bin/install.sh` (or release install) to refresh installed skill bundles,
-and remove any legacy `.agent-relay/` runs.
+### Upgrading from 3.0.x
 
+3.0.x installs have no `.agent-relay-owned` marker, so 3.1.x refuses to
+overwrite them. Remove first, then reinstall:
+
+```bash
+./bin/uninstall.sh --force
+./bin/install.sh
+```
+
+Details: [`docs/installer.md`](docs/installer.md). Pre-3.0 run directories
+are unsupported; start new runs under `{YMD}-{RUN_ID}-{RUN_SLUG}/`.
 
 ## Honest limits
 
