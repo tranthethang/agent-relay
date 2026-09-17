@@ -12,14 +12,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed the top-level `templates/` directory. Empty artifact outlines now live
   in each skill's `references/*-template.md` (installed with the bundle).
 
+### Added
+
+- Shared `reviewer-conduct.md` for both review skills: escalate genuine
+  tradeoffs to the developer (interactive ask, or non-blocking `### Open
+  decisions` when unattended), and require independently re-derived evidence
+  before accepting implement/self-review claims. Synced byte-identical via
+  `scripts/sync-references.sh`.
+- Self-review broad-vision lens: check cross-feature impact and reuse; confirmed
+  bugs still fix directly; other suggestions stay walkthrough notes (no solo
+  scope expansion).
+- Cross-review inverted-question framing: ask where a claim could be wrong,
+  list evidence; "no issues found" with a checklist remains valid.
+
 ### Changed
 
 - `run-init.sh` writes `tool=<tool>` on the `history.log` `action=created` line
   (optional `--tool`, default `unknown`).
 - `plan-template.md` includes `## Non-goals` and a `(deps: T1 T2)` task example.
 - Implement-report template uses neutral placeholders (no fabricated sample work).
-- `scripts/sync-references.sh` keeps review `*-template.md` files byte-identical
-  between `atry-self-review` and `atry-cross-review`.
+- `scripts/sync-references.sh` keeps review `*-template.md` and
+  `reviewer-conduct.md` byte-identical between `atry-self-review` and
+  `atry-cross-review`.
+- Review report template documents optional `### Open decisions` inside existing
+  Self-Review / Cross-Review section bodies.
 
 ## [3.0.0] — 2026-09-16
 

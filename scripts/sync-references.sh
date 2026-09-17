@@ -3,7 +3,8 @@
 # Keep the shared files inside skills/*/ bundles identical to their source:
 #   - docs/file-conventions.md -> skills/*/references/file-conventions.md
 #   - scripts/<name>.sh        -> skills/*/scripts/<name>.sh
-#   - review-*-template.md     -> atry-self-review (canonical) <-> atry-cross-review
+#   - review-*-template.md / reviewer-conduct.md
+#     -> atry-self-review (canonical) <-> atry-cross-review
 # Bundles deliberately carry copies (each skill must be self-contained), so a
 # --check gate is the only thing keeping those copies from drifting.
 # Usage:
@@ -19,6 +20,7 @@ CROSS_REVIEW_REF="$ROOT_DIR/skills/atry-cross-review/references"
 REVIEW_TEMPLATES=(
   "review-report-template.md"
   "review-walkthrough-template.md"
+  "reviewer-conduct.md"
 )
 
 CHECK_ONLY=0

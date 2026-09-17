@@ -66,10 +66,13 @@ cross-review is skipped.
    ```bash
    scripts/run-history.sh append "$RUN_DIR" self-review started tool=<tool>
    ```
-   Read the plan, implementation plan, and implementation report first.
+   Read `references/reviewer-conduct.md` before reviewing. Then read the plan,
+   implementation plan, and implementation report.
 
 1. Inspect the actual changes with git. The diff is the source of truth; the
-   implementation report may be incomplete or wrong.
+   implementation report may be incomplete or wrong. Apply the evidence-not-
+   assertion rule from `reviewer-conduct.md` to every claim in the
+   implement-report before accepting it.
 
 1. Review for, in this order:
 
@@ -81,13 +84,24 @@ cross-review is skipped.
    Scope rule: fix bugs and rule violations relative to the plan's intent, but
    do **not** enlarge scope beyond the plan.
 
+1. Broad-vision lens (analysis only): also check cross-feature impact and
+   reuse opportunities in the reviewed diff. Action constraint — a confirmed
+   bug found this way is fixed directly; everything else (including any
+   pattern or architecture suggestion) is a walkthrough note only, never
+   scope expansion on its own. Propose a pattern only where it would reduce
+   duplication or complexity already present in the reviewed diff.
+
 1. If tests or a build step exist in this project, run them and report pass/fail.
 
-1. Fix rules:
+1. Fix / escalate rules (three branches — keep all three):
 
    - Fix **confirmed** bugs and rule violations directly.
    - For stylistic preferences that don't affect correctness, note them in the
      walkthrough instead of changing code.
+   - For a genuine tradeoff/decision point (not a bug, not style, not already
+     resolved by the plan), escalate per `reviewer-conduct.md` — ask the
+     developer if interactive; otherwise record under `### Open decisions`
+     and leave the code as-is.
    - If a fix requires deviating from the original plan, say so explicitly.
 
 1. Upsert today's Self-Review section with the helper beside this skill (do not

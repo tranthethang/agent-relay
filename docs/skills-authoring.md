@@ -53,9 +53,10 @@ description: One or two sentences; tools use this for discovery.
 | `docs/file-conventions.md` | `skills/*/references/file-conventions.md` |
 | `scripts/<file>.sh` | `skills/<skill>/scripts/<file>.sh` (only if the bundle lists that script) |
 | `skills/atry-self-review/references/review-*-template.md` | `skills/atry-cross-review/references/review-*-template.md` (must stay byte-identical) |
+| `skills/atry-self-review/references/reviewer-conduct.md` | `skills/atry-cross-review/references/reviewer-conduct.md` (must stay byte-identical) |
 
 ```bash
-# after editing docs/file-conventions.md, scripts/*.sh, or review templates
+# after editing docs/file-conventions.md, scripts/*.sh, review templates, or reviewer-conduct.md
 bash scripts/sync-references.sh
 bash scripts/sync-references.sh --check
 ```
@@ -67,9 +68,10 @@ sync script’s expectations by adding the file under the bundle and syncing).
 
 Empty artifact outlines live in each skill's `references/*-template.md`.
 `SKILL.md` should tell the agent to read those files before writing the
-matching runtime artifact. Review report/walkthrough templates are duplicated
-under `atry-self-review` and `atry-cross-review`; edit the self-review copy and
-re-run sync so both stay identical.
+matching runtime artifact. Review report/walkthrough templates and
+`reviewer-conduct.md` are duplicated under `atry-self-review` and
+`atry-cross-review`; edit the self-review copy and re-run sync so both stay
+identical.
 
 Skills with **no** `scripts/` (e.g. historical empty bundles) are fine; sync
 skips empty script dirs (bash 3.2 + `set -u` safe).

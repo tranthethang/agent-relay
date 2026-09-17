@@ -51,9 +51,18 @@ enforcement — nothing here can verify which tool is running you.
    ```bash
    scripts/run-history.sh append "$RUN_DIR" cross-review started tool=<tool>
    ```
-   Read the full chain (plan → implement → prior review).
+   Read `references/reviewer-conduct.md` before reviewing. Then read the full
+   chain (plan → implement → prior review).
 
 1. Diff from the plan `base:` (or ask), not just uncommitted changes.
+
+1. Inverted-question framing: for each claim in the implement-report and prior
+   Self-Review, ask "where could this be wrong?" — not "does this look right?"
+   Independently re-derive evidence (re-read the actual file, diff, or
+   test/build output) before accepting the claim. List that evidence in the
+   report (paths, commands, results). A documented "no issues found" backed by
+   that checklist is a valid, non-penalized outcome — do not invent findings to
+   avoid it.
 
 1. Prioritize differently from the self-review step:
 
@@ -64,8 +73,15 @@ enforcement — nothing here can verify which tool is running you.
 
 1. If tests or a build step exist, re-run them and report pass/fail.
 
-1. Fix confirmed bugs/rule violations directly; note pure style disagreements
-   without changing code; if you override a prior decision, state why.
+1. Fix / escalate rules (three branches — keep all three):
+
+   - Fix confirmed bugs/rule violations directly.
+   - Note pure style disagreements without changing code.
+   - For a genuine tradeoff/decision point (not a bug, not style, not already
+     resolved by the plan), escalate per `reviewer-conduct.md` — ask the
+     developer if interactive; otherwise record under `### Open decisions`
+     and leave the code as-is.
+   - If you override a prior decision, state why.
 
 1. If the plan itself was ambiguous or wrong and the implementation correctly
    deferred or adjusted, append a plan amendment (do not rewrite history):
