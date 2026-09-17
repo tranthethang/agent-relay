@@ -64,19 +64,6 @@ check_frontmatter "$HOME/.gemini/config/skills" "antigravity"
 check_frontmatter "$HOME/.claude/skills" "claude"
 check_frontmatter "$HOME/.codex/skills" "codex"
 
-# Legacy Cursor rules (.mdc) and Antigravity paths should be cleaned by uninstall
-# (and by install migration) even after path/format change.
-mkdir -p "$HOME/.cursor/rules" "$HOME/.agents/skills/atry-implement" "$HOME/.agent/skills/atry-implement"
-echo legacy > "$HOME/.cursor/rules/atry-implement.mdc"
-echo legacy > "$HOME/.agents/skills/atry-implement/SKILL.md"
-echo legacy > "$HOME/.agent/skills/atry-implement/SKILL.md"
-
-# Re-install cursor should migrate away the legacy .mdc
-"$INSTALL" --only cursor --skill atry-implement >/dev/null
-[[ ! -f "$HOME/.cursor/rules/atry-implement.mdc" ]] && pass "install cleans legacy mdc" || fail "install cleans legacy mdc"
-# Recreate for uninstall coverage below
-echo legacy > "$HOME/.cursor/rules/atry-implement.mdc"
-
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
 
 # Skill bundles include references/ and scripts/ (not ~/.agent-relay/scripts/)
@@ -94,18 +81,7 @@ if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verif
   pass "bundle run-init" || fail "bundle run-init"
 [[ -x "$HOME/.cursor/skills/atry-implement/scripts/run-history.sh" ]] && \
   pass "bundle run-history" || fail "bundle run-history"
-[[ -x "$HOME/.cursor/skills/atry-implement/scripts/run-migrate.sh" ]] && \
-  pass "bundle run-migrate" || fail "bundle run-migrate"
 [[ -f "$HOME/.cursor/skills/atry-plan/SKILL.md" ]] && pass "atry-plan installed" || fail "atry-plan installed"
-[[ ! -e "$HOME/.agent-relay/scripts/task-claim.sh" ]] && \
-  pass "no legacy global scripts" || fail "no legacy global scripts"
-
-# Legacy ~/.agent-relay/scripts is cleaned on install
-mkdir -p "$HOME/.agent-relay/scripts"
-echo old > "$HOME/.agent-relay/scripts/task-claim.sh"
-"$INSTALL" --only cursor >/dev/null
-[[ ! -e "$HOME/.agent-relay/scripts/task-claim.sh" ]] && \
-  pass "install cleans legacy scripts" || fail "install cleans legacy scripts"
 
 "$INSTALL" --dry-run --only CURSOR >/dev/null
 pass "--only CURSOR"
@@ -151,7 +127,6 @@ fi
 
 "$UNINSTALL" --only cursor --skill atry-implement >/dev/null
 [[ ! -e "$HOME/.cursor/skills/atry-implement" ]] && pass "uninstall cursor skill" || fail "uninstall cursor skill"
-[[ ! -f "$HOME/.cursor/rules/atry-implement.mdc" ]] && pass "uninstall legacy mdc" || fail "uninstall legacy mdc"
 # Other cursor skills should remain
 [[ -f "$HOME/.cursor/skills/atry-self-review/SKILL.md" ]] && pass "uninstall scoped" || fail "uninstall scoped"
 
@@ -165,9 +140,6 @@ fi
 [[ ! -f "$HOME/.gemini/config/skills/atry-implement/SKILL.md" ]] && pass "uninstall all" || fail "uninstall all"
 [[ ! -e "$HOME/.claude/skills/atry-implement" ]] && pass "uninstall claude skill" || fail "uninstall claude skill"
 [[ ! -e "$HOME/.codex/skills/atry-implement" ]] && pass "uninstall codex skill" || fail "uninstall codex skill"
-[[ ! -e "$HOME/.agents/skills/atry-implement" ]] && pass "uninstall legacy .agents" || fail "uninstall legacy .agents"
-[[ ! -e "$HOME/.agent/skills/atry-implement" ]] && pass "uninstall legacy .agent" || fail "uninstall legacy .agent"
-[[ ! -e "$HOME/.agent-relay/scripts/task-claim.sh" ]] && pass "uninstall scripts" || fail "uninstall scripts"
 
 # validate_targets_conf: allowlist accepts the real manifest and benign paths
 # that contain "source"/"exec" as substrings; rejects bare commands and

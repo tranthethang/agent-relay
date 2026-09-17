@@ -8,7 +8,7 @@ change install targets without breaking CI.
 | Script | Role |
 | --- | --- |
 | `bin/install.sh` | Copy skill bundles into each selected tool’s directory under `$HOME` |
-| `bin/uninstall.sh` | Remove those copies (and known legacy paths) |
+| `bin/uninstall.sh` | Remove those copies |
 | `bin/verify.sh` | Check expected files exist after install |
 
 All three:
@@ -35,7 +35,6 @@ One block per tool, plus `TOOLS=(...)` listing names in install order:
 ```bash
 CURSOR_DIR="$HOME/.cursor/skills"
 CURSOR_FORMAT="skill-folder"
-CURSOR_LEGACY_DIRS=("$HOME/.cursor/rules")   # optional
 TOOLS=(CURSOR ANTIGRAVITY CLAUDE CODEX)
 ```
 
@@ -76,7 +75,7 @@ same skills.
 
 ## Adding a tool
 
-1. Add `NAME_DIR`, `NAME_FORMAT="skill-folder"`, optional `NAME_LEGACY_DIRS=(…)`  
+1. Add `NAME_DIR`, `NAME_FORMAT="skill-folder"`  
 2. Append `NAME` to `TOOLS=(…)`  
 3. Keep paths under `$HOME`  
 4. Ensure lines pass `validate_targets_conf` (plain assignments only)  
@@ -86,15 +85,6 @@ same skills.
 You should **not** need to edit `install.sh` unless you introduce a new
 `FORMAT` (none is planned).
 
-## Legacy cleanup
-
-Install and uninstall remove leftovers when configured:
-
-- Cursor: old `.mdc` under `CURSOR_LEGACY_DIRS`  
-- Antigravity: previous roots in `ANTIGRAVITY_LEGACY_DIRS`  
-- Global `~/.agent-relay/scripts/` from pre-1.0 helper installs  
-
-Absence of those paths is not an error.
 
 ## Release-mode install
 

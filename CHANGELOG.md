@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-09-16
+
+### Removed
+
+- Removed legacy migration tool `scripts/run-migrate.sh` and its skill bundle copies.
+- Removed `--migrate` flag from `scripts/task-init.sh`.
+- Removed legacy flat layout (`.agent-relay/plan-<id>.md`) and legacy `YMD_nanoid` format resolution from `scripts/resolve-run.sh` and `scripts/task-claim.sh`.
+- Removed legacy destination directory cleanup (`*_LEGACY_DIRS`) and legacy scripts cleanup from installer/uninstaller/verifier (`bin/install.sh`, `bin/uninstall.sh`, `bin/verify.sh`, `targets.conf`).
+- Removed all legacy migration and historical layout sections from documentation (`README.md`, `docs/file-conventions.md`, `docs/troubleshooting.md`, `docs/task-claim.md`, `docs/skills-authoring.md`, `docs/installer.md`, `docs/testing.md`, `templates/README.md`, and skill guides).
+
+### Changed
+
+- Strictly enforced single standard run directory format: `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`.
+- Updated `AGENTS.md` with explicit hard constraint: changes need not support or migrate older versions or historical layouts; no backward-compatibility code or fallbacks.
+- Modernized all test suites (`tests/smoke.sh`, `tests/tasks.sh`) to operate exclusively on per-run directories with explicit rejection of legacy structures.
+
 ## [2.0.1] — 2026-09-16
 
 ### Changed

@@ -24,12 +24,6 @@ or not found), ask the user for the `RUN_ID` or path.
 
 There is no `CURRENT` file — do not look for or write `CURRENT`.
 
-If you encounter a legacy flat run (`.agent-relay/plan-<id>.md`), migrate it:
-
-```bash
-RUN_DIR="$(scripts/run-migrate.sh <id>)"
-```
-
 ## Inputs
 
 - Plan file: `$RUN_DIR/plan.md`
@@ -133,9 +127,8 @@ TASK_CLAIM="scripts/task-claim.sh"
 ```
 
 1. **Setup**: Run `"$TASK_INIT" "$RUN_DIR"` instead of hand-writing
-   `implement-plan.md`. (If converting an existing sequential run, use
-   `"$TASK_INIT" "$RUN_DIR" --migrate`). This creates `implement-plan/`,
-   `implement-report/`, and their rollup files.
+   `implement-plan.md`. This creates `implement-plan/`, `implement-report/`, and
+   their rollup files.
 
 2. **Per sub-agent loop**:
    - Run `"$TASK_CLAIM" list "$RUN_DIR"`.

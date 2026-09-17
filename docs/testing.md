@@ -39,9 +39,7 @@ on purpose until cleaned up (see `CONTRIBUTING.md`).
 - Per-tool skill-folder paths for cursor / antigravity / claude / codex  
 - Front-matter: each installed `SKILL.md` starts with `---` and has non-empty
   `name:` / `description:` inside that block  
-- Legacy `.mdc` / old Antigravity roots cleaned on install/uninstall  
-- Bundle `references/` + executable helpers present; no legacy
-  `~/.agent-relay/scripts/` left behind  
+- Bundle `references/` + executable helpers present under each skill folder  
 - Flag edge cases: `--only`, unknown tool/skill, `--no-clobber`, `--target`
   rejected  
 - `validate_targets_conf`: real `targets.conf`, benign `.resource` path, bare

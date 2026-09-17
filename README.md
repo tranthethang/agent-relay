@@ -49,9 +49,8 @@ with `bash scripts/sync-references.sh` (CI runs `--check`).
 
 ## Working files
 
-Skills read and write under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` (or legacy
-`.agent-relay/{YMD}_{RUN_ID}/`) in the **target** repo.
-Whether you commit that directory is your choice.
+Skills read and write under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` in the
+**target** repo. Whether you commit that directory is your choice.
 
 Default mode is sequential: one shared `implement-plan.md` and
 `implement-report.md` inside the run folder.
@@ -79,7 +78,7 @@ Still true:
 
 - Serializes **task status** (and per-task reports), not overlapping source edits
 - Use disjoint paths or separate worktrees when files overlap
-- If `implement-plan/` (or legacy `implement-plan-<id>/`) already exists, `atry-implement` tells the agent to
+- If `implement-plan/` already exists, `atry-implement` tells the agent to
   use `task-claim.sh` and not hand-edit the rollup `.md` files — that is skill
   text, not a lock on the filesystem
 
@@ -120,35 +119,11 @@ curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/
 shasum -a 256 -c SHA256SUMS
 bash ./install.sh --ref "$REF"
 ```
+### Upgrading from pre-3.0
 
-### Migration v1.x → v2.0
+Re-run `./bin/install.sh` (or release install) to refresh installed skill bundles,
+and remove any legacy `.agent-relay/` runs.
 
-- Per-run folder layout: all artifacts live in `.agent-relay/{YMD}_{RUN_ID}/`.
-- Artifacts inside the run folder use short names: `plan.md`, `meta.md`,
-  `history.log`, `implement-plan.md`, `implement-report.md`, `review-report.md`,
-  `review-walkthrough.md`.
-- Parallel task directories live inside the run directory: `implement-plan/` and
-  `implement-report/`.
-- There is no `.agent-relay/CURRENT` file and no central index; each run folder is
-  self-contained.
-- Shared Bash 3.2 helpers: `resolve-run.sh`, `run-init.sh`, `run-history.sh`,
-  `run-migrate.sh`.
-- Legacy flat runs (`plan-<id>.md`) can be migrated into the per-run layout:
-  `bash skills/atry-implement/scripts/run-migrate.sh <id>`.
-
-### Migration v0.4 → v1.0
-
-- Skills are directories (`skills/<name>/SKILL.md`), not flat `skills/<name>.md`.
-- Helpers live in each skill’s `scripts/`, not `~/.agent-relay/scripts/`.
-  Install/uninstall remove the old global scripts directory.
-- `resolve-task-bin.sh` is gone — call `scripts/task-claim.sh` beside `SKILL.md`.
-- Stale locks are not auto-stolen; use `task-claim.sh steal …`.
-- `CURRENT` is written only when creating a new id.
-- Only `skill-folder` format remains (the old Cursor `.mdc` writer is gone;
-  leftover `.mdc` files are still cleaned from legacy dirs).
-
-No separate migration step for v1.0.0 → v1.0.1: re-run `./bin/install.sh` (or
-install from the `v1.0.1` release) to refresh bundles.
 
 ## Honest limits
 

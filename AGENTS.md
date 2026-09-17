@@ -23,6 +23,9 @@ docs for end users — see [`README.md`](README.md).
   (`tests/smoke.sh`), task-helper smoke (`tests/tasks.sh`), remote-download
   smoke (`tests/smoke-remote.sh`), shellcheck (`-S error`),
   `sync-references.sh --check`, and `sync-bootstrap.sh --check`.
+- Sole-maintainer repo: changes need not support or migrate older versions or
+  historical layouts. Do not reintroduce migration paths, layout fallbacks, or
+  backward-compatibility code.
 
 ## Layout
 

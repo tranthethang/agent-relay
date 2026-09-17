@@ -27,13 +27,11 @@ From the target repo (walks up to find `.agent-relay/`):
 ```bash
 # next to SKILL.md after install, or from this repo's scripts/
 scripts/task-init.sh <id>
-# migrate an existing sequential rollup into directory mode:
-scripts/task-init.sh <id> --migrate
 ```
 
-Creates `implement-plan/` (or legacy `implement-plan-<id>/`) (`*.status`, `.order`, optional `_meta.md`) and
-generates `implement-plan.md` as a rollup. Plain `task-init` without
-`--migrate` refuses if the rollup file already exists.
+Creates `implement-plan/` (`*.status`, `.order`, optional `_meta.md`) and
+generates `implement-plan.md` as a rollup. `task-init` refuses if the rollup
+file already exists.
 
 ## `task-claim.sh` subcommands
 
@@ -69,7 +67,7 @@ Ids and task-ids must match `^[A-Za-z0-9._-]+$` (no path separators).
 
 ## Locks
 
-- Per-task lock: `implement-plan/.lock-<task-id>/` (or legacy `implement-plan-<id>/.lock-<task-id>/`; `mkdir` is the mutex)  
+- Per-task lock: `implement-plan/.lock-<task-id>/` (`mkdir` is the mutex)  
 - Owner file records `session-tag` + timestamp  
 - Stale locks: `claim` fails and prints the `steal` command — human/agent
   decision, not a timer  
@@ -80,7 +78,7 @@ Hand-editing `implement-plan.md` while the directory exists desyncs
 `.status` files from the rollup (seen in real runs). `check` compares
 **content** (what regenerate would produce) to the on-disk rollup — not mtime.
 
-If `implement-plan/` (or legacy `implement-plan-<id>/`) exists, `atry-implement` skill text requires using
+If `implement-plan/` exists, `atry-implement` skill text requires using
 `task-claim.sh` for further status/report writes. That is instruction only;
 nothing filesystem-locks the rollup `.md` against editors.
 

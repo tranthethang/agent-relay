@@ -472,31 +472,6 @@ write_skill_folder() {
   fi
 }
 
-# Remove prior-format installs from LEGACY_DIRS (both .mdc and skill-folder).
-# Does not fail if absent. Uses the caller's legacy_dirs + dest_dir.
-cleanup_legacy_artifacts() {
-  # cleanup_legacy_artifacts <skill_name>
-  local name="$1" legacy_dir
-  for legacy_dir in "${legacy_dirs[@]+"${legacy_dirs[@]}"}"; do
-    [[ -z "$legacy_dir" || "$legacy_dir" == "$dest_dir" ]] && continue
-    if [[ -f "$legacy_dir/$name.mdc" ]]; then
-      if [[ "$DRY_RUN" -eq 1 ]]; then
-        log "[dry-run] rm legacy $legacy_dir/$name.mdc"
-      else
-        log "rm legacy $legacy_dir/$name.mdc"
-        rm -f "$legacy_dir/$name.mdc"
-      fi
-    fi
-    if [[ -e "$legacy_dir/$name" ]]; then
-      if [[ "$DRY_RUN" -eq 1 ]]; then
-        log "[dry-run] rm -rf legacy $legacy_dir/$name"
-      else
-        log "rm -rf legacy $legacy_dir/$name"
-        rm -rf "$legacy_dir/$name"
-      fi
-    fi
-  done
-}
 
 # Collect skill bundles (skills/<name>/SKILL.md).
 shopt -s nullglob
@@ -543,12 +518,7 @@ for tool in "${TOOLS[@]}"; do
   dest_dir="${!dir_var}"
   fmt="${!fmt_var}"
 
-  legacy_dirs=()
-  legacy_var="${tool}_LEGACY_DIRS"
-  if declare -p "$legacy_var" >/dev/null 2>&1; then
-    # shellcheck disable=SC1087
-    eval "legacy_dirs=(\"\${${legacy_var}[@]}\")"
-  fi
+
 
   echo "[$tool] -> $dest_dir ($fmt)"
   for skill_dir in "${skill_dirs[@]}"; do
@@ -566,7 +536,6 @@ for tool in "${TOOLS[@]}"; do
         else
           skipped=$((skipped + 1))
         fi
-        cleanup_legacy_artifacts "$name"
         ;;
       *)
         echo "Unknown format '$fmt' for $tool (only skill-folder is supported)" >&2
@@ -576,17 +545,6 @@ for tool in "${TOOLS[@]}"; do
   done
 done
 
-# Clean leftover v0.4 global script installs (scripts now live in skill bundles).
-LEGACY_SCRIPTS="$HOME/.agent-relay/scripts"
-if [[ "$DRY_RUN" -eq 0 && -d "$LEGACY_SCRIPTS" ]]; then
-  echo "  Cleaning legacy $LEGACY_SCRIPTS (scripts now ship inside skill bundles)"
-  rm -f "$LEGACY_SCRIPTS/task-claim.sh" \
-    "$LEGACY_SCRIPTS/task-init.sh" \
-    "$LEGACY_SCRIPTS/resolve-task-bin.sh" \
-    "$LEGACY_SCRIPTS/review-section.sh"
-  rmdir "$LEGACY_SCRIPTS" 2>/dev/null || true
-  rmdir "$HOME/.agent-relay" 2>/dev/null || true
-fi
 
 if [[ "$installed" -eq 0 && "$skipped" -eq 0 ]]; then
   echo "Nothing to install (filters matched no tool/skill combinations)." >&2
