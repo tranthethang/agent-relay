@@ -145,6 +145,8 @@ TASK_CLAIM="scripts/task-claim.sh"
      one worktree/agent when files overlap — claim does not protect content).
    - Update with `"$TASK_CLAIM" update "$RUN_DIR" <task-id> <session-tag> done`
      (or `skipped <reason>`).
+   - Write the task's report **before releasing** (step 4) — `report-write`
+     requires you to still hold the task's lock.
    - Release with `"$TASK_CLAIM" release "$RUN_DIR" <task-id> <session-tag>`.
 
 3. **File scoping rule in parallel mode**:
@@ -152,6 +154,10 @@ TASK_CLAIM="scripts/task-claim.sh"
    `in-progress` under a lock you do not hold. Report the conflict instead.
 
 4. **Implementation report in parallel mode**:
-   Use `"$TASK_CLAIM" report-write "$RUN_DIR" <task-id> -` (stdin) or
-   `"$TASK_CLAIM" report-write "$RUN_DIR" <task-id> <file>"` under
-   `$RUN_DIR/implement-report/<task-id>.md`. Do not manually edit the rollup.
+   Use `"$TASK_CLAIM" report-write "$RUN_DIR" <task-id> <session-tag> -`
+   (stdin) or `"$TASK_CLAIM" report-write "$RUN_DIR" <task-id> <session-tag> <file>"`
+   under `$RUN_DIR/implement-report/<task-id>.md`. Run this while you still
+   hold the lock, before `release`: the session-tag must match the current lock
+   owner, and after a release the task is unlocked so `report-write` refuses
+   unless you pass `--force` (which logs `report-write-force` in `history.log`).
+   Do not manually edit the rollup.

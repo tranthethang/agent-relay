@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.1] — 2026-09-17
+
+### Changed
+
+- `steal` waits a short bounded time for the per-task mutex
+  (`AGENT_RELAY_STEAL_WAIT_MAX`, default 5s) instead of failing the moment it is
+  busy, so an unrelated `claim` / `update` / `release` no longer aborts a steal.
+  The single-winner rule moved to a compare-and-swap on the lock owner: `steal`
+  records the owner it intends to take over from before entering the mutex and
+  refuses inside if it changed (`was already taken over by …`).
+- Mutex staleness is host-aware. Each mutex records `owner_host`; the owner pid
+  is only trusted when that host matches this machine, where a dead pid now
+  reclaims after `MUTEX_STALE_AGE` (lowered 30s → 10s, since a dead local pid is
+  conclusive). A mutex recorded on another host ignores the pid entirely and is
+  reclaimed only after `MUTEX_FOREIGN_STALE_AGE` (default 900s), so a live
+  remote holder is never evicted.
+- `docs/task-claim.md` documents the single-host assumption, both reclaim
+  branches, and how `steal` serializes.
+
+### Added
+
+- Tests: same-host dead-pid reclaim, foreign-host mutex not reclaimed on pid,
+  foreign-host reclaim after the long timer, and `steal` winning against an
+  `update` that merely holds the mutex (the case the old try-once aborted).
+
+## [3.1.0] — 2026-09-17
+
+### Added
+
+- Per-task `mkdir` mutation mutex in `task-claim.sh` (`.mutex-<task-id>/`) so
+  claim / steal / update / release / report-write serialize; ownership lock and
+  status write share one critical section. Steal is try-once on that mutex;
+  `.lock-steal-*` is removed.
+- `report-write` session ownership check, with `--force` that appends
+  `report-write-force` to `history.log`.
+- Installer ownership marker `.agent-relay-owned` (tool, skill, version,
+  installer). Uninstall refuses unmarked destinations unless `--force`.
+  Verify reports unmanaged destinations. Install refuses skill dirs that
+  symlink outside the configured tool directory.
+- `task-init` validates checkbox statuses and dependency ids; removes a
+  partial `implement-plan/` when it refuses a plan.
+- Cross-operation concurrency tests (steal/release, claim/steal, update/steal,
+  release/release) and installer ownership/symlink tests.
+
+### Changed
+
+- Rollup mutex stale recovery uses recorded epoch age + owner pid liveness
+  instead of “waited ~5s → steal”.
+- `take_lock_forced` stages a replacement lock dir before swap so a failed
+  mkdir cannot leave the task unlocked.
+- `review-section.sh` tracks fence character, length, and indentation
+  (CommonMark-ish) instead of toggling on any fence prefix.
+- Docs: task state machine and ownership rules in `docs/task-claim.md`;
+  installer trust notes in `docs/security.md` / `docs/testing.md`.
+- `report-write` now runs while the task lock is still held. In the parallel
+  loop it belongs before `release`, not after.
+
+### Migration
+
+Skill directories installed by 3.0.x have no `.agent-relay-owned` marker, so
+3.1.0 refuses to write into them (that refusal is the point of the marker).
+Upgrading an existing install is two steps:
+
+```bash
+./bin/uninstall.sh --force    # removes the unmarked 3.0.x skill directories
+./bin/install.sh              # reinstalls, writing the ownership marker
+```
+
+Use `--only` / `--skill` on both commands to scope the upgrade. Run
+`./bin/verify.sh` afterwards: it now fails on any destination without a valid
+marker.
+
 ## [3.0.1] — 2026-09-17
 
 ### Removed

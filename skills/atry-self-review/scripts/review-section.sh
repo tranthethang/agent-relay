@@ -97,13 +97,46 @@ if [[ "$KIND" == "Cross-Review" ]]; then
       # headings, documented at the top of this file) and warn on a false
       # match.
       prev_prov="$(awk '
-        function is_fence(s) {
-          sub(/^[ 	]*/, "", s)
-          return (s ~ /^```/ || s ~ /^~~~/)
+        function leading_ws(s,   n) {
+          n = 0
+          while (substr(s, n + 1, 1) == " " || substr(s, n + 1, 1) == "\t") n++
+          return n
         }
-        BEGIN { fence = 0; capture = 0; prov = "" }
+        function fence_match(s,   indent, rest, i, ch, len) {
+          indent = leading_ws(s)
+          rest = substr(s, indent + 1)
+          if (rest == "") return 0
+          ch = substr(rest, 1, 1)
+          if (ch != "`" && ch != "~") return 0
+          len = 1
+          for (i = 2; i <= length(rest); i++) {
+            if (substr(rest, i, 1) != ch) break
+            len++
+          }
+          if (len < 3) return 0
+          fence_indent = indent
+          fence_char = ch
+          fence_len = len
+          fence_rest = substr(rest, len + 1)
+          return 1
+        }
+        BEGIN { fence = 0; capture = 0; prov = ""; open_indent=0; open_char=""; open_len=0 }
         {
-          if (is_fence($0)) { fence = !fence; next }
+          if (fence_match($0)) {
+            if (!fence) {
+              fence = 1
+              open_indent = fence_indent
+              open_char = fence_char
+              open_len = fence_len
+              next
+            } else if (fence_char == open_char && fence_len >= open_len && fence_indent <= open_indent && fence_rest ~ /^[ \t]*$/) {
+              fence = 0
+              open_indent = 0
+              open_char = ""
+              open_len = 0
+              next
+            }
+          }
           if (!fence && $0 ~ /^## Self-Review — /) { capture = 1; next }
           if (capture && !fence) {
             if ($0 ~ /^<!-- relay: stage=self-review /) { prov = $0; capture = 0 }
@@ -140,10 +173,39 @@ OUT_TMP="$(mktemp "${FILE}.ar-out.XXXXXX")"
 # block; pass 2 rewrites. If fences are unbalanced the file is already
 # malformed, so pass 2 falls back to fence-unaware behavior and warns rather
 # than swallowing every following section.
+#
+# Fence rules (CommonMark-ish): an opening fence records character (` or ~),
+# run length (>=3), and leading indentation. A closing fence must use the
+# same character, be at least as long, and not be more indented than the
+# opener. Nested different-length/different-char "fences" inside a block are
+# treated as content.
 awk -v heading="$HEADING" -v bodyfile="$BODY_TMP" '
-  function is_fence(s) {
-    sub(/^[ \t]*/, "", s)
-    return (s ~ /^```/ || s ~ /^~~~/)
+  function leading_ws(s,   n) {
+    n = 0
+    while (substr(s, n + 1, 1) == " " || substr(s, n + 1, 1) == "\t") n++
+    return n
+  }
+  function fence_match(s,   indent, rest, i, ch, len) {
+    # Sets fence_indent, fence_char, fence_len when s is a fence line.
+    # Returns 1 if fence, 0 otherwise.
+    indent = leading_ws(s)
+    rest = substr(s, indent + 1)
+    if (rest == "") return 0
+    ch = substr(rest, 1, 1)
+    if (ch != "`" && ch != "~") return 0
+    len = 1
+    for (i = 2; i <= length(rest); i++) {
+      if (substr(rest, i, 1) != ch) break
+      len++
+    }
+    if (len < 3) return 0
+    # Info string may follow; closing fences reject non-space after the run
+    # only when we are already open (checked by caller via expect_close).
+    fence_indent = indent
+    fence_char = ch
+    fence_len = len
+    fence_rest = substr(rest, len + 1)
+    return 1
   }
   function emit_body(   line) {
     print heading
@@ -159,12 +221,32 @@ awk -v heading="$HEADING" -v bodyfile="$BODY_TMP" '
       inserted = 1
     }
   }
-  BEGIN { in_target=0; inserted=0; prev_nonempty=0; fence_open=0; unbalanced=0 }
+  BEGIN {
+    in_target=0; inserted=0; prev_nonempty=0
+    fence_open=0; unbalanced=0
+    open_indent=0; open_char=""; open_len=0
+  }
 
   # ---- pass 1: record fence state per line ----
   FNR == NR {
     inside[FNR] = fence_open
-    if (is_fence($0)) fence_open = !fence_open
+    if (fence_match($0)) {
+      if (!fence_open) {
+        # Opening fence: info string allowed after the run.
+        fence_open = 1
+        open_indent = fence_indent
+        open_char = fence_char
+        open_len = fence_len
+      } else if (fence_char == open_char && fence_len >= open_len && fence_indent <= open_indent) {
+        # Closing fence: same char, long enough, not more indented; no info string.
+        if (fence_rest ~ /^[ \t]*$/) {
+          fence_open = 0
+          open_indent = 0
+          open_char = ""
+          open_len = 0
+        }
+      }
+    }
     total = FNR
     next
   }

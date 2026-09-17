@@ -152,6 +152,47 @@ fi
 # Other cursor skills should remain
 [[ -f "$HOME/.cursor/skills/atry-self-review/SKILL.md" ]] && pass "uninstall scoped" || fail "uninstall scoped"
 
+# Ownership marker present after install
+"$INSTALL" --only cursor --skill atry-implement >/dev/null
+[[ -f "$HOME/.cursor/skills/atry-implement/.agent-relay-owned" ]] && \
+  grep -q 'installer=agent-relay' "$HOME/.cursor/skills/atry-implement/.agent-relay-owned" && \
+  pass "ownership marker written" || fail "ownership marker written"
+
+# Unmanaged directory: refuse uninstall without --force
+UNMANAGED="$HOME/.cursor/skills/unmanaged-skill"
+mkdir -p "$UNMANAGED/references"
+echo '---' > "$UNMANAGED/SKILL.md"
+echo 'name: unmanaged-skill' >> "$UNMANAGED/SKILL.md"
+echo 'description: not ours' >> "$UNMANAGED/SKILL.md"
+echo '---' >> "$UNMANAGED/SKILL.md"
+# Pretend it is a known skill by planting next to a real skill name we won't use —
+# instead test refuse on atry-implement after stripping the marker
+rm -f "$HOME/.cursor/skills/atry-implement/.agent-relay-owned"
+if "$UNINSTALL" --only cursor --skill atry-implement >/dev/null 2>&1; then
+  fail "uninstall refuses unmarked destination"
+else
+  pass "uninstall refuses unmarked destination"
+fi
+[[ -d "$HOME/.cursor/skills/atry-implement" ]] && pass "unmarked dest kept" || fail "unmarked dest kept"
+"$UNINSTALL" --force --only cursor --skill atry-implement >/dev/null
+[[ ! -e "$HOME/.cursor/skills/atry-implement" ]] && pass "force uninstall unmarked" || fail "force uninstall unmarked"
+
+# Symlinked destination outside tool dir is refused
+"$INSTALL" --only cursor --skill atry-implement >/dev/null
+OUTSIDE="$T/outside-skill"
+mkdir -p "$OUTSIDE"
+rm -rf "$HOME/.cursor/skills/atry-plan"
+ln -s "$OUTSIDE" "$HOME/.cursor/skills/atry-plan"
+if "$INSTALL" --only cursor --skill atry-plan >/dev/null 2>&1; then
+  fail "install refuses escaped symlink dest"
+else
+  pass "install refuses escaped symlink dest"
+fi
+rm -f "$HOME/.cursor/skills/atry-plan"
+
+"$UNINSTALL" --only cursor --skill atry-implement >/dev/null
+[[ ! -e "$HOME/.cursor/skills/atry-implement" ]] && pass "uninstall after marker tests" || fail "uninstall after marker tests"
+
 if "$VERIFY" --only cursor --skill atry-implement >/dev/null 2>&1; then
   fail "verify fail after partial uninstall"
 else

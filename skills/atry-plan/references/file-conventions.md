@@ -174,34 +174,42 @@ task-claim.sh release [--force] [--session <tag>] <run-dir-or-id> <task-id> [<se
 task-claim.sh list <run-dir-or-id>
 task-claim.sh rollup <run-dir-or-id>
 task-claim.sh check <run-dir-or-id>
-task-claim.sh report-write <run-dir-or-id> <task-id> <path-or-->
+task-claim.sh report-write [--force] [--session <tag>] <run-dir-or-id> <task-id> [<session-tag>] <path-or-->
 task-claim.sh report-list <run-dir-or-id>
 task-claim.sh report-rollup <run-dir-or-id>
 ```
 
-`--session <tag>` may appear before the subcommand or (for `update`/`release`)
-after it. An explicit `--session` wins over a positional session-tag. Ambient
-`SESSION` / `SESSION_TAG` environment variables are never used for auth.
+`--session <tag>` may appear before the subcommand or (for `update`/`release`/
+`report-write`) after it. An explicit `--session` wins over a positional
+session-tag. Ambient `SESSION` / `SESSION_TAG` environment variables are never
+used for auth.
 
 - `claim`: Atomically creates `implement-plan/.lock-<task-id>` (`mkdir` is
-  atomic on POSIX). Verifies every `deps:` entry is exactly `done` before
-  locking (`skipped` does **not** satisfy a dep unless `--allow-skipped-deps`).
-  On success, writes `<session-tag> <ISO8601>` inside the lock and sets status
-  to `in-progress`. On failure, prints the existing lock's owner + timestamp
-  and exits non-zero. **Stale locks are not auto-stolen** — `claim` fails with
-  a message naming the owner, lock age, and the `steal` command to run.
-- `steal`: Intentional lock takeover. Serializes the critical section with
-  `mkdir …/.lock-steal-<task-id>` (try-once mutex; a concurrent stealer exits
-  non-zero immediately). Auto-steal after two hours was removed on purpose:
-  an agent hung for two hours is a human decision, not a mechanism default.
-- `update`: Refuses if the caller's session-tag does not match the lock owner.
-  Status must be one of `pending`, `in-progress`, `done`, `skipped`. `skipped`
-  requires a reason; other statuses reject a trailing reason. Preserves `deps:`.
-- `release`: Removes the lock only if the caller session matches the owner, or
-  with `--force` (prints a warning). Leaves `.status` untouched.
+  atomic on POSIX) under the per-task `.mutex-<task-id>` critical section.
+  Verifies every `deps:` entry is exactly `done` before locking (`skipped` does
+  **not** satisfy a dep unless `--allow-skipped-deps`). On success, writes
+  `<session-tag> <ISO8601>` inside the lock and sets status to `in-progress`.
+  On failure, prints the existing lock's owner + timestamp and exits non-zero.
+  **Stale locks are not auto-stolen** — `claim` fails with a message naming the
+  owner, lock age, and the `steal` command to run.
+- `steal`: Intentional lock takeover. Serializes with the same per-task mutex,
+  waiting a short bounded time for it (`AGENT_RELAY_STEAL_WAIT_MAX`, default
+  5s) so unrelated contention does not abort a steal, and refusing if the lock
+  owner changed while it waited — so two concurrent stealers still yield
+  exactly one winner. Auto-steal after two hours was removed on purpose: an
+  agent hung for two hours is a human decision, not a mechanism default.
+- `update`: Under the task mutex, refuses if the caller's session-tag does not
+  match the lock owner. Status must be one of `pending`, `in-progress`, `done`,
+  `skipped`. `skipped` requires a reason; other statuses reject a trailing
+  reason. Preserves `deps:`.
+- `release`: Under the task mutex, removes the lock only if the caller session
+  matches the owner, or with `--force` (prints a warning). Leaves `.status`
+  untouched.
 - `list`: Prints current state of all tasks. Pending tasks whose deps are unmet
   include a `[blocked: …]` suffix explaining why.
-- `report-write`: Writes stdin (`-`) or a file to
+- `report-write`: Under the task mutex, requires the caller session to own the
+  lock (or `--force`, which warns and appends `report-write-force` to
+  `history.log`). Writes stdin (`-`) or a file to
   `implement-report/<task-id>.md` and regenerates the report rollup.
 - `report-list`: Prints paths of per-task report files in plan order.
 - `report-rollup`: Regenerates `implement-report.md`.
