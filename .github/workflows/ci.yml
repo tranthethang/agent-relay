@@ -31,6 +31,9 @@ jobs:
       - name: Run task scripts tests
         run: bash ./tests/tasks.sh
 
+      - name: Run knowledge-bank helper tests
+        run: bash ./tests/bank.sh
+
       - name: Run remote smoke tests
         run: bash ./tests/smoke-remote.sh
 

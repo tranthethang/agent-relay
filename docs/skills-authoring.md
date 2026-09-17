@@ -69,6 +69,13 @@ will be overwritten or fail CI `--check`. Add a new helper by placing it in
 `scripts/` first, then copying into the skill(s) that need it (or extend the
 sync script’s expectations by adding the file under the bundle and syncing).
 
+Which scripts belong to which bundle is defined by `get_skill_scripts()` in
+`scripts/sync-references.sh`:
+- `atry-plan`: `find-agent-relay-dir.sh`, `resolve-run.sh`, `run-init.sh`, `run-history.sh`
+- `atry-implement`: `find-agent-relay-dir.sh`, `resolve-run.sh`, `run-init.sh`, `run-history.sh`, `task-init.sh`, `task-claim.sh`
+- `atry-self-review` / `atry-cross-review`: `find-agent-relay-dir.sh`, `resolve-run.sh`, `run-history.sh`, `review-section.sh`
+- `atry-distill`: `find-agent-relay-dir.sh`, `resolve-run.sh`, `run-history.sh`, `bank-check.sh`, `bank-push.sh`
+
 Empty artifact outlines live in each skill's `references/*-template.md`.
 `SKILL.md` should tell the agent to read those files before writing the
 matching runtime artifact. Review report/walkthrough templates and

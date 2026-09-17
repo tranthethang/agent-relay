@@ -54,7 +54,7 @@ case "$SUBCOMMAND" in
     # Update meta.md stage/status if meta.md exists
     if [[ -f "$RUN_DIR/meta.md" ]]; then
       case "$STAGE" in
-        plan|implement|self-review|cross-review|done)
+        plan|implement|self-review|cross-review|distill|done)
           sed -e "s/^stage:.*/stage: $STAGE/" "$RUN_DIR/meta.md" > "$RUN_DIR/meta.md.tmp" && mv "$RUN_DIR/meta.md.tmp" "$RUN_DIR/meta.md"
           ;;
       esac

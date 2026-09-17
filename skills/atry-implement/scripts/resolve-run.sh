@@ -16,24 +16,13 @@ EOF
   exit 1
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/find-agent-relay-dir.sh
+source "$SCRIPT_DIR/find-agent-relay-dir.sh"
+
 # Walk up from cwd looking for .agent-relay/ (stop at / or git root).
 find_base_dir() {
-  local dir="$PWD"
-  while true; do
-    if [[ -d "$dir/.agent-relay" ]]; then
-      printf '%s\n' "$dir/.agent-relay"
-      return 0
-    fi
-    if [[ "$dir" == "/" ]]; then
-      break
-    fi
-    if [[ -d "$dir/.git" || -f "$dir/.git" ]]; then
-      break
-    fi
-    dir="$(dirname "$dir")"
-  done
-  # Fallback: relative .agent-relay under cwd
-  printf '%s\n' ".agent-relay"
+  find_agent_relay_dir "$PWD"
 }
 
 is_run_dirname() {
