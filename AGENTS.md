@@ -85,12 +85,22 @@ bash -n bin/*.sh lib/*.sh scripts/*.sh tests/*.sh
 
 ## Release checklist (humans)
 
-Full steps: [`docs/release.md`](docs/release.md). Short form:
+Full steps: [`docs/release.md`](docs/release.md). Short form — **commit the
+docs in the same tree you tag**, then push the tag. The release workflow
+builds `dist/` from the tagged commit; it does not rewrite README.
 
 1. Bump [`VERSION`](VERSION) and [`CHANGELOG.md`](CHANGELOG.md) together.
-2. Tag `v$(cat VERSION)` — the release workflow refuses a mismatched tag.
-3. `scripts/build-release-assets.sh` builds `dist/` (tarball, install scripts,
-   `SHA256SUMS`). Checksums detect truncation, not a maliciously replaced asset.
+2. Update [`README.md`](README.md) so user-facing pins match that version:
+   - Release-install `REF="vX.Y.Z"` must equal `v` + contents of `VERSION`.
+   - If install/upgrade behavior changed (ownership marker, `uninstall --force`,
+     unsupported layouts), refresh the README upgrade section and
+     [`docs/installer.md`](docs/installer.md) in the same commit.
+   - Keep README claims honest for what shipped (locks, steal, installer).
+3. Commit on the branch you intend to tag (usually the default branch).
+4. Tag `v$(cat VERSION)` and push it — the workflow refuses a mismatched tag.
+5. Confirm the GitHub Release has assets. `scripts/build-release-assets.sh`
+   produces the tarball, install scripts, and `SHA256SUMS` (checksums detect
+   truncation, not a maliciously replaced asset).
 
 ## Tone
 
