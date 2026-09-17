@@ -1,9 +1,9 @@
 # Knowledge bank (optional)
 
 An **opt-in** connection from one target repo to an external place where
-`atry-distill` records condensed lessons after a run finishes. This is
-project-level configuration — one bank per repo, declared once at
-`.agent-relay/bank.conf` — not per-run.
+`atry-distill` records lessons (pushing the full `distillation.md` note) after a
+run finishes. This is project-level configuration — one bank per repo, declared
+once at `.agent-relay/bank.conf` — not per-run.
 
 This is not a runtime and does not run in the background. Nothing here
 polls, syncs, or watches the bank. `bank-check.sh` and `bank-push.sh` are
@@ -106,7 +106,9 @@ scripts/bank-push.sh <start-dir> <run-id-or-slug> <title> <body-file-or-->
 Refuses (exit `2`, not a hard failure) unless the most recent
 `bank-status.md` says `configured: true` and `reachable: true`. For
 `obsidian-vault`, writes `<BANK_PATH>/agent-relay/<YYYYMMDD>-<run-id>-<slug>.md`
-with a small frontmatter block (`source`, `run`, `date`) and the given body.
+with a small frontmatter block (`source`, `run`, `date`) and the given body
+(per `atry-distill`, this is always the complete `$RUN_DIR/distillation.md`
+note, not a condensed summary or a note with links back to the run directory).
 Never overwrites an existing bank note with a different run id — the
 filename includes the run id specifically to avoid collisions across runs on
 the same day. Conversely, re-running `bank-push.sh` for the same run id and

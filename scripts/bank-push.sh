@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/bank-push.sh
-# Push one distilled case-study note into the knowledge bank declared in
+# Push one distilled note into the knowledge bank declared in
 # .agent-relay/bank.conf, if scripts/bank-check.sh last recorded it reachable.
 # Used by the atry-distill skill. See docs/bank.md.
 #

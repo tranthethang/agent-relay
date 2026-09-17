@@ -1,6 +1,6 @@
 ---
 name: atry-distill
-description: Distill lessons and a case-study note from a completed agent-relay run (plan → implement → self-review → cross-review) into distillation.md, and optionally push a condensed note to a configured external knowledge bank. Use after atry-cross-review (or atry-self-review if cross-review was skipped) to record reusable lessons for future runs.
+description: Distill lessons from a completed agent-relay run (plan → implement → self-review → cross-review) into distillation.md, and optionally push the full distillation note to a configured external knowledge bank. Use after atry-cross-review (or atry-self-review if cross-review was skipped) to record reusable lessons for future runs.
 ---
 
 # Distill
@@ -72,7 +72,9 @@ runtime proof, same as every other stage.
 
    Do not restate the full diff or duplicate the review report; this file is
    a distillation, meant to be short enough that a future plan step can
-   actually read it.
+   actually read it. The distillation body must be self-contained: do not embed
+   run-directory or repo file paths, and do not write links like "see full
+   record at …" (run paths move or differ across clones).
 
 1. **Bank check.** Run the bank-check helper fresh — do not trust an old
    `bank-status.md` left over from a previous run, since the bank's
@@ -92,23 +94,29 @@ runtime proof, same as every other stage.
 
 1. If `bank-check.sh` exited `0` **and** the resulting
    `.agent-relay/bank-status.md` shows `reachable: true`,
-   push a condensed case-study note (title + a short body — not the entire
-   `distillation.md` — pointing back at `$RUN_DIR` for the full record):
+   push the full distillation note to the bank. The note body must always be
+   `"$RUN_DIR/distillation.md"` itself:
 
    ```bash
    RUN_ID="$(grep -E '^id:' "$RUN_DIR/meta.md" | head -1 | sed 's/^id:[[:space:]]*//')"
-   scripts/bank-push.sh "$RUN_DIR" "$RUN_ID" "<short case-study title>" body.md
+   TITLE="$(grep -E '^title:' "$RUN_DIR/meta.md" | head -1 | sed 's/^title:[[:space:]]*//')"
+   scripts/bank-push.sh "$RUN_DIR" "$RUN_ID" "${TITLE:-Distillation $RUN_ID}" "$RUN_DIR/distillation.md"
    ```
+
+   You must **not**:
+   - Write a separate condensed `body.md` or case-study file for the push.
+   - Summarize, truncate, or omit any sections of the distillation for the vault note.
+   - Embed run-dir paths, repo paths, or "see full record at …" links in the distillation body. The vault note must be completely self-contained.
 
    `bank-push.sh` exits `2` when the bank is not configured or not reachable —
    that is expected and not an error. Re-running `bank-push.sh` for the same
    run overwrites that run's existing note at the same deterministic path
    rather than versioning or appending. In every case (pushed, skipped, or
-   failed), append one line to the end of `distillation.md` recording what
-   happened, e.g. `Bank push: pushed to <path>` / `Bank push: skipped — bank
-   not configured` / `Bank push: failed — <reason>`. Never fail this stage
-   because the push failed; `distillation.md` in the run directory is always
-   the record of truth regardless of the bank.
+   failed), append one line under `## Bank push` at the end of the local
+   `distillation.md` recording what happened, e.g. `Bank push: pushed to <path>` /
+   `Bank push: skipped — bank not configured` / `Bank push: failed — <reason>`.
+   Never fail this stage because the push failed; `distillation.md` in the run
+   directory is always the record of truth regardless of the bank.
 
 1. Once distillation is complete, record completion in `history.log`:
    ```bash

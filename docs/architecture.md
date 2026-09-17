@@ -51,7 +51,7 @@ skill directories. It does not call agents, pick models, or watch `.agent-relay/
 4. **cross-review** → upsert Cross-Review with inverted-question framing
    (skill asks for a different tool; nothing enforces it)  
 5. **distill** → summarize reusable patterns/lessons into `distillation.md`;
-   optionally push a condensed case-study note to an external knowledge bank
+   optionally push the full distillation note to an external knowledge bank
    (e.g., Obsidian vault) via `bank-push.sh`
 
 Nothing in this repo schedules that order. Skipping a stage is always possible.
