@@ -435,6 +435,7 @@ for tool in "${TOOLS[@]}"; do
       skill-folder)
         dest="$dest_dir/$name/SKILL.md"
         refs="$dest_dir/$name/references/file-conventions.md"
+        marker="$dest_dir/$name/.agent-relay-owned"
         if [[ -f "$dest" ]]; then
           echo "[OK] $tool skill '$name' at $dest"
         else
@@ -445,6 +446,12 @@ for tool in "${TOOLS[@]}"; do
           echo "[OK] $tool skill '$name' references at $refs"
         else
           echo "[FAIL] $tool skill '$name' missing references at $refs"
+          FAILED=1
+        fi
+        if [[ -f "$marker" ]] && grep -q '^installer=agent-relay$' "$marker" && grep -q "^skill=${name}$" "$marker"; then
+          echo "[OK] $tool skill '$name' ownership marker"
+        elif [[ -e "$dest_dir/$name" ]]; then
+          echo "[FAIL] $tool skill '$name' unmanaged or missing .agent-relay-owned marker at $dest_dir/$name"
           FAILED=1
         fi
         # scripts/ is optional per skill (atry-plan may have none); if source has it, dest must.

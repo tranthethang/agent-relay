@@ -398,7 +398,8 @@ fi
 log() { echo "  $*"; }
 
 act_write() {
-  # act_write <dest> <description> — returns 1 if skipped (no-clobber)
+  # act_write <dest_bundle_dir> <description> — returns 1 if skipped (no-clobber)
+  # no-clobber considers the whole skill bundle directory, not only SKILL.md.
   local dest="$1" desc="$2"
   if [[ "$NO_CLOBBER" -eq 1 && -e "$dest" ]]; then
     log "skip (exists): $dest"
@@ -410,6 +411,108 @@ act_write() {
   fi
   log "$desc"
   return 0
+}
+
+read_install_version() {
+  if [[ -f "$SRC_DIR/VERSION" ]]; then
+    tr -d '[:space:]' < "$SRC_DIR/VERSION"
+  else
+    echo "unknown"
+  fi
+}
+
+ownership_marker_path() {
+  echo "$1/.agent-relay-owned"
+}
+
+write_ownership_marker() {
+  # write_ownership_marker <dest_root> <tool> <skill>
+  local dest_root="$1" tool="$2" skill="$3"
+  local marker version
+  marker="$(ownership_marker_path "$dest_root")"
+  version="$(read_install_version)"
+  cat > "$marker" <<EOF
+tool=$tool
+skill=$skill
+version=$version
+installer=agent-relay
+EOF
+}
+
+has_valid_ownership_marker() {
+  # has_valid_ownership_marker <dest_root> <expected_skill>
+  local dest_root="$1" expected_skill="$2"
+  local marker
+  marker="$(ownership_marker_path "$dest_root")"
+  [[ -f "$marker" ]] || return 1
+  grep -q '^installer=agent-relay$' "$marker" || return 1
+  grep -q "^skill=${expected_skill}$" "$marker" || return 1
+  return 0
+}
+
+dest_resolves_inside_tool_dir() {
+  # dest_resolves_inside_tool_dir <dest_root> <tool_dir>
+  # Refuse writing through a skill directory symlink that escapes tool_dir.
+  local dest_root="$1" tool_dir="$2"
+  local tool_resolved dest_resolved
+  mkdir -p "$tool_dir"
+  tool_resolved="$(cd "$tool_dir" && pwd -P)"
+  if [[ -L "$dest_root" || -d "$dest_root" ]]; then
+    if [[ -d "$dest_root" ]]; then
+      dest_resolved="$(cd "$dest_root" && pwd -P)"
+    else
+      # Dangling or non-dir symlink
+      echo "Error: skill destination '$dest_root' is a symlink that does not resolve to a directory" >&2
+      return 1
+    fi
+    case "$dest_resolved" in
+      "$tool_resolved"|"$tool_resolved"/*) return 0 ;;
+      *)
+        echo "Error: skill destination '$dest_root' resolves to '$dest_resolved', outside tool dir '$tool_resolved'" >&2
+        return 1
+        ;;
+    esac
+  fi
+  return 0
+}
+
+write_skill_folder() {
+  # write_skill_folder <skill_src_dir> <dest_skill_md> <tool> <skill_name>
+  # Copies the whole bundle (SKILL.md, references/, scripts/) into the parent
+  # of dest_skill_md. Refuses to wipe an unmanaged destination (no ownership
+  # marker). Records .agent-relay-owned after a successful write.
+  local skill_src="$1" dest="$2" tool="$3" skill_name="$4"
+  local dest_root
+  dest_root="$(dirname "$dest")"
+
+  if ! dest_resolves_inside_tool_dir "$dest_root" "$(dirname "$dest_root")"; then
+    return 1
+  fi
+
+  if [[ -e "$dest_root" ]] && ! has_valid_ownership_marker "$dest_root" "$skill_name"; then
+    # Destination exists but is not owned by agent-relay — do not delete
+    # references/ or scripts/, and do not claim the directory.
+    if [[ -d "$dest_root" ]] && [[ -n "$(ls -A "$dest_root" 2>/dev/null || true)" ]]; then
+      echo "Error: refusing to modify unmanaged skill directory '$dest_root' (missing or invalid .agent-relay-owned marker)" >&2
+      return 1
+    fi
+  fi
+
+  mkdir -p "$dest_root"
+  # Refresh bundle contents only for owned (or empty/new) destinations.
+  rm -rf "$dest_root/references" "$dest_root/scripts"
+  cp "$skill_src/SKILL.md" "$dest"
+  if [[ -d "$skill_src/references" ]]; then
+    mkdir -p "$dest_root/references"
+    cp -R "$skill_src/references/." "$dest_root/references/"
+  fi
+  if [[ -d "$skill_src/scripts" ]]; then
+    mkdir -p "$dest_root/scripts"
+    cp -R "$skill_src/scripts/." "$dest_root/scripts/"
+    # Intentional: chmod may no-op on empty; ignore if no matches.
+    chmod +x "$dest_root/scripts"/* 2>/dev/null || true
+  fi
+  write_ownership_marker "$dest_root" "$tool" "$skill_name"
 }
 
 tool_selected() {
@@ -446,30 +549,6 @@ csv_has_unknown() {
     fi
   done
   [[ "$unknown" -eq 1 ]]
-}
-
-write_skill_folder() {
-  # write_skill_folder <skill_src_dir> <dest_skill_md>
-  # Copies the whole bundle (SKILL.md, references/, scripts/) into the parent
-  # of dest_skill_md. Per-file --no-clobber is handled by the caller on SKILL.md;
-  # sibling files are refreshed when SKILL.md is written.
-  local skill_src="$1" dest="$2"
-  local dest_root
-  dest_root="$(dirname "$dest")"
-  mkdir -p "$dest_root"
-  # Refresh bundle contents
-  rm -rf "$dest_root/references" "$dest_root/scripts"
-  cp "$skill_src/SKILL.md" "$dest"
-  if [[ -d "$skill_src/references" ]]; then
-    mkdir -p "$dest_root/references"
-    cp -R "$skill_src/references/." "$dest_root/references/"
-  fi
-  if [[ -d "$skill_src/scripts" ]]; then
-    mkdir -p "$dest_root/scripts"
-    cp -R "$skill_src/scripts/." "$dest_root/scripts/"
-    # Intentional: chmod may no-op on empty; ignore if no matches.
-    chmod +x "$dest_root/scripts"/* 2>/dev/null || true
-  fi
 }
 
 
@@ -527,10 +606,14 @@ for tool in "${TOOLS[@]}"; do
 
     case "$fmt" in
       skill-folder)
-        dest="$dest_dir/$name/SKILL.md"
-        if act_write "$dest" "-> $dest_dir/$name/ (bundle)"; then
+        dest_root="$dest_dir/$name"
+        dest="$dest_root/SKILL.md"
+        if act_write "$dest_root" "-> $dest_root/ (bundle)"; then
           if [[ "$DRY_RUN" -eq 0 ]]; then
-            write_skill_folder "$skill_dir" "$dest"
+            if ! write_skill_folder "$skill_dir" "$dest" "$tool" "$name"; then
+              echo "Error: failed to install skill '$name' for $tool" >&2
+              exit 1
+            fi
           fi
           installed=$((installed + 1))
         else

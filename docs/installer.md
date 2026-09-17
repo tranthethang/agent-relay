@@ -64,14 +64,31 @@ Same family of flags on install / uninstall / verify (details in each script’s
 | `--ref REF` | Download that release tag or commit instead of using the working tree |
 | `--sha256 HEX` | Pin checksum when fetching a commit tarball |
 | `--dry-run` | Print actions; write nothing |
-| `--no-clobber` | Skip destinations that already exist (install) |
+| `--no-clobber` | Skip skill bundle directories that already exist (install) |
+| `--force` | Uninstall only: remove destinations even without a valid ownership marker |
 
 Env overrides: `AGENT_RELAY_REF`, `AGENT_RELAY_SHA256` (same idea as CLI).
 `--ref` / env **always** fetch even when run from a clone so a pin cannot be
 silently ignored.
 
 Re-running install **without** `--no-clobber` overwrites prior installs of the
-same skills.
+same skills **when** the destination has a valid `.agent-relay-owned` marker.
+Unmanaged directories (no marker) are refused rather than wiped.
+
+## Upgrading from 3.0.x
+
+3.0.x wrote no ownership marker, so 3.1.0 treats those directories as
+unmanaged and refuses to touch them — install exits non-zero with
+`refusing to modify unmanaged skill directory`. There is no in-place
+migration by design (see `AGENTS.md`); remove the old install first:
+
+```bash
+./bin/uninstall.sh --force
+./bin/install.sh
+```
+
+`--force` is required only because the old directories predate the marker.
+After reinstalling, `./bin/verify.sh` reports the marker for each skill.
 
 ## Adding a tool
 

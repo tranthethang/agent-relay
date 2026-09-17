@@ -459,13 +459,16 @@ id: 1700000009
 PLAN
 "$TASK_INIT" reports >/dev/null
 
-echo "report 1 content" | "$TASK_CLAIM" report-write reports rT1 -
+"$TASK_CLAIM" claim reports rT1 agent-r1 >/dev/null
+"$TASK_CLAIM" claim reports rT2 agent-r2 >/dev/null
+
+echo "report 1 content" | "$TASK_CLAIM" report-write reports rT1 agent-r1 -
 [[ -f "$R1_DIR/implement-report/rT1.md" ]] && \
   pass "report-write creates file from stdin" || \
   fail "report-write creates file from stdin"
 
 echo "report 2 content" > "$T/rt2.txt"
-"$TASK_CLAIM" report-write reports rT2 "$T/rt2.txt"
+"$TASK_CLAIM" report-write reports rT2 agent-r2 "$T/rt2.txt"
 [[ -f "$R1_DIR/implement-report/rT2.md" ]] && \
   pass "report-write creates file from path" || \
   fail "report-write creates file from path"
@@ -485,9 +488,9 @@ report_lost=0
 for i in 1 2 3 4 5; do
   rm -f "$R1_DIR/implement-report"/rT1.md "$R1_DIR/implement-report"/rT2.md \
     "$R1_DIR/implement-report.md"
-  echo "concurrent-a-$i" | "$TASK_CLAIM" report-write reports rT1 - &
+  echo "concurrent-a-$i" | "$TASK_CLAIM" report-write reports rT1 agent-r1 - &
   pid_a=$!
-  echo "concurrent-b-$i" | "$TASK_CLAIM" report-write reports rT2 - &
+  echo "concurrent-b-$i" | "$TASK_CLAIM" report-write reports rT2 agent-r2 - &
   pid_b=$!
   wait $pid_a || true
   wait $pid_b || true
@@ -500,8 +503,21 @@ done
   pass "concurrent report-write: rollup consistent (5 iters)" || \
   fail "concurrent report-write: rollup lost updates ($report_lost/5)"
 
+# Unowned report-write fails; --force records history
+if echo "nope" | "$TASK_CLAIM" report-write reports rT1 wrong-agent - >/dev/null 2>&1; then
+  fail "report-write rejects non-owner"
+else
+  pass "report-write rejects non-owner"
+fi
+FORCE_OUT="$(echo "forced" | "$TASK_CLAIM" report-write --force reports rT1 wrong-agent - 2>&1)"
+echo "$FORCE_OUT" | grep -qi "force" && pass "report-write --force warns" || fail "report-write --force warns"
+grep -q "report-write-force" "$R1_DIR/history.log" && pass "report-write --force logs history" || fail "report-write --force logs history"
+
+"$TASK_CLAIM" release reports rT1 agent-r1 >/dev/null
+"$TASK_CLAIM" release reports rT2 agent-r2 >/dev/null
+
 # --- T3: ident validation / path traversal ---
-if "$TASK_CLAIM" report-write happy '../../../../tmp/X' - </dev/null >/dev/null 2>&1; then
+if "$TASK_CLAIM" report-write --force happy '../../../../tmp/X' - </dev/null >/dev/null 2>&1; then
   fail "report-write rejects path-like task-id"
 else
   pass "report-write rejects path-like task-id"
@@ -1021,6 +1037,278 @@ else
   pass "history refuses legacy flat layout"
 fi
 [[ ! -f "$LEGACY_HIST/.agent-relay/history.log" ]] && pass "history does not write root history.log" || fail "history does not write root history.log"
+
+# --- Rejected inputs: invalid status / deps / init cleanup ---
+BAD_STATUS_DIR="$("$RUN_INIT" 1700000100 --slug badstat --title "Bad Status" --base main)"
+cat <<'EOF' > "$BAD_STATUS_DIR/plan.md"
+base: main
+id: 1700000100
+
+## Tasks
+- [banana] T1: Not a real status
+EOF
+if "$TASK_INIT" badstat >/dev/null 2>&1; then
+  fail "task-init rejects invalid checkbox status"
+else
+  pass "task-init rejects invalid checkbox status"
+fi
+[[ ! -d "$BAD_STATUS_DIR/implement-plan" ]] && pass "failed init removes plan dir (bad status)" || fail "failed init removes plan dir (bad status)"
+# Re-init after cleanup must succeed with a valid plan
+cat <<'EOF' > "$BAD_STATUS_DIR/plan.md"
+base: main
+id: 1700000100
+
+## Tasks
+1. **Ok.** Valid after cleanup
+EOF
+if "$TASK_INIT" badstat >/dev/null; then
+  pass "re-init works after refused plan cleanup"
+else
+  fail "re-init works after refused plan cleanup"
+fi
+
+BAD_DEP_DIR="$("$RUN_INIT" 1700000101 --slug baddep --title "Bad Dep" --base main)"
+cat <<'EOF' > "$BAD_DEP_DIR/plan.md"
+base: main
+id: 1700000101
+
+## Tasks
+1. **Bad dep.** Uses glob (deps: T*/evil)
+EOF
+if "$TASK_INIT" baddep >/dev/null 2>&1; then
+  fail "task-init rejects invalid dependency id"
+else
+  pass "task-init rejects invalid dependency id"
+fi
+[[ ! -d "$BAD_DEP_DIR/implement-plan" ]] && pass "failed init removes plan dir (bad dep)" || fail "failed init removes plan dir (bad dep)"
+
+# --- Mutex staleness: host-aware reclaim ---
+# Same host + dead pid is conclusive, so a short age guard is enough. A mutex
+# recorded on another host must never be reclaimed on the pid (that pid means
+# nothing here) — only on the long foreign timer.
+STALE_DIR2="$("$RUN_INIT" 1700000103 --slug mutexhost --title "Mutex Host" --base main)"
+cat <<'EOF' > "$STALE_DIR2/plan.md"
+base: main
+id: 1700000103
+
+## Tasks
+
+1. **Host.** Mutex staleness target
+EOF
+"$TASK_INIT" mutexhost >/dev/null
+MHOST_PLAN="$STALE_DIR2/implement-plan"
+MHOST_MUTEX="$MHOST_PLAN/.mutex-T1"
+
+# Orphaned mutex from this host with a pid that cannot be alive.
+mk_orphan_mutex() {
+  # mk_orphan_mutex <host> <age-seconds>
+  rm -rf "$MHOST_MUTEX"
+  mkdir -p "$MHOST_MUTEX"
+  echo "2147483647" > "$MHOST_MUTEX/owner_pid"
+  printf '%s\n' "$1" > "$MHOST_MUTEX/owner_host"
+  echo "$(( $(date +%s) - $2 ))" > "$MHOST_MUTEX/created_epoch"
+}
+
+mk_orphan_mutex "$(uname -n)" 60
+if AGENT_RELAY_MUTEX_WAIT_MAX=3 "$TASK_CLAIM" claim mutexhost T1 host-a >/dev/null 2>&1; then
+  pass "same-host dead pid mutex is reclaimed"
+else
+  fail "same-host dead pid mutex is reclaimed"
+fi
+"$TASK_CLAIM" release mutexhost T1 host-a >/dev/null 2>&1 || true
+
+# Same age, foreign host: the pid must be ignored, so this must NOT be reclaimed.
+mk_orphan_mutex "some-other-machine" 60
+if AGENT_RELAY_MUTEX_WAIT_MAX=2 "$TASK_CLAIM" claim mutexhost T1 host-b >/dev/null 2>&1; then
+  fail "foreign-host mutex is not reclaimed on pid"
+else
+  pass "foreign-host mutex is not reclaimed on pid"
+fi
+
+# Past the foreign timer it must be reclaimable again.
+mk_orphan_mutex "some-other-machine" 60
+if AGENT_RELAY_MUTEX_FOREIGN_STALE_AGE=30 AGENT_RELAY_MUTEX_WAIT_MAX=3 \
+  "$TASK_CLAIM" claim mutexhost T1 host-c >/dev/null 2>&1; then
+  pass "foreign-host mutex is reclaimed after the foreign timer"
+else
+  fail "foreign-host mutex is reclaimed after the foreign timer"
+fi
+"$TASK_CLAIM" release mutexhost T1 host-c >/dev/null 2>&1 || true
+rm -rf "$STALE_DIR2"
+
+# --- Cross-operation concurrency: steal vs release / claim vs steal / update vs steal / release vs release ---
+CROSS_N=20
+cross_fail=0
+CROSS_DIR="$("$RUN_INIT" 1700000102 --slug crossop --title "Cross Op" --base main)"
+cat <<'EOF' > "$CROSS_DIR/plan.md"
+base: main
+id: 1700000102
+
+## Tasks
+1. **Cross.** Contention target
+EOF
+
+# steal vs release — both directions, with unconditional assertions.
+#
+# Direction A (release holds the mutex, steal is try-once): steal must fail and
+# the lock must be gone once release finishes.
+#
+# Direction B (steal holds the mutex, release waits): this is the original 3.0.1
+# race. There, release deleted the lock, reported success, and steal then
+# recreated it under the stealer — a successful release silently undone. The
+# invariant now is that the two cannot both succeed: release must fail with an
+# owner mismatch and the lock must belong to the stealer.
+i=1
+while [[ $i -le $CROSS_N ]]; do
+  # --- direction A ---
+  rm -rf "$CROSS_DIR/implement-plan" "$CROSS_DIR/implement-plan.md" "$CROSS_DIR/implement-report" "$CROSS_DIR/implement-report.md"
+  "$TASK_INIT" crossop >/dev/null
+  "$TASK_CLAIM" claim crossop T1 owner-x >/dev/null
+  HOLD="$T/mutex-hold-steal-release-a-$i"
+  rm -f "$HOLD" "$HOLD.ready"
+  touch "$HOLD"
+  code_rel=0
+  AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" release crossop T1 owner-x >/dev/null 2>&1 &
+  pid_rel=$!
+  waits=0
+  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do sleep 0.01; waits=$((waits + 1)); done
+  # steal must run in the background: it now waits for the mutex (STEAL_WAIT_MAX)
+  # instead of failing on it, so a foreground call would block until the budget
+  # expires because only this loop releases the barrier.
+  code_steal=0
+  "$TASK_CLAIM" steal crossop T1 stealer-x >/dev/null 2>&1 &
+  pid_steal=$!
+  sleep 0.05
+  rm -f "$HOLD"
+  wait $pid_rel || code_rel=$?
+  wait $pid_steal || code_steal=$?
+  # release wins the mutex and removes the lock; steal then finds nothing to
+  # take over, so it must still fail and must not resurrect the lock.
+  [[ $code_steal -ne 0 ]] || cross_fail=$((cross_fail + 1))
+  [[ $code_rel -eq 0 ]] || cross_fail=$((cross_fail + 1))
+  [[ ! -d "$CROSS_DIR/implement-plan/.lock-T1" ]] || cross_fail=$((cross_fail + 1))
+
+  # --- direction B (the 3.0.1 race) ---
+  rm -rf "$CROSS_DIR/implement-plan" "$CROSS_DIR/implement-plan.md" "$CROSS_DIR/implement-report" "$CROSS_DIR/implement-report.md"
+  "$TASK_INIT" crossop >/dev/null
+  "$TASK_CLAIM" claim crossop T1 owner-x >/dev/null
+  HOLD="$T/mutex-hold-steal-release-b-$i"
+  rm -f "$HOLD" "$HOLD.ready"
+  touch "$HOLD"
+  code_steal=0
+  AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" steal crossop T1 stealer-x >/dev/null 2>&1 &
+  pid_steal=$!
+  waits=0
+  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do sleep 0.01; waits=$((waits + 1)); done
+  code_rel=0
+  "$TASK_CLAIM" release crossop T1 owner-x >/dev/null 2>&1 &
+  pid_rel=$!
+  sleep 0.05
+  rm -f "$HOLD"
+  wait $pid_steal || code_steal=$?
+  wait $pid_rel || code_rel=$?
+  owner=""
+  [[ -d "$CROSS_DIR/implement-plan/.lock-T1" ]] && owner="$(awk '{print $1}' "$CROSS_DIR/implement-plan/.lock-T1/owner" 2>/dev/null || true)"
+  # The stealer took the lock, so the old owner's release must have failed and
+  # the lock must still be the stealer's. A release that reports success here
+  # is the resurrection bug.
+  [[ $code_steal -eq 0 ]] || cross_fail=$((cross_fail + 1))
+  [[ $code_rel -ne 0 ]] || cross_fail=$((cross_fail + 1))
+  [[ "$owner" == "stealer-x" ]] || cross_fail=$((cross_fail + 1))
+  i=$((i + 1))
+done
+[[ $cross_fail -eq 0 ]] && pass "cross-op steal vs release, both directions ($CROSS_N)" || fail "cross-op steal vs release ($cross_fail failures)"
+
+# claim vs steal
+cross_fail=0
+i=1
+while [[ $i -le $CROSS_N ]]; do
+  rm -rf "$CROSS_DIR/implement-plan" "$CROSS_DIR/implement-plan.md" "$CROSS_DIR/implement-report" "$CROSS_DIR/implement-report.md"
+  "$TASK_INIT" crossop >/dev/null
+  "$TASK_CLAIM" claim crossop T1 seed >/dev/null
+  HOLD="$T/mutex-hold-claim-steal-$i"
+  rm -f "$HOLD" "$HOLD.ready"
+  touch "$HOLD"
+  AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" steal crossop T1 stealer >/dev/null 2>&1 &
+  pid_st=$!
+  waits=0
+  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do sleep 0.01; waits=$((waits + 1)); done
+  # Claim must start while steal still holds the mutex, but must not run
+  # synchronously (that deadlocks: claim waits on mutex, steal waits on HOLD).
+  code_claim=0
+  "$TASK_CLAIM" claim crossop T1 claimant >/dev/null 2>&1 &
+  pid_cl=$!
+  sleep 0.05
+  rm -f "$HOLD"
+  wait $pid_st || true
+  wait $pid_cl || code_claim=$?
+  # Claim must not succeed while/after steal took the lock; lock owner is stealer
+  owner="$(awk '{print $1}' "$CROSS_DIR/implement-plan/.lock-T1/owner" 2>/dev/null || true)"
+  if [[ $code_claim -eq 0 || "$owner" != "stealer" ]]; then
+    cross_fail=$((cross_fail + 1))
+  fi
+  i=$((i + 1))
+done
+[[ $cross_fail -eq 0 ]] && pass "cross-op claim vs steal ($CROSS_N)" || fail "cross-op claim vs steal ($cross_fail/$CROSS_N)"
+
+# update vs steal — steal waits out the update, then takes the lock over
+cross_fail=0
+i=1
+while [[ $i -le $CROSS_N ]]; do
+  rm -rf "$CROSS_DIR/implement-plan" "$CROSS_DIR/implement-plan.md" "$CROSS_DIR/implement-report" "$CROSS_DIR/implement-report.md"
+  "$TASK_INIT" crossop >/dev/null
+  "$TASK_CLAIM" claim crossop T1 owner-u >/dev/null
+  HOLD="$T/mutex-hold-update-steal-$i"
+  rm -f "$HOLD" "$HOLD.ready"
+  touch "$HOLD"
+  AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" update crossop T1 owner-u done >/dev/null 2>&1 &
+  pid_up=$!
+  waits=0
+  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do sleep 0.01; waits=$((waits + 1)); done
+  code_steal=0
+  "$TASK_CLAIM" steal crossop T1 stealer-u >/dev/null 2>&1 &
+  pid_steal=$!
+  sleep 0.05
+  rm -f "$HOLD"
+  wait $pid_up || true
+  wait $pid_steal || code_steal=$?
+  status="$(grep -E '^status:' "$CROSS_DIR/implement-plan/T1.status" | sed 's/^status:[[:space:]]*//')"
+  owner=""
+  [[ -d "$CROSS_DIR/implement-plan/.lock-T1" ]] && owner="$(awk '{print $1}' "$CROSS_DIR/implement-plan/.lock-T1/owner")"
+  # An update holding the mutex is unrelated contention, not a competing
+  # takeover: steal must wait it out and win, leaving the lock with the stealer
+  # and the status back at in-progress. Failing here would be the old
+  # try-once behaviour, where incidental contention aborted a steal.
+  [[ $code_steal -eq 0 ]] || cross_fail=$((cross_fail + 1))
+  [[ "$owner" == "stealer-u" ]] || cross_fail=$((cross_fail + 1))
+  [[ "$status" == "in-progress" ]] || cross_fail=$((cross_fail + 1))
+  i=$((i + 1))
+done
+[[ $cross_fail -eq 0 ]] && pass "cross-op update vs steal ($CROSS_N)" || fail "cross-op update vs steal ($cross_fail/$CROSS_N)"
+
+# release vs release
+cross_fail=0
+i=1
+while [[ $i -le $CROSS_N ]]; do
+  rm -rf "$CROSS_DIR/implement-plan" "$CROSS_DIR/implement-plan.md" "$CROSS_DIR/implement-report" "$CROSS_DIR/implement-report.md"
+  "$TASK_INIT" crossop >/dev/null
+  "$TASK_CLAIM" claim crossop T1 owner-rr >/dev/null
+  code1=0
+  code2=0
+  "$TASK_CLAIM" release crossop T1 owner-rr >/dev/null 2>&1 &
+  pid1=$!
+  "$TASK_CLAIM" release --force crossop T1 >/dev/null 2>&1 &
+  pid2=$!
+  wait $pid1 || code1=$?
+  wait $pid2 || code2=$?
+  if [[ -d "$CROSS_DIR/implement-plan/.lock-T1" ]]; then
+    cross_fail=$((cross_fail + 1))
+  fi
+  # Both may succeed (second is no-op) or one may fail; lock must be gone.
+  i=$((i + 1))
+done
+[[ $cross_fail -eq 0 ]] && pass "cross-op release vs release ($CROSS_N)" || fail "cross-op release vs release ($cross_fail/$CROSS_N)"
+rm -rf "$CROSS_DIR"
 
 # --- CR-2: skill bundle copies must not drift from their sources ---
 if bash "$ROOT/scripts/sync-references.sh" --check; then

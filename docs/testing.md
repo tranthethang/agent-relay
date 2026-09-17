@@ -40,6 +40,8 @@ on purpose until cleaned up (see `CONTRIBUTING.md`).
 - Front-matter: each installed `SKILL.md` starts with `---` and has non-empty
   `name:` / `description:` inside that block  
 - Bundle `references/` + executable helpers present under each skill folder  
+- Ownership marker `.agent-relay-owned`; uninstall refuses unmarked dirs;
+  `--force` uninstall; symlink destination outside tool dir refused  
 - Flag edge cases: `--only`, unknown tool/skill, `--no-clobber`, `--target`
   rejected  
 - `validate_targets_conf`: real `targets.conf`, benign `.resource` path, bare
@@ -50,8 +52,12 @@ on purpose until cleaned up (see `CONTRIBUTING.md`).
 - Happy path claim → update → release → list  
 - `check` OK → hand-edited rollup → `MISMATCH` → restore → OK  
 - Lock collision, concurrent claim, steal mutex, deps / cycles / sorting  
-- `review-section.sh` upsert idempotency, fenced headings, same-tool warning,
-  fence-aware provenance  
+- Cross-operation races (barrier + N iterations): steal vs release, claim vs
+  steal, update vs steal, release vs release  
+- Rejected inputs: invalid init status / dependency id, failed-init cleanup,
+  unowned `report-write` (and `--force` history)  
+- `review-section.sh` upsert idempotency, fenced headings (char/length/indent),
+  same-tool warning, fence-aware provenance  
 - `sync-references.sh --check` and drift detection  
 
 ### `tests/smoke-remote.sh`

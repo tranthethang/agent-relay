@@ -21,18 +21,66 @@ validate_ident() {
   local value="$2"
   if [[ -z "$value" ]]; then
     echo "Error: $kind must not be empty" >&2
+    [[ -n "${PLAN_DIR:-}" ]] && rm -rf "$PLAN_DIR"
     exit 1
   fi
   if [[ "$value" == "." || "$value" == ".." ]]; then
     echo "Error: $kind '$value' is not allowed" >&2
+    [[ -n "${PLAN_DIR:-}" ]] && rm -rf "$PLAN_DIR"
     exit 1
   fi
   case "$value" in
     *[!A-Za-z0-9._-]*)
       echo "Error: $kind '$value' must match ^[A-Za-z0-9._-]+$" >&2
+      [[ -n "${PLAN_DIR:-}" ]] && rm -rf "$PLAN_DIR"
       exit 1
       ;;
   esac
+}
+
+validate_task_status() {
+  local s="$1"
+  case "$s" in
+    pending|in-progress|done|skipped) return 0 ;;
+  esac
+  case "$s" in
+    skipped\ *) return 0 ;;
+  esac
+  return 1
+}
+
+validate_deps_string() {
+  # Validate each dependency token against the same ident rule as task ids.
+  local deps="$1"
+  local dep
+  local _noglob_was=0
+  case "$-" in *f*) _noglob_was=1 ;; esac
+  set -f
+  for dep in $deps; do
+    if [[ -z "$dep" ]]; then
+      continue
+    fi
+    if [[ "$dep" == "." || "$dep" == ".." ]]; then
+      [[ "$_noglob_was" -eq 0 ]] && set +f
+      echo "Error: dependency id '$dep' is not allowed" >&2
+      return 1
+    fi
+    case "$dep" in
+      *[!A-Za-z0-9._-]*)
+        [[ "$_noglob_was" -eq 0 ]] && set +f
+        echo "Error: dependency id '$dep' must match ^[A-Za-z0-9._-]+$" >&2
+        return 1
+        ;;
+    esac
+  done
+  [[ "$_noglob_was" -eq 0 ]] && set +f
+  return 0
+}
+
+refuse_init() {
+  # Remove partially written plan dir so a failed init does not block re-init.
+  rm -rf "$PLAN_DIR"
+  exit 1
 }
 
 # Strip markdown bold/backticks from a task description remnant.
@@ -94,17 +142,22 @@ check_dep_cycles() {
     local deps
     deps="$(grep -E '^deps:' "$plan_dir/$tid.status" 2>/dev/null | head -n 1 | sed -e 's/^deps:[[:space:]]*//' || true)"
     local dep
+    local _noglob_was=0
+    case "$-" in *f*) _noglob_was=1 ;; esac
+    set -f
     for dep in $deps; do
       if [[ ! -f "$plan_dir/$dep.status" ]]; then
         echo "Error: task '$tid' depends on unknown task '$dep'" >&2
+        [[ "$_noglob_was" -eq 0 ]] && set +f
         rm -rf "$tmp"
-        exit 1
+        return 1
       fi
       echo "$dep $tid" >> "$tmp/edges"
       local n
       n="$(cat "$tmp/indegree.$tid")"
       echo $((n + 1)) > "$tmp/indegree.$tid"
     done
+    [[ "$_noglob_was" -eq 0 ]] && set +f
   done
 
   local queue=""
@@ -152,9 +205,10 @@ check_dep_cycles() {
       fi
     done
     rm -rf "$tmp"
-    exit 1
+    return 1
   fi
   rm -rf "$tmp"
+  return 0
 }
 
 ID=""
@@ -236,8 +290,7 @@ done < "$PLAN_FILE"
 
 if [[ "$has_tasks_section" -eq 0 ]]; then
   echo "Error: plan '$PLAN_FILE' has no '## Tasks' heading. Refusing to guess task lists from other sections." >&2
-  rm -rf "$PLAN_DIR"
-  exit 1
+  refuse_init
 fi
 
 in_tasks=0
@@ -256,8 +309,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   if [[ "$line" =~ ^[[:space:]]+[0-9]+\. ]]; then
     echo "Error: nested numbered list under ## Tasks is not allowed: $line" >&2
     echo "Use a single flat numbered list. See docs/file-conventions.md." >&2
-    rm -rf "$PLAN_DIR"
-    exit 1
+    refuse_init
   fi
 
   if [[ "$line" =~ ^([0-9]+)\.[[:space:]]+(.*)$ ]]; then
@@ -266,13 +318,15 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     tid="T${task_seq}"
     if [[ -f "$PLAN_DIR/$tid.status" ]]; then
       echo "Error: duplicate task id '$tid' in the same init run" >&2
-      rm -rf "$PLAN_DIR"
-      exit 1
+      refuse_init
     fi
     desc="$(clean_desc "$rest")"
     extract_deps "$desc"
     desc="$DESC_OUT"
     deps="$DEPS_OUT"
+    if ! validate_deps_string "$deps"; then
+      refuse_init
+    fi
     validate_ident "task-id" "$tid"
     echo "$tid" >> "$ORDER_TMP"
     printf 'status: pending\ndesc: %s\ndeps: %s\n' "$desc" "$deps" > "$PLAN_DIR/$tid.status"
@@ -286,13 +340,22 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     validate_ident "task-id" "$tid"
     if [[ -f "$PLAN_DIR/$tid.status" ]]; then
       echo "Error: duplicate task id '$tid' in the same init run" >&2
-      rm -rf "$PLAN_DIR"
-      exit 1
+      refuse_init
     fi
     extract_deps "$desc"
     desc="$DESC_OUT"
     deps="$DEPS_OUT"
+    if ! validate_deps_string "$deps"; then
+      refuse_init
+    fi
     [[ -n "$s" ]] || s="pending"
+    # Checkbox form "- [ ] id: desc" captures a single space; treat blank as pending.
+    s="$(echo "$s" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -n "$s" ]] || s="pending"
+    if ! validate_task_status "$s"; then
+      echo "Error: invalid initial status '$s' for task '$tid' (allowed: pending, in-progress, done, skipped)" >&2
+      refuse_init
+    fi
     echo "$tid" >> "$ORDER_TMP"
     printf 'status: %s\ndesc: %s\ndeps: %s\n' "$s" "$desc" "$deps" > "$PLAN_DIR/$tid.status"
     found_count=$((found_count + 1))
@@ -307,19 +370,19 @@ for f in "$PLAN_DIR"/*.status; do
 done
 if [[ "$found_count" -ne "$real_count" ]]; then
   echo "Error: internal count mismatch (found_count=$found_count real_count=$real_count)" >&2
-  rm -rf "$PLAN_DIR"
-  exit 1
+  refuse_init
 fi
 
 if [[ "$found_count" -eq 0 ]]; then
   echo "Error: ## Tasks section produced zero tasks" >&2
-  rm -rf "$PLAN_DIR"
-  exit 1
+  refuse_init
 fi
 
 mv -f "$ORDER_TMP" "$PLAN_DIR/.order"
 
-check_dep_cycles "$PLAN_DIR"
+if ! check_dep_cycles "$PLAN_DIR"; then
+  refuse_init
+fi
 
 mkdir -p "$REPORT_DIR"
 : > "$REPORT_DIR/_meta.md"

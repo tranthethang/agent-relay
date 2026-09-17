@@ -8,7 +8,7 @@
 #
 # Usage (clone). A release download is the same script, saved as ./uninstall.sh.
 #   ./bin/uninstall.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
-#                      [--ref REF] [--sha256 HEX] [--dry-run]
+#                      [--ref REF] [--sha256 HEX] [--dry-run] [--force]
 
 set -euo pipefail
 
@@ -19,9 +19,10 @@ CLI_SHA256=""
 ONLY_TOOLS=""
 ONLY_SKILLS=""
 DRY_RUN=0
+FORCE_UNINSTALL=0
 TEMP_DIR=""
 # Parse loop shifts "$@" away. Remote mode re-execs the extracted script,
-# which must still see --only / --skill / --dry-run.
+# which must still see --only / --skill / --dry-run / --force.
 ORIG_ARGS=("$@")
 
 usage() {
@@ -30,12 +31,14 @@ agent-relay uninstaller
 
 Removes skill artifacts previously installed by install.sh under $HOME.
 Does not remove parent directories (e.g. ~/.cursor/skills) even if empty.
+Refuses to remove a destination without a valid .agent-relay-owned marker
+unless --force is given.
 
 Requires: bash >= 3.2 (macOS system bash is fine).
 
 Usage (clone). A release download is the same script, saved as ./uninstall.sh.
   ./bin/uninstall.sh [--only TOOL[,TOOL...]] [--skill NAME[,NAME...]]
-                     [--ref REF] [--sha256 HEX] [--dry-run]
+                     [--ref REF] [--sha256 HEX] [--dry-run] [--force]
 EOF
 }
 
@@ -274,6 +277,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --force) FORCE_UNINSTALL=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -420,12 +424,30 @@ echo "agent-relay: uninstalling from \$HOME ($HOME)"
 
 removed=0
 missing=0
+refused=0
 
+has_valid_ownership_marker() {
+  local dest_root="$1" expected_skill="$2"
+  local marker="$dest_root/.agent-relay-owned"
+  [[ -f "$marker" ]] || return 1
+  grep -q '^installer=agent-relay$' "$marker" || return 1
+  grep -q "^skill=${expected_skill}$" "$marker" || return 1
+  return 0
+}
 
 remove_skill_folder() {
-  # remove_skill_folder <dest_folder> [optional=0]
-  local dest_folder="$1" optional="${2:-0}"
+  # remove_skill_folder <dest_folder> <skill_name> [optional=0]
+  local dest_folder="$1" skill_name="$2" optional="${3:-0}"
   if [[ -e "$dest_folder" ]]; then
+    if ! has_valid_ownership_marker "$dest_folder" "$skill_name"; then
+      if [[ "$FORCE_UNINSTALL" -eq 1 ]]; then
+        echo "  WARNING: force-removing unmanaged destination $dest_folder" >&2
+      else
+        echo "  refuse: $dest_folder has no valid .agent-relay-owned marker (use --force)" >&2
+        refused=$((refused + 1))
+        return 0
+      fi
+    fi
     if [[ "$DRY_RUN" -eq 1 ]]; then
       echo "  [dry-run] rm -rf $dest_folder"
     else
@@ -453,7 +475,7 @@ for tool in "${TOOLS[@]}"; do
 
     case "$fmt" in
       skill-folder)
-        remove_skill_folder "$dest_dir/$name"
+        remove_skill_folder "$dest_dir/$name" "$name"
         ;;
       *)
         echo "Unknown format '$fmt' for $tool (only skill-folder is supported)" >&2
@@ -463,12 +485,16 @@ for tool in "${TOOLS[@]}"; do
   done
 done
 
-if [[ "$removed" -eq 0 && "$missing" -eq 0 ]]; then
+if [[ "$removed" -eq 0 && "$missing" -eq 0 && "$refused" -eq 0 ]]; then
   echo "Nothing to uninstall (filters matched no tool/skill combinations)." >&2
   exit 1
 fi
 
-echo "Done. ($removed removed, $missing already absent)"
+echo "Done. ($removed removed, $missing already absent, $refused refused)"
+if [[ "$refused" -gt 0 && "$FORCE_UNINSTALL" -eq 0 ]]; then
+  echo "Some destinations were refused (unmanaged). Re-run with --force to remove them." >&2
+  exit 1
+fi
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "(dry run — nothing was removed)"
 fi

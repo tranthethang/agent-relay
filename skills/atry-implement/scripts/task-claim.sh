@@ -5,6 +5,21 @@
 set -euo pipefail
 
 STALE_THRESHOLD=7200 # 2 hours in seconds (informational for steal messages)
+# Per-task mutation mutex / rollup mutex: reclaim only when recorded age is old
+# AND the recorded owner pid is dead (or missing). Never evict a live holder
+# based on how long the waiter has been blocked.
+#
+# A pid is only evidence on the machine that wrote it, so the mutex records
+# owner_host too. Same host: a dead pid is conclusive, so a short age guard
+# (pid reuse, clock skew) is enough. Different or unknown host: ignore the pid
+# entirely and fall back to a long age-only timer, which bounds a dead peer
+# without ever evicting a live one. See docs/task-claim.md.
+MUTEX_STALE_AGE="${AGENT_RELAY_MUTEX_STALE_AGE:-10}"
+MUTEX_FOREIGN_STALE_AGE="${AGENT_RELAY_MUTEX_FOREIGN_STALE_AGE:-900}"
+MUTEX_WAIT_MAX="${AGENT_RELAY_MUTEX_WAIT_MAX:-60}"
+# steal waits only briefly: every critical section is a few small writes, so
+# this absorbs incidental contention without queueing behind a long holder.
+STEAL_WAIT_MAX="${AGENT_RELAY_STEAL_WAIT_MAX:-5}"
 
 usage() {
   cat <<'EOF'
@@ -18,11 +33,12 @@ Usage:
   task-claim.sh list <id>
   task-claim.sh rollup <id>
   task-claim.sh check <id>
-  task-claim.sh report-write <id> <task-id> <path-or-->
+  task-claim.sh report-write [--force] [--session <tag>] <id> <task-id> [<session-tag>] <path-or-->
   task-claim.sh report-list <id>
   task-claim.sh report-rollup <id>
 
   claim flags: --allow-skipped-deps
+  report-write / release: --force
 EOF
   exit 1
 }
@@ -174,6 +190,7 @@ status_base() {
 deps_satisfied() {
   # args: plan_dir deps_string allow_skipped(0|1)
   # prints reason on stdout and returns 1 if blocked
+  # noglob: dependency tokens must never expand as pathnames.
   local plan_dir="$1"
   local deps="$2"
   local allow_skipped="$3"
@@ -181,10 +198,14 @@ deps_satisfied() {
   local dep_file
   local dep_status
   local base
+  local _noglob_was=0
+  case "$-" in *f*) _noglob_was=1 ;; esac
+  set -f
   for dep in $deps; do
     dep_file="$plan_dir/$dep.status"
     if [[ ! -f "$dep_file" ]]; then
       echo "missing dependency '$dep'"
+      [[ "$_noglob_was" -eq 0 ]] && set +f
       return 1
     fi
     dep_status="$(read_status_field "$dep_file")"
@@ -196,9 +217,156 @@ deps_satisfied() {
       continue
     fi
     echo "dependency '$dep' is not done (status: $dep_status)"
+    [[ "$_noglob_was" -eq 0 ]] && set +f
     return 1
   done
+  [[ "$_noglob_was" -eq 0 ]] && set +f
   return 0
+}
+
+validate_task_status() {
+  # Accept pending|in-progress|done|skipped, or skipped (...).
+  local s="$1"
+  local base
+  base="$(status_base "$s")"
+  case "$base" in
+    pending|in-progress|done)
+      [[ "$s" == "$base" ]] && return 0
+      return 1
+      ;;
+    skipped)
+      if [[ "$s" == "skipped" ]]; then
+        return 0
+      fi
+      case "$s" in
+        skipped\ *) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# ---- mkdir mutex helpers (per-task mutation + rollup) ----
+# HELD_MUTEX is released on EXIT via trap so no path can leak it.
+HELD_MUTEX=""
+
+release_held_mutex() {
+  local dir="${HELD_MUTEX:-}"
+  HELD_MUTEX=""
+  if [[ -z "$dir" || ! -d "$dir" ]]; then
+    return 0
+  fi
+  local pid=""
+  pid="$(cat "$dir/owner_pid" 2>/dev/null || true)"
+  if [[ -n "$pid" && "$pid" != "$$" ]]; then
+    return 0
+  fi
+  rmdir "$dir" 2>/dev/null || rm -rf "$dir"
+}
+
+mutex_owner_alive() {
+  # args: mutex_dir — return 0 if recorded pid is alive
+  local mutex_dir="$1"
+  local pid=""
+  pid="$(cat "$mutex_dir/owner_pid" 2>/dev/null || true)"
+  case "$pid" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  kill -0 "$pid" 2>/dev/null
+}
+
+mutex_host() {
+  # Stable-enough machine id; empty when uname is unusable.
+  uname -n 2>/dev/null || true
+}
+
+mutex_recorded_age() {
+  local mutex_dir="$1"
+  local now epoch=""
+  now="$(date +%s)"
+  epoch="$(cat "$mutex_dir/created_epoch" 2>/dev/null || true)"
+  case "$epoch" in
+    ''|*[!0-9]*) echo 0 ;;
+    *) echo "$((now - epoch))" ;;
+  esac
+}
+
+mutex_is_reclaimable() {
+  # Same host: trust the pid. A dead pid plus MUTEX_STALE_AGE is conclusive.
+  # Foreign or unrecorded host: the pid means nothing here, so only a long
+  # recorded age may reclaim. A live slow writer is never reclaimed on a
+  # waiter timer alone in either branch.
+  local mutex_dir="$1"
+  local age recorded_host this_host
+  age="$(mutex_recorded_age "$mutex_dir")"
+  recorded_host="$(cat "$mutex_dir/owner_host" 2>/dev/null || true)"
+  this_host="$(mutex_host)"
+
+  if [[ -n "$recorded_host" && -n "$this_host" && "$recorded_host" == "$this_host" ]]; then
+    if mutex_owner_alive "$mutex_dir"; then
+      return 1
+    fi
+    [[ "$age" -ge "$MUTEX_STALE_AGE" ]]
+    return
+  fi
+
+  [[ "$age" -ge "$MUTEX_FOREIGN_STALE_AGE" ]]
+}
+
+acquire_mkdir_mutex() {
+  # acquire_mkdir_mutex <mutex_dir> [label] [wait|try] [wait-budget-seconds]
+  # Bounded wait (default) or try-once. Sets HELD_MUTEX and EXIT trap on success.
+  local mutex_dir="$1"
+  local label="${2:-mutex}"
+  local mode="${3:-wait}"
+  local budget="${4:-$MUTEX_WAIT_MAX}"
+  local wait_start now
+  wait_start="$(date +%s)"
+
+  while true; do
+    if mkdir "$mutex_dir" 2>/dev/null; then
+      printf '%s\n' "$$" > "$mutex_dir/owner_pid"
+      printf '%s\n' "$(mutex_host)" > "$mutex_dir/owner_host"
+      printf '%s\n' "$(date +%s)" > "$mutex_dir/created_epoch"
+      HELD_MUTEX="$mutex_dir"
+      trap 'release_held_mutex' EXIT
+      # Test barrier: while HOLD file exists, stay inside the critical section
+      # after acquire so another process can race against a held mutex.
+      if [[ -n "${AGENT_RELAY_TEST_MUTEX_HOLD:-}" ]]; then
+        touch "${AGENT_RELAY_TEST_MUTEX_HOLD}.ready" 2>/dev/null || true
+        while [[ -f "$AGENT_RELAY_TEST_MUTEX_HOLD" ]]; do
+          sleep 0.01
+        done
+      fi
+      if [[ -n "${AGENT_RELAY_TEST_STEAL_PAUSE:-}" && "$label" == "task mutex"* ]]; then
+        sleep "$AGENT_RELAY_TEST_STEAL_PAUSE"
+      fi
+      return 0
+    fi
+
+    if [[ -d "$mutex_dir" ]] && mutex_is_reclaimable "$mutex_dir"; then
+      rm -rf "$mutex_dir"
+      continue
+    fi
+
+    if [[ "$mode" == "try" ]]; then
+      echo "Error: another agent holds $label" >&2
+      return 1
+    fi
+
+    now="$(date +%s)"
+    if [[ "$((now - wait_start))" -ge "$budget" ]]; then
+      echo "Error: timed out waiting for $label" >&2
+      return 1
+    fi
+    sleep 0.05
+  done
+}
+
+release_mkdir_mutex() {
+  release_held_mutex
+  trap - EXIT
 }
 
 regenerate_rollup() {
@@ -207,16 +375,9 @@ regenerate_rollup() {
   local id="$3"
 
   local rollup_lock="$plan_dir/.lock-rollup"
-  local lock_waited=0
-  while ! mkdir "$rollup_lock" 2>/dev/null; do
-    sleep 0.05
-    lock_waited=$((lock_waited + 1))
-    # Stale rollup lock (crash mid-regen): steal after ~5s of waiting.
-    if [[ "$lock_waited" -ge 100 ]]; then
-      rm -rf "$rollup_lock"
-      lock_waited=0
-    fi
-  done
+  if ! acquire_mkdir_mutex "$rollup_lock" "rollup mutex"; then
+    return 1
+  fi
 
   local tmp_rollup="$plan_dir/.rollup-tmp-$$.md"
   {
@@ -246,8 +407,7 @@ regenerate_rollup() {
   } > "$tmp_rollup"
 
   mv -f "$tmp_rollup" "$rollup_file"
-  # Intentional: rmdir preferred; rm -rf if non-empty after a crash.
-  rmdir "$rollup_lock" 2>/dev/null || rm -rf "$rollup_lock"
+  release_mkdir_mutex
 }
 
 regenerate_report_rollup() {
@@ -256,15 +416,9 @@ regenerate_report_rollup() {
   local id="$3"
 
   local rollup_lock="$report_dir/.lock-report-rollup"
-  local lock_waited=0
-  while ! mkdir "$rollup_lock" 2>/dev/null; do
-    sleep 0.05
-    lock_waited=$((lock_waited + 1))
-    if [[ "$lock_waited" -ge 100 ]]; then
-      rm -rf "$rollup_lock"
-      lock_waited=0
-    fi
-  done
+  if ! acquire_mkdir_mutex "$rollup_lock" "report-rollup mutex"; then
+    return 1
+  fi
 
   local tmp_rollup="$report_dir/.rollup-tmp-$$.md"
   {
@@ -309,7 +463,7 @@ regenerate_report_rollup() {
   } > "$tmp_rollup"
 
   mv -f "$tmp_rollup" "$rollup_file"
-  rmdir "$rollup_lock" 2>/dev/null || rm -rf "$rollup_lock"
+  release_mkdir_mutex
 }
 
 check_consistency() {
@@ -422,15 +576,33 @@ acquire_lock() {
 }
 
 take_lock_forced() {
-  # rm + mkdir + write owner. Caller must hold steal mutex.
+  # Prepare a staging lock dir, then swap it into place. Caller must hold the
+  # per-task mutex. A failed mkdir must not leave the task unlocked.
   local lock_dir="$1"
   local session_tag="$2"
   local iso_now="$3"
   local epoch_now="$4"
+  local staging="${lock_dir}.taking.$$"
+  rm -rf "$staging"
+  if ! mkdir "$staging" 2>/dev/null; then
+    echo "Error: could not stage replacement lock at '$staging'" >&2
+    return 1
+  fi
+  if ! printf '%s %s\n' "$session_tag" "$iso_now" > "$staging/owner"; then
+    rm -rf "$staging"
+    return 1
+  fi
+  if ! printf '%s\n' "$epoch_now" > "$staging/created_epoch"; then
+    rm -rf "$staging"
+    return 1
+  fi
   rm -rf "$lock_dir"
-  mkdir "$lock_dir"
-  printf '%s %s\n' "$session_tag" "$iso_now" > "$lock_dir/owner"
-  printf '%s\n' "$epoch_now" > "$lock_dir/created_epoch"
+  if ! mv "$staging" "$lock_dir"; then
+    # Best effort: keep staging visible if the final rename failed.
+    echo "Error: failed to install replacement lock at '$lock_dir'" >&2
+    return 1
+  fi
+  return 0
 }
 
 # --- option parsing (global --session before subcommand) ---
@@ -491,10 +663,16 @@ case "$SUBCMD" in
       exit 1
     }
 
+    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+    if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
+      exit 1
+    fi
+
     DEPS="$(read_deps_field "$TASK_FILE")"
     if [[ -n "$DEPS" ]]; then
       block_reason=""
       if ! block_reason="$(deps_satisfied "$PLAN_DIR" "$DEPS" "$ALLOW_SKIPPED_DEPS")"; then
+        release_mkdir_mutex
         echo "Error: $block_reason. Cannot claim '$TASK_ID'." >&2
         exit 1
       fi
@@ -505,10 +683,12 @@ case "$SUBCMD" in
     EPOCH_NOW="$(date +%s)"
 
     if acquire_lock "$LOCK_DIR" "$SESSION_TAG" "$ISO_NOW" "$EPOCH_NOW"; then
-      :
+      write_task_status "$TASK_FILE" "in-progress"
+      release_mkdir_mutex
     else
       LOCK_AGE="$(get_lock_age "$LOCK_DIR")"
       OLD_OWNER="$(cat "$LOCK_DIR/owner" 2>/dev/null || echo "unknown")"
+      release_mkdir_mutex
       if [[ "$LOCK_AGE" -ge "$STALE_THRESHOLD" ]]; then
         echo "Error: lock on task '$TASK_ID' is stale (held by $OLD_OWNER for ${LOCK_AGE}s > ${STALE_THRESHOLD}s)." >&2
         echo "Run: task-claim.sh steal $TARGET $TASK_ID $SESSION_TAG" >&2
@@ -523,7 +703,6 @@ case "$SUBCMD" in
       exit 1
     fi
 
-    write_task_status "$TASK_FILE" "in-progress"
     regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
     ;;
 
@@ -546,32 +725,46 @@ case "$SUBCMD" in
       exit 1
     }
 
+    # Compare-and-swap on the lock owner. The mutex alone cannot express
+    # "exactly one stealer wins": waiting on it would let a second stealer take
+    # the lock straight back off the first. So read the owner we intend to take
+    # over from *before* entering the mutex, then refuse inside if it moved.
+    # That keeps the single-winner rule while letting steal wait out an
+    # unrelated claim/update/release instead of failing on it.
+    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
+    EXPECTED_OWNER="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
+
+    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+    if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'" wait "$STEAL_WAIT_MAX"; then
+      exit 1
+    fi
+
     # Steal takes over an existing lock — not a backdoor claim. Same dep
     # rules as claim so unmet deps cannot be skipped by stealing.
     DEPS="$(read_deps_field "$TASK_FILE")"
     if [[ -n "$DEPS" ]]; then
       block_reason=""
       if ! block_reason="$(deps_satisfied "$PLAN_DIR" "$DEPS" "$ALLOW_SKIPPED_DEPS")"; then
+        release_mkdir_mutex
         echo "Error: $block_reason. Cannot steal '$TASK_ID'." >&2
         exit 1
       fi
     fi
 
-    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
-    STEAL_MUTEX="$PLAN_DIR/.lock-steal-$TASK_ID"
     ISO_NOW="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     EPOCH_NOW="$(date +%s)"
 
-    if ! mkdir "$STEAL_MUTEX" 2>/dev/null; then
-      echo "Error: another agent is stealing lock on task '$TASK_ID'" >&2
+    # Critical section under per-task mutex: require existing lock → take over.
+    if [[ ! -d "$LOCK_DIR" ]]; then
+      release_mkdir_mutex
+      echo "Error: task '$TASK_ID' is not locked; use claim instead of steal" >&2
       exit 1
     fi
 
-    # Critical section: require existing lock → read age → delete → recreate.
-    # Lock check is inside the mutex so release cannot race into a free claim.
-    if [[ ! -d "$LOCK_DIR" ]]; then
-      rmdir "$STEAL_MUTEX" 2>/dev/null || rm -rf "$STEAL_MUTEX"
-      echo "Error: task '$TASK_ID' is not locked; use claim instead of steal" >&2
+    CURRENT_OWNER="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
+    if [[ "$CURRENT_OWNER" != "$EXPECTED_OWNER" ]]; then
+      release_mkdir_mutex
+      echo "Error: task '$TASK_ID' was already taken over by '${CURRENT_OWNER:-unknown}' while waiting; re-read the task list before stealing again" >&2
       exit 1
     fi
 
@@ -579,17 +772,14 @@ case "$SUBCMD" in
     OLD_OWNER="$(cat "$LOCK_DIR/owner" 2>/dev/null || echo "unknown")"
     echo "Stealing lock on task '$TASK_ID' (was held by $OLD_OWNER, age ${LOCK_AGE}s)" >&2
 
-    # Test hook: optional pause inside the mutex so concurrent stealers
-    # still serialize on mkdir(STEAL_MUTEX) rather than overlapping rm/mkdir.
-    if [[ -n "${AGENT_RELAY_TEST_STEAL_PAUSE:-}" ]]; then
-      sleep "$AGENT_RELAY_TEST_STEAL_PAUSE"
+    if ! take_lock_forced "$LOCK_DIR" "$SESSION_TAG" "$ISO_NOW" "$EPOCH_NOW"; then
+      release_mkdir_mutex
+      exit 1
     fi
 
-    take_lock_forced "$LOCK_DIR" "$SESSION_TAG" "$ISO_NOW" "$EPOCH_NOW"
-
-    rmdir "$STEAL_MUTEX" 2>/dev/null || rm -rf "$STEAL_MUTEX"
-
     write_task_status "$TASK_FILE" "in-progress"
+    release_mkdir_mutex
+
     regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
     ;;
 
@@ -626,14 +816,6 @@ case "$SUBCMD" in
       exit 1
     }
 
-    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
-    [[ -d "$LOCK_DIR" ]] || {
-      echo "Error: task '$TASK_ID' is not claimed/locked" >&2
-      exit 1
-    }
-
-    OWNER_TAG="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
-
     ARG_SESSION=""
     ARG_STATUS=""
     REASON=""
@@ -659,12 +841,7 @@ case "$SUBCMD" in
     CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
 
     if [[ -z "$CALLER_SESSION" ]]; then
-      echo "Error: session-tag required to update task '$TASK_ID' (held by '$OWNER_TAG')" >&2
-      exit 1
-    fi
-
-    if [[ "$CALLER_SESSION" != "$OWNER_TAG" ]]; then
-      echo "Error: caller session tag '$CALLER_SESSION' does not match lock owner '$OWNER_TAG' for task '$TASK_ID'" >&2
+      echo "Error: session-tag required to update task '$TASK_ID'" >&2
       exit 1
     fi
 
@@ -689,7 +866,32 @@ case "$SUBCMD" in
       exit 1
     fi
 
+    if ! validate_task_status "$FINAL_STATUS"; then
+      echo "Error: invalid status '$FINAL_STATUS'" >&2
+      exit 1
+    fi
+
+    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+    if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
+      exit 1
+    fi
+
+    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
+    if [[ ! -d "$LOCK_DIR" ]]; then
+      release_mkdir_mutex
+      echo "Error: task '$TASK_ID' is not claimed/locked" >&2
+      exit 1
+    fi
+
+    OWNER_TAG="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
+    if [[ "$CALLER_SESSION" != "$OWNER_TAG" ]]; then
+      release_mkdir_mutex
+      echo "Error: caller session tag '$CALLER_SESSION' does not match lock owner '$OWNER_TAG' for task '$TASK_ID'" >&2
+      exit 1
+    fi
+
     write_task_status "$TASK_FILE" "$FINAL_STATUS"
+    release_mkdir_mutex
     regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
     ;;
 
@@ -724,6 +926,12 @@ case "$SUBCMD" in
     CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
 
     resolve_paths "$TARGET"
+
+    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+    if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
+      exit 1
+    fi
+
     LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
 
     if [[ -d "$LOCK_DIR" ]]; then
@@ -732,10 +940,12 @@ case "$SUBCMD" in
         echo "WARNING: force-releasing lock on task '$TASK_ID' (owner was '$OWNER_TAG')" >&2
       else
         if [[ -z "$CALLER_SESSION" ]]; then
+          release_mkdir_mutex
           echo "Error: session-tag required to release task '$TASK_ID' (held by '$OWNER_TAG'); use --force to override" >&2
           exit 1
         fi
         if [[ "$CALLER_SESSION" != "$OWNER_TAG" ]]; then
+          release_mkdir_mutex
           echo "Error: caller session tag '$CALLER_SESSION' does not match lock owner '$OWNER_TAG' for task '$TASK_ID'" >&2
           exit 1
         fi
@@ -743,6 +953,7 @@ case "$SUBCMD" in
       rm -rf "$LOCK_DIR"
     fi
 
+    release_mkdir_mutex
     regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
     ;;
 
@@ -758,14 +969,83 @@ case "$SUBCMD" in
     ;;
 
   report-write)
-    [[ $# -eq 3 ]] || usage
+    while [[ $# -ge 1 ]]; do
+      case "$1" in
+        --session)
+          [[ $# -ge 2 ]] || usage
+          OPT_SESSION="$2"
+          shift 2
+          ;;
+        --force)
+          FORCE_RELEASE=1
+          shift
+          ;;
+        *)
+          break
+          ;;
+      esac
+    done
+
+    [[ $# -ge 3 ]] || usage
     TARGET="$1"
     TASK_ID="$2"
-    IN_FILE="$3"
+    shift 2
     validate_ident "task-id" "$TASK_ID"
+
+    ARG_SESSION=""
+    IN_FILE=""
+    if [[ $# -eq 1 ]]; then
+      IN_FILE="$1"
+    elif [[ $# -eq 2 ]]; then
+      ARG_SESSION="$1"
+      IN_FILE="$2"
+    else
+      usage
+    fi
+
+    CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
 
     resolve_paths "$TARGET"
     mkdir -p "$REPORT_DIR"
+
+    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+    if [[ -d "$PLAN_DIR" ]]; then
+      if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
+        exit 1
+      fi
+    fi
+
+    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
+    OWNER_TAG=""
+    if [[ -d "$LOCK_DIR" ]]; then
+      OWNER_TAG="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
+    fi
+
+    if [[ "$FORCE_RELEASE" -eq 1 ]]; then
+      if [[ -n "$OWNER_TAG" && ( -z "$CALLER_SESSION" || "$CALLER_SESSION" != "$OWNER_TAG" ) ]]; then
+        echo "WARNING: force report-write for task '$TASK_ID' (lock owner '${OWNER_TAG:-none}', caller '${CALLER_SESSION:-none}')" >&2
+      fi
+      if [[ -x "$SCRIPT_DIR/run-history.sh" ]]; then
+        "$SCRIPT_DIR/run-history.sh" append "$RUN_DIR" implement report-write-force \
+          "task=$TASK_ID" "owner=${OWNER_TAG:-none}" "caller=${CALLER_SESSION:-none}" >/dev/null 2>&1 || true
+      fi
+    else
+      if [[ ! -d "$LOCK_DIR" ]]; then
+        [[ -d "$PLAN_DIR" ]] && release_mkdir_mutex
+        echo "Error: task '$TASK_ID' is not claimed/locked; claim it before report-write, or use --force" >&2
+        exit 1
+      fi
+      if [[ -z "$CALLER_SESSION" ]]; then
+        release_mkdir_mutex
+        echo "Error: session-tag required to report-write task '$TASK_ID' (held by '$OWNER_TAG')" >&2
+        exit 1
+      fi
+      if [[ "$CALLER_SESSION" != "$OWNER_TAG" ]]; then
+        release_mkdir_mutex
+        echo "Error: caller session tag '$CALLER_SESSION' does not match lock owner '$OWNER_TAG' for task '$TASK_ID'" >&2
+        exit 1
+      fi
+    fi
 
     if [[ "$IN_FILE" == "-" ]]; then
       cat > "$REPORT_DIR/$TASK_ID.md"
@@ -773,6 +1053,7 @@ case "$SUBCMD" in
       cp "$IN_FILE" "$REPORT_DIR/$TASK_ID.md"
     fi
 
+    [[ -d "$PLAN_DIR" ]] && release_mkdir_mutex
     regenerate_report_rollup "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
     ;;
 
