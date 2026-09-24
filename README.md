@@ -26,7 +26,7 @@ Maintainer docs (architecture, installer, tests, release, …):
 - Not a guarantee that every listed tool loads the installed files the same
   way. Install only copies files to known paths. Smoke tests check that each
   installed `SKILL.md` has non-empty front-matter `name:` / `description:` —
-  not that Cursor, Antigravity, Claude, or Codex actually load the skill.
+  not that Cursor, Antigravity, Claude, Codex, or Kiro actually load the skill.
 
 ## Stages
 
@@ -105,6 +105,7 @@ as a **bundle**. Flags, `targets.conf`, and adding a tool:
 | Antigravity | `~/.gemini/config/skills/<name>/` |
 | Claude | `~/.claude/skills/<name>/` |
 | Codex | `~/.codex/skills/<name>/` |
+| Kiro | `~/.kiro/skills/<name>/` (macOS and Linux) |
 
 ```bash
 git clone https://github.com/tranthethang/agent-relay.git

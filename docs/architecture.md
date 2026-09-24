@@ -7,7 +7,7 @@ tree, not a roadmap.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│  Human opens Cursor / Claude / Codex / Antigravity          │
+│  Human opens Cursor / Claude / Codex / Antigravity / Kiro   │
 │  and invokes a skill by name                                │
 └───────────────────────────┬─────────────────────────────────┘
                             │ reads installed bundle

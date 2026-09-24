@@ -33,6 +33,9 @@ export HOME="$T"
 "$INSTALL" --only codex >/dev/null
 [[ -f "$HOME/.codex/skills/atry-implement/SKILL.md" ]] && pass "codex skill-folder" || fail "codex skill-folder"
 
+"$INSTALL" --only kiro >/dev/null
+[[ -f "$HOME/.kiro/skills/atry-implement/SKILL.md" ]] && pass "kiro skill-folder" || fail "kiro skill-folder"
+
 # File-copy checks above only prove a file landed at the right path -- they
 # do not prove the tool would actually load it as a skill. Check that every
 # installed SKILL.md has well-formed front matter (a "---" fenced block with
@@ -63,6 +66,7 @@ check_frontmatter "$HOME/.cursor/skills" "cursor"
 check_frontmatter "$HOME/.gemini/config/skills" "antigravity"
 check_frontmatter "$HOME/.claude/skills" "claude"
 check_frontmatter "$HOME/.codex/skills" "codex"
+check_frontmatter "$HOME/.kiro/skills" "kiro"
 
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
 
@@ -205,6 +209,7 @@ fi
 [[ ! -f "$HOME/.gemini/config/skills/atry-implement/SKILL.md" ]] && pass "uninstall all" || fail "uninstall all"
 [[ ! -e "$HOME/.claude/skills/atry-implement" ]] && pass "uninstall claude skill" || fail "uninstall claude skill"
 [[ ! -e "$HOME/.codex/skills/atry-implement" ]] && pass "uninstall codex skill" || fail "uninstall codex skill"
+[[ ! -e "$HOME/.kiro/skills/atry-implement" ]] && pass "uninstall kiro skill" || fail "uninstall kiro skill"
 
 # validate_targets_conf: allowlist accepts the real manifest and benign paths
 # that contain "source"/"exec" as substrings; rejects bare commands and

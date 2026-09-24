@@ -36,7 +36,7 @@ on purpose until cleaned up (see `CONTRIBUTING.md`).
 ### `tests/smoke.sh`
 
 - Installs into a temporary `HOME` (never your real skill dirs)  
-- Per-tool skill-folder paths for cursor / antigravity / claude / codex  
+- Per-tool skill-folder paths for cursor / antigravity / claude / codex / kiro  
 - Front-matter: each installed `SKILL.md` starts with `---` and has non-empty
   `name:` / `description:` inside that block  
 - Bundle `references/` + executable helpers present under each skill folder  

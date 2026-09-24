@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Kiro as a `skill-folder` install target (`~/.kiro/skills`, same path on
+  macOS and Linux). Default agent auto-loads skills from that directory;
+  see https://kiro.dev/docs/skills/.
 - `atry-distill` skill (stage 5): after cross-review (or self-review if
   cross-review was skipped), distills lessons from a run's
   plan/implement-report/review files into `distillation.md`. Calls

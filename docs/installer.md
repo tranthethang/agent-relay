@@ -35,7 +35,7 @@ One block per tool, plus `TOOLS=(...)` listing names in install order:
 ```bash
 CURSOR_DIR="$HOME/.cursor/skills"
 CURSOR_FORMAT="skill-folder"
-TOOLS=(CURSOR ANTIGRAVITY CLAUDE CODEX)
+TOOLS=(CURSOR ANTIGRAVITY CLAUDE CODEX KIRO)
 ```
 
 Only `FORMAT=skill-folder` is supported: install copies the whole
