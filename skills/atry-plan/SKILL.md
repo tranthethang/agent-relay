@@ -1,9 +1,14 @@
 ---
 name: atry-plan
-description: Create a new run directory under .agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/ with plan.md and meta.md. Use when the user asks to plan work for agent-relay before implement.
+description: Use when the user asks to plan work in this repo before implementing -- starting a new agent-relay run, or writing/updating a plan.md that has not yet been broken into steps.
 ---
 
 # Plan
+
+## Overview
+
+Creates a new run directory under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` with
+`plan.md` and `meta.md`, ready for `atry-implement` to consume.
 
 You are writing a plan that later stages (`atry-implement`, reviews) will
 consume. Do not implement. Do not call other tools' agents. Produce one plan
@@ -42,6 +47,18 @@ id="$(grep -E '^id:' "$RUN_DIR/meta.md" | head -1 | sed 's/^id:[[:space:]]*//')"
 
 This creates `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`, writes `meta.md`, and starts `history.log`.
 Use the `id` read back from `meta.md` (not the pre-init `date +%s` value) when writing `plan.md`.
+
+## Prior lessons (optional)
+
+Before writing `## Goal`, check whether this repo already has distilled
+lessons from earlier runs: look for the most recent
+`.agent-relay/*/distillation.md` (sort by the `{YMD}-{RUN_ID}` prefix in the
+directory name; newest first). If one exists and its lessons are relevant to
+this plan's goal, skim it and let it inform `## Constraints` or `## Non-goals`
+-- do not copy it wholesale, and do not block on it if none exists or none
+apply. This is the only point where a prior run's `distillation.md` feeds
+back into a later stage; nothing in this repo reads the knowledge bank back
+automatically.
 
 ## Provenance
 

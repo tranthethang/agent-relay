@@ -1,9 +1,15 @@
 ---
 name: atry-self-review
-description: Self-review code produced from an agent-relay plan using implement-plan.md and implement-report.md in the run directory; fix confirmed bugs; write dated sections in review-report.md and review-walkthrough.md. Use after an agent-relay implement step.
+description: Use right after an agent-relay implement step finishes, before any cross-review -- reviewing the diff that was just produced against its own plan.
 ---
 
 # Self-Review
+
+## Overview
+
+Reviews code produced from a plan using `implement-plan.md` and
+`implement-report.md`, fixes confirmed bugs, and writes dated sections in
+`review-report.md` and `review-walkthrough.md`.
 
 You are reviewing code that a (possibly different, possibly weaker) model just
 implemented from a plan. Treat the implementation report as a claim to verify,

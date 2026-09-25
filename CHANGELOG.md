@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Skill frontmatter `description:` fields rewritten to state only the trigger
+  condition ("Use when ..."), matching the sync gate's existing
+  name/description smoke check. The former "what it does" sentences moved
+  into a new `## Overview` section under each skill's H1.
+- `reviewer-conduct.md` (shared by `atry-self-review` / `atry-cross-review`)
+  gains a "Common rationalizations" table pairing agent excuses observed in
+  this project with the rule that overrides each one.
+- `atry-plan` gains an optional "Prior lessons" step: check the most recent
+  `.agent-relay/*/distillation.md` in the repo before writing a new plan's
+  `## Goal`, so a completed run's lessons can inform the next plan instead of
+  sitting unread in the knowledge bank.
+- `docs/skills-authoring.md` documents the trigger-only description rule
+  (authoring rule 8) for future skills.
+
 ## [4.0.0] — 2026-09-25
 
 ### Changed
