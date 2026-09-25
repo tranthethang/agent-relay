@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/bank-check.sh
+# scripts/runtime/bank-check.sh
 # Probe an optional external knowledge bank declared in .agent-relay/bank.conf
 # and record reachability in .agent-relay/bank-status.md. Project-level (one
 # per target repo), not per-run. See docs/bank.md for the format and the
@@ -36,7 +36,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/find-agent-relay-dir.sh
+# shellcheck source=scripts/runtime/find-agent-relay-dir.sh
 source "$SCRIPT_DIR/find-agent-relay-dir.sh"
 
 START_DIR="${1:-$PWD}"

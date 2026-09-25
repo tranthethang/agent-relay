@@ -7,9 +7,9 @@ change install targets without breaking CI.
 
 | Script | Role |
 | --- | --- |
-| `bin/install.sh` | Copy skill bundles into each selected tool’s directory under `$HOME` |
-| `bin/uninstall.sh` | Remove those copies |
-| `bin/verify.sh` | Check expected files exist after install |
+| `bin/install.sh` | Copy skill bundles into each selected tool’s directory under `$HOME`; install `atry` under `~/.agent-relay` |
+| `bin/uninstall.sh` | Remove those copies (and `~/.agent-relay` on a full uninstall) |
+| `bin/verify.sh` | Check expected files exist after install (skills + `atry`) |
 
 All three:
 
@@ -24,8 +24,8 @@ inlined between `# BEGIN BOOTSTRAP` / `# END BOOTSTRAP` in each bin script.
 After editing `lib/bootstrap.sh`, run:
 
 ```bash
-bash scripts/sync-bootstrap.sh
-bash scripts/sync-bootstrap.sh --check
+bash scripts/maint/sync-bootstrap.sh
+bash scripts/maint/sync-bootstrap.sh --check
 ```
 
 ## `targets.conf`
@@ -38,8 +38,9 @@ CURSOR_FORMAT="skill-folder"
 TOOLS=(CURSOR ANTIGRAVITY CLAUDE CODEX KIRO)
 ```
 
-Only `FORMAT=skill-folder` is supported: install copies the whole
-`skills/<name>/` tree (`SKILL.md`, `references/`, `scripts/`).
+Only `FORMAT=skill-folder` is supported: install copies `SKILL.md` +
+`references/` (not `scripts/`). Runtime helpers install once under
+`~/.agent-relay/` via `atry`.
 
 ### Validation before `source`
 
@@ -75,19 +76,17 @@ Re-running install **without** `--no-clobber` overwrites prior installs of the
 same skills **when** the destination has a valid `.agent-relay-owned` marker.
 Unmanaged directories (no marker) are refused rather than wiped.
 
-## Upgrading from 3.0.x
+## Reinstall / ownership marker
 
-3.0.x wrote no ownership marker, so 3.1.0 treats those directories as
-unmanaged and refuses to touch them — install exits non-zero with
-`refusing to modify unmanaged skill directory`. There is no in-place
-migration by design (see `AGENTS.md`); remove the old install first:
+Install refuses directories that lack a valid `.agent-relay-owned` marker
+(`refusing to modify unmanaged skill directory`). To replace an unmanaged
+skill install:
 
 ```bash
 ./bin/uninstall.sh --force
 ./bin/install.sh
 ```
 
-`--force` is required only because the old directories predate the marker.
 After reinstalling, `./bin/verify.sh` reports the marker for each skill.
 
 ## Adding a tool

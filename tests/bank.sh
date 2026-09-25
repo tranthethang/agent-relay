@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Offline checks for the optional knowledge-bank helpers (bash 3.2+):
-#   scripts/bank-check.sh, scripts/bank-push.sh
+#   atry bank check|push  (scripts/runtime/bank-*.sh)
 # Run from repo root:
 #   ./tests/bank.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BANK_CHECK="$ROOT/scripts/bank-check.sh"
-BANK_PUSH="$ROOT/scripts/bank-push.sh"
+ATRY="$ROOT/scripts/atry"
+bank_check() { "$ATRY" bank check "$@"; }
+bank_push() { "$ATRY" bank push "$@"; }
+BANK_CHECK=bank_check
+BANK_PUSH=bank_push
 
 FAIL=0
 pass() { echo "PASS: $1"; }

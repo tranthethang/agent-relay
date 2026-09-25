@@ -12,19 +12,16 @@ are not actually supported by the run's own files.
 
 ## Run discovery
 
-Resolve the run directory before reading or writing artifacts. Call the helper
-shipped beside this skill:
+Resolve the run directory before reading or writing artifacts:
 
 ```bash
-RUN_DIR="$(scripts/resolve-run.sh [RUN_ID or path])"
+RUN_DIR="$(atry resolve [RUN_ID or path])"
 ```
 
-If the user passed a `RUN_ID` or a path under a run directory, pass it to the
-helper. If no argument is passed and exactly one run directory exists,
-`resolve-run.sh` will resolve it automatically. If it exits non-zero (ambiguous
-or not found), ask the user for the `RUN_ID` or path.
-
-There is no `CURRENT` file — each run is self-contained.
+If the user passed a `RUN_ID` or a path under a run directory, pass it to
+`atry resolve`. If no argument is passed and exactly one run directory exists,
+it resolves automatically. If it exits non-zero (ambiguous or not found), ask
+the user for the `RUN_ID` or path.
 
 ## Inputs
 
@@ -51,7 +48,7 @@ runtime proof, same as every other stage.
 
 1. Resolve `$RUN_DIR` as above. Record stage start in `history.log`:
    ```bash
-   scripts/run-history.sh append "$RUN_DIR" distill started tool=<tool>
+   atry history append "$RUN_DIR" distill started tool=<tool>
    ```
 
 1. Read the full chain: plan → implement report → review report →
@@ -81,10 +78,10 @@ runtime proof, same as every other stage.
    availability can change between runs:
 
    ```bash
-   scripts/bank-check.sh "$RUN_DIR"
+   atry bank check "$RUN_DIR"
    ```
 
-   (`bank-check.sh` walks up from `$RUN_DIR` to find `.agent-relay/` at the
+   `(`atry bank check` walks up from `$RUN_DIR` to find `.agent-relay/` at the
    repo root.)
 
    Check its exit code, do not just read the file it may or may not have
@@ -92,7 +89,7 @@ runtime proof, same as every other stage.
    be found; treat that as "no usable bank" and skip the push entirely rather
    than reading `bank-status.md`.
 
-1. If `bank-check.sh` exited `0` **and** the resulting
+1. If `atry bank check` exited `0` **and** the resulting
    `.agent-relay/bank-status.md` shows `reachable: true`,
    push the full distillation note to the bank. The note body must always be
    `"$RUN_DIR/distillation.md"` itself:
@@ -100,7 +97,7 @@ runtime proof, same as every other stage.
    ```bash
    RUN_ID="$(grep -E '^id:' "$RUN_DIR/meta.md" | head -1 | sed 's/^id:[[:space:]]*//')"
    TITLE="$(grep -E '^title:' "$RUN_DIR/meta.md" | head -1 | sed 's/^title:[[:space:]]*//')"
-   scripts/bank-push.sh "$RUN_DIR" "$RUN_ID" "${TITLE:-Distillation $RUN_ID}" "$RUN_DIR/distillation.md"
+   atry bank push "$RUN_DIR" "$RUN_ID" "${TITLE:-Distillation $RUN_ID}" "$RUN_DIR/distillation.md"
    ```
 
    You must **not**:
@@ -108,8 +105,8 @@ runtime proof, same as every other stage.
    - Summarize, truncate, or omit any sections of the distillation for the vault note.
    - Embed run-dir paths, repo paths, or "see full record at …" links in the distillation body. The vault note must be completely self-contained.
 
-   `bank-push.sh` exits `2` when the bank is not configured or not reachable —
-   that is expected and not an error. Re-running `bank-push.sh` for the same
+   `atry bank push` exits `2` when the bank is not configured or not reachable —
+   that is expected and not an error. Re-running `atry bank push` for the same
    run overwrites that run's existing note at the same deterministic path
    rather than versioning or appending. In every case (pushed, skipped, or
    failed), append one line under `## Bank push` at the end of the local
@@ -120,7 +117,7 @@ runtime proof, same as every other stage.
 
 1. Once distillation is complete, record completion in `history.log`:
    ```bash
-   scripts/run-history.sh append "$RUN_DIR" distill completed tool=<tool>
+   atry history append "$RUN_DIR" distill completed tool=<tool>
    ```
 
 ## Non-goals for this skill
@@ -130,4 +127,4 @@ runtime proof, same as every other stage.
 - Do not treat a failed or skipped bank push as a reason to change or omit
   content in `distillation.md`.
 - Do not invent a knowledge-bank backend that has no driver in
-  `scripts/bank-push.sh`. See `docs/bank.md` for what is actually implemented.
+  `atry bank push`. See `docs/bank.md` for what is actually implemented.

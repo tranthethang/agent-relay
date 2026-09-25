@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/task-claim.sh
+# scripts/runtime/task-claim.sh
 # Atomic per-task claim/update/release/list for agent-relay parallel mode.
 # Bash 3.2+ compatible, POSIX tools only.
 set -euo pipefail
@@ -488,7 +488,7 @@ check_consistency() {
     if [[ -f "$rollup_file" ]]; then
       if ! cmp -s "$tmp_plan" "$rollup_file"; then
         echo "MISMATCH: $rollup_file does not match the state of $plan_dir/*.status" >&2
-        echo "  This means the rollup was edited by hand, or a task-claim.sh call" >&2
+        echo "  This means the rollup was edited by hand, or a atry claim/update call" >&2
         echo "  never ran, since it was last regenerated. Diff (expected vs actual):" >&2
         diff -u "$tmp_plan" "$rollup_file" >&2 || true
         mismatch=1
@@ -691,7 +691,7 @@ case "$SUBCMD" in
       release_mkdir_mutex
       if [[ "$LOCK_AGE" -ge "$STALE_THRESHOLD" ]]; then
         echo "Error: lock on task '$TASK_ID' is stale (held by $OLD_OWNER for ${LOCK_AGE}s > ${STALE_THRESHOLD}s)." >&2
-        echo "Run: task-claim.sh steal $TARGET $TASK_ID $SESSION_TAG" >&2
+        echo "Run: atry steal $TARGET $TASK_ID $SESSION_TAG" >&2
         exit 1
       fi
       retries=5

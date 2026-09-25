@@ -70,23 +70,19 @@ check_frontmatter "$HOME/.kiro/skills" "kiro"
 
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
 
-# Skill bundles include references/ and scripts/ (not ~/.agent-relay/scripts/)
+# Skill bundles include references/ only; runtime is ~/.agent-relay atry CLI
 [[ -f "$HOME/.cursor/skills/atry-implement/references/file-conventions.md" ]] && \
   pass "bundle references" || fail "bundle references"
-[[ -x "$HOME/.cursor/skills/atry-implement/scripts/task-claim.sh" ]] && \
-  pass "bundle task-claim" || fail "bundle task-claim"
-[[ -x "$HOME/.cursor/skills/atry-implement/scripts/task-init.sh" ]] && \
-  pass "bundle task-init" || fail "bundle task-init"
-[[ -x "$HOME/.cursor/skills/atry-self-review/scripts/review-section.sh" ]] && \
-  pass "bundle review-section" || fail "bundle review-section"
-[[ -x "$HOME/.cursor/skills/atry-implement/scripts/resolve-run.sh" ]] && \
-  pass "bundle resolve-run" || fail "bundle resolve-run"
-[[ -x "$HOME/.cursor/skills/atry-implement/scripts/run-init.sh" ]] && \
-  pass "bundle run-init" || fail "bundle run-init"
-[[ -x "$HOME/.cursor/skills/atry-implement/scripts/run-history.sh" ]] && \
-  pass "bundle run-history" || fail "bundle run-history"
-[[ -x "$HOME/.cursor/skills/atry-implement/scripts/find-agent-relay-dir.sh" ]] && \
-  pass "bundle find-agent-relay-dir" || fail "bundle find-agent-relay-dir"
+[[ ! -e "$HOME/.cursor/skills/atry-implement/scripts" ]] && \
+  pass "no bundle scripts/" || fail "no bundle scripts/"
+[[ -x "$HOME/.agent-relay/bin/atry" ]] && \
+  pass "atry CLI installed" || fail "atry CLI installed"
+[[ -f "$HOME/.agent-relay/lib/task-claim.sh" ]] && \
+  pass "atry lib task-claim" || fail "atry lib task-claim"
+[[ -x "$HOME/.local/bin/atry" ]] && \
+  pass "atry PATH shim" || fail "atry PATH shim"
+out="$("$HOME/.agent-relay/bin/atry" version 2>/dev/null | head -1 || true)"
+[[ -n "$out" ]] && pass "atry version" || fail "atry version"
 [[ -f "$HOME/.cursor/skills/atry-plan/SKILL.md" ]] && pass "atry-plan installed" || fail "atry-plan installed"
 
 # Each installed skill ships its artifact empty-outline templates under references/
@@ -123,13 +119,13 @@ echo "$out" | grep -q ANTIGRAVITY && pass "comma+space" || fail "comma+space"
 
 # Description with apostrophe must survive skill-folder bundle copy.
 DESC="$T/apos-src"
-mkdir -p "$DESC/skills/apos-test/references"
+mkdir -p "$DESC/skills/apos-test/references" "$DESC/scripts/runtime" "$DESC/lib"
 cp "$INSTALL" "$DESC/install.sh"
 cp "$ROOT/targets.conf" "$DESC/"
-cp "$ROOT/lib/bootstrap.sh" "$DESC/lib/bootstrap.sh" 2>/dev/null || {
-  mkdir -p "$DESC/lib"
-  cp "$ROOT/lib/bootstrap.sh" "$DESC/lib/bootstrap.sh"
-}
+cp "$ROOT/lib/bootstrap.sh" "$DESC/lib/bootstrap.sh"
+cp "$ROOT/scripts/atry" "$DESC/scripts/atry"
+cp -R "$ROOT/scripts/runtime/." "$DESC/scripts/runtime/"
+cp "$ROOT/VERSION" "$DESC/VERSION"
 printf '%s\n' '---' 'name: apos-test' "description: Review the user's implementation." '---' '' '# Body' > "$DESC/skills/apos-test/SKILL.md"
 cp "$ROOT/docs/file-conventions.md" "$DESC/skills/apos-test/references/file-conventions.md"
 (

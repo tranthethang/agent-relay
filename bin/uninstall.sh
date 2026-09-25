@@ -485,6 +485,34 @@ for tool in "${TOOLS[@]}"; do
   done
 done
 
+# Remove atry CLI home unless --only/--skill filtered this uninstall to a subset.
+# Full uninstall (no filters): drop ~/.agent-relay and the PATH shim.
+if [[ -z "$ONLY_TOOLS" && -z "$ONLY_SKILLS" ]]; then
+  atry_home="$HOME/.agent-relay"
+  atry_shim="$HOME/.local/bin/atry"
+  if [[ -e "$atry_home" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      echo "  [dry-run] rm -rf $atry_home"
+    else
+      echo "  rm -rf $atry_home"
+      rm -rf "$atry_home"
+    fi
+    removed=$((removed + 1))
+  else
+    echo "  missing: $atry_home"
+    missing=$((missing + 1))
+  fi
+  if [[ -L "$atry_shim" || -f "$atry_shim" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      echo "  [dry-run] rm -f $atry_shim"
+    else
+      echo "  rm -f $atry_shim"
+      rm -f "$atry_shim"
+    fi
+    removed=$((removed + 1))
+  fi
+fi
+
 if [[ "$removed" -eq 0 && "$missing" -eq 0 && "$refused" -eq 0 ]]; then
   echo "Nothing to uninstall (filters matched no tool/skill combinations)." >&2
   exit 1

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] — 2026-09-25
+
+### Changed
+
+- **Breaking (no migrate):** runtime helpers are the `atry` CLI under
+  `~/.agent-relay/` (PATH shim `~/.local/bin/atry`). Skill bundles ship
+  `SKILL.md` + `references/` only — no bundled `scripts/`.
+- Flattened CLI verbs: `atry claim|list|steal|update|…`, plus `resolve`,
+  `run-init`, `history`, `task-init`, `review`, `bank check|push`.
+- Repo layout: `scripts/runtime/` (installed), `scripts/maint/` (sync/release),
+  `scripts/atry` (dispatcher).
+- Installer installs CLI home; reinstall drops legacy `scripts/` inside skill
+  dirs. Symlink-based skill SoT was evaluated and rejected (Antigravity /
+  Claude do not follow escaped skill symlinks).
+
 ### Added
 
 - Kiro as a `skill-folder` install target (`~/.kiro/skills`, same path on
@@ -15,20 +30,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `atry-distill` skill (stage 5): after cross-review (or self-review if
   cross-review was skipped), distills lessons from a run's
   plan/implement-report/review files into `distillation.md`. Calls
-  `scripts/bank-check.sh "$RUN_DIR"` directly to probe reachability.
+  `atry bank check "$RUN_DIR"` to probe reachability.
 - Optional, project-level knowledge-bank connection: `.agent-relay/bank.conf`
   (parsed line-by-line via bash-3.2-safe scalar variables without associative
   arrays, never sourced; blank lines and whole-line `#` comments are ignored,
   keys must start at column 0, and anything else is refused rather than
-  silently skipped), `scripts/bank-check.sh` (probes reachability into
-  `.agent-relay/bank-status.md`), and `scripts/bank-push.sh` (writes the full
+  silently skipped), `atry bank check` (probes reachability into
+  `.agent-relay/bank-status.md`), and `atry bank push` (writes the full
   distillation note; overwrites idempotently for the same run id/title). Schema in
   `bank-status.md` splits `bank_path:` and `bank_endpoint:`. Only the
   `obsidian-vault` backend has a driver; `lightrag-http` / `agentmemory-cli` are
   recorded as reserved, no-op types. Docs: `docs/bank.md`.
-- Shared `.agent-relay/` root finder in `scripts/find-agent-relay-dir.sh`,
-  unified across `resolve-run.sh`, `run-init.sh`, `bank-check.sh`, and
-  `bank-push.sh`.
+- Shared `.agent-relay/` root finder in `scripts/runtime/find-agent-relay-dir.sh`,
+  unified across resolve / run-init / bank helpers.
 - `meta.md` / `history.log` `stage:` enum gains `distill` between
   `cross-review` and `done`.
 - Stage 5 and bank documentation in `docs/architecture.md`,

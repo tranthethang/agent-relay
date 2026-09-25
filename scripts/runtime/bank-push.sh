@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# scripts/bank-push.sh
+# scripts/runtime/bank-push.sh
 # Push one distilled note into the knowledge bank declared in
-# .agent-relay/bank.conf, if scripts/bank-check.sh last recorded it reachable.
+# .agent-relay/bank.conf, if atry bank check last recorded it reachable.
 # Used by the atry-distill skill. See docs/bank.md.
 #
 # This does not judge the note's content and does not retry or queue on
@@ -30,7 +30,7 @@ EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/find-agent-relay-dir.sh
+# shellcheck source=scripts/runtime/find-agent-relay-dir.sh
 source "$SCRIPT_DIR/find-agent-relay-dir.sh"
 
 [[ $# -eq 4 ]] || usage

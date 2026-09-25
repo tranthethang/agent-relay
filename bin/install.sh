@@ -478,9 +478,10 @@ dest_resolves_inside_tool_dir() {
 
 write_skill_folder() {
   # write_skill_folder <skill_src_dir> <dest_skill_md> <tool> <skill_name>
-  # Copies the whole bundle (SKILL.md, references/, scripts/) into the parent
-  # of dest_skill_md. Refuses to wipe an unmanaged destination (no ownership
-  # marker). Records .agent-relay-owned after a successful write.
+  # Copies SKILL.md + references/ into the parent of dest_skill_md. Runtime
+  # helpers are not bundled; they install via install_atry_home → `atry`.
+  # Refuses to wipe an unmanaged destination (no ownership marker).
+  # Records .agent-relay-owned after a successful write.
   local skill_src="$1" dest="$2" tool="$3" skill_name="$4"
   local dest_root
   dest_root="$(dirname "$dest")"
@@ -491,7 +492,7 @@ write_skill_folder() {
 
   if [[ -e "$dest_root" ]] && ! has_valid_ownership_marker "$dest_root" "$skill_name"; then
     # Destination exists but is not owned by agent-relay — do not delete
-    # references/ or scripts/, and do not claim the directory.
+    # references/, and do not claim the directory.
     if [[ -d "$dest_root" ]] && [[ -n "$(ls -A "$dest_root" 2>/dev/null || true)" ]]; then
       echo "Error: refusing to modify unmanaged skill directory '$dest_root' (missing or invalid .agent-relay-owned marker)" >&2
       return 1
@@ -506,13 +507,48 @@ write_skill_folder() {
     mkdir -p "$dest_root/references"
     cp -R "$skill_src/references/." "$dest_root/references/"
   fi
-  if [[ -d "$skill_src/scripts" ]]; then
-    mkdir -p "$dest_root/scripts"
-    cp -R "$skill_src/scripts/." "$dest_root/scripts/"
-    # Intentional: chmod may no-op on empty; ignore if no matches.
-    chmod +x "$dest_root/scripts"/* 2>/dev/null || true
-  fi
   write_ownership_marker "$dest_root" "$tool" "$skill_name"
+}
+
+install_atry_home() {
+  # Install ~/.agent-relay/{bin/atry,lib/*.sh,VERSION} and a PATH shim when
+  # ~/.local/bin exists or can be created. Always runs (not gated by --only).
+  local home_dir bin_dir lib_dir shim version_src
+  home_dir="$HOME/.agent-relay"
+  bin_dir="$home_dir/bin"
+  lib_dir="$home_dir/lib"
+  version_src="$SRC_DIR/VERSION"
+
+  if [[ ! -f "$SRC_DIR/scripts/atry" ]]; then
+    echo "Error: missing $SRC_DIR/scripts/atry" >&2
+    return 1
+  fi
+  if [[ ! -d "$SRC_DIR/scripts/runtime" ]]; then
+    echo "Error: missing $SRC_DIR/scripts/runtime/" >&2
+    return 1
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] install atry CLI -> $home_dir"
+    return 0
+  fi
+
+  mkdir -p "$bin_dir" "$lib_dir"
+  cp "$SRC_DIR/scripts/atry" "$bin_dir/atry"
+  chmod +x "$bin_dir/atry"
+  rm -rf "$lib_dir"
+  mkdir -p "$lib_dir"
+  cp -R "$SRC_DIR/scripts/runtime/." "$lib_dir/"
+  chmod +x "$lib_dir"/*.sh 2>/dev/null || true
+  if [[ -f "$version_src" ]]; then
+    cp "$version_src" "$home_dir/VERSION"
+  fi
+
+  # Prefer ~/.local/bin when present or creatable (XDG-ish, no sudo).
+  mkdir -p "$HOME/.local/bin"
+  shim="$HOME/.local/bin/atry"
+  ln -sfn "$bin_dir/atry" "$shim"
+  echo "atry CLI -> $bin_dir/atry (shim $shim)"
 }
 
 tool_selected() {
@@ -587,6 +623,11 @@ fi
 
 echo "agent-relay: installing globally under \$HOME ($HOME)"
 
+if ! install_atry_home; then
+  echo "Error: failed to install atry CLI under \$HOME/.agent-relay" >&2
+  exit 1
+fi
+
 installed=0
 skipped=0
 
@@ -645,6 +686,7 @@ else
     echo "  ${!dir_var}"
   done
   echo "Tip: run bin/verify.sh (clone) or ./verify.sh (release download) to confirm the install."
-  echo "Tip: each skill bundle includes references/ and scripts/ next to SKILL.md."
+  echo "Tip: runtime helpers are the \`atry\` CLI under \$HOME/.agent-relay (shim: \$HOME/.local/bin/atry)."
+  echo "Tip: each skill bundle includes references/ next to SKILL.md (no bundled scripts/)."
   echo "Tip: add .agent-relay/ to each project's .gitignore if you do not want relay working files committed."
 fi

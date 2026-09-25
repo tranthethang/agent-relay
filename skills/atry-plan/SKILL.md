@@ -7,7 +7,7 @@ description: Create a new run directory under .agent-relay/{YMD}-{RUN_ID}-{RUN_S
 
 You are writing a plan that later stages (`atry-implement`, reviews) will
 consume. Do not implement. Do not call other tools' agents. Produce one plan
-file that `scripts/task-init.sh` can parse without guessing.
+file that `atry task-init` can parse without guessing.
 
 ## Run discovery
 
@@ -32,18 +32,16 @@ git rev-parse HEAD
 
 Do not invent a ref. If git is unavailable, ask the user.
 
-Initialize the run directory with the helper shipped next to this skill:
+Initialize the run directory with `atry` (on PATH after install):
 
 ```bash
-# from skill directory or repo root:
-RUN_DIR="$(scripts/run-init.sh "$id" --slug "$slug" --title "<short title>" --base "<base-ref>")"
+RUN_DIR="$(atry run-init "$id" --slug "$slug" --title "<short title>" --base "<base-ref>")"
 # run-init may bump id on same-second collision; meta.md is canonical:
 id="$(grep -E '^id:' "$RUN_DIR/meta.md" | head -1 | sed 's/^id:[[:space:]]*//')"
 ```
 
 This creates `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`, writes `meta.md`, and starts `history.log`.
 Use the `id` read back from `meta.md` (not the pre-init `date +%s` value) when writing `plan.md`.
-There is no `CURRENT` file — each run is self-contained.
 
 ## Provenance
 
@@ -88,7 +86,7 @@ id: <RUN_ID>
 3. <short description> (deps: T1 T2)
 ```
 
-`run-init.sh` also seeds `meta.md` and `history.log`; see
+`atry run-init` also seeds `meta.md` and `history.log`; see
 `references/meta-template.md` and `references/history-log-template.md` for the
 empty outlines of those files.
 
@@ -107,8 +105,7 @@ After writing the plan, optionally validate with the implement skill's helper
 if available in this environment:
 
 ```bash
-# from a checkout of agent-relay, or after install from the implement bundle:
-scripts/task-init.sh "$RUN_DIR"
+atry task-init "$RUN_DIR"
 ```
 
 `task-init` must create exactly as many `.status` files as numbered tasks.

@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# scripts/atry — agent-relay CLI (flatten verbs at top level).
+# Installed as ~/.agent-relay/bin/atry with helpers in ~/.agent-relay/lib/.
+# From a clone, run as scripts/atry with helpers in scripts/runtime/.
+# Bash 3.2+ compatible, POSIX tools only.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  atry version
+  atry resolve [<RUN_ID> | <path>]
+  atry run-init <RUN_ID> --slug <slug> [--title <title>] [--base <base-ref>] [--tool <tool>]
+  atry history append <run-dir-or-id> <stage> <action> [k=v ...]
+  atry history show <run-dir-or-id>
+  atry task-init <id-or-path>
+  atry [--session <tag>] [--allow-skipped-deps] claim|steal|update|release|list|rollup|check|report-write|report-list|report-rollup ...
+  atry review upsert <file> <"Self-Review"|"Cross-Review"> <YYYY-MM-DD> <body-file|->
+  atry bank check [<start-dir>]
+  atry bank push <start-dir> <run-id-or-slug> <title> <body-file-or-->
+
+Task helpers map 1:1 to scripts/runtime/task-claim.sh subcommands, flattened:
+  atry list <id>
+  atry claim <id> <task-id> <session-tag>
+  … (same argv as task-claim.sh after the subcommand name)
+
+Global flags --session / --allow-skipped-deps may appear before the task verb
+(same as historical task-claim.sh).
+EOF
+  exit 1
+}
+
+resolve_lib() {
+  local self root
+  self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  if [[ -d "$self/runtime" && -f "$self/runtime/task-claim.sh" ]]; then
+    ATRY_LIB="$self/runtime"
+    ATRY_ROOT="$(cd "$self/.." && pwd -P)"
+    return 0
+  fi
+  root="$(cd "$self/.." && pwd -P)"
+  if [[ -d "$root/lib" && -f "$root/lib/task-claim.sh" ]]; then
+    ATRY_LIB="$root/lib"
+    ATRY_ROOT="$root"
+    return 0
+  fi
+  echo "Error: cannot find atry helpers (expected scripts/runtime/ or \$HOME/.agent-relay/lib/)" >&2
+  exit 1
+}
+
+run_helper() {
+  local helper="$1"
+  shift
+  if [[ ! -f "$ATRY_LIB/$helper" ]]; then
+    echo "Error: missing helper $ATRY_LIB/$helper" >&2
+    exit 1
+  fi
+  exec bash "$ATRY_LIB/$helper" "$@"
+}
+
+resolve_lib
+
+if [[ $# -lt 1 ]]; then
+  usage
+fi
+
+# Leading globals for task-claim (historical: flags before subcommand).
+TASK_GLOBALS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --session)
+      [[ $# -ge 2 ]] || { echo "Error: --session requires a value" >&2; exit 1; }
+      TASK_GLOBALS+=("$1" "$2")
+      shift 2
+      ;;
+    --allow-skipped-deps)
+      TASK_GLOBALS+=("$1")
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+[[ $# -ge 1 ]] || usage
+
+cmd="$1"
+shift
+
+case "$cmd" in
+  -h|--help|help)
+    usage
+    ;;
+  version)
+    if [[ -f "$ATRY_ROOT/VERSION" ]]; then
+      tr -d '[:space:]' < "$ATRY_ROOT/VERSION"
+      echo
+    else
+      echo "unknown"
+    fi
+    echo "lib=$ATRY_LIB"
+    exit 0
+    ;;
+  resolve)
+    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for resolve" >&2; exit 1; }
+    run_helper resolve-run.sh "$@"
+    ;;
+  run-init)
+    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for run-init" >&2; exit 1; }
+    run_helper run-init.sh "$@"
+    ;;
+  history)
+    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for history" >&2; exit 1; }
+    [[ $# -ge 1 ]] || usage
+    run_helper run-history.sh "$@"
+    ;;
+  task-init)
+    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for task-init" >&2; exit 1; }
+    run_helper task-init.sh "$@"
+    ;;
+  claim|steal|update|release|list|rollup|check|report-write|report-list|report-rollup)
+    if [[ ${#TASK_GLOBALS[@]} -gt 0 ]]; then
+      run_helper task-claim.sh "${TASK_GLOBALS[@]}" "$cmd" "$@"
+    else
+      run_helper task-claim.sh "$cmd" "$@"
+    fi
+    ;;
+  review)
+    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for review" >&2; exit 1; }
+    [[ $# -ge 1 ]] || usage
+    run_helper review-section.sh "$@"
+    ;;
+  bank)
+    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for bank" >&2; exit 1; }
+    [[ $# -ge 1 ]] || usage
+    sub="$1"
+    shift
+    case "$sub" in
+      check) run_helper bank-check.sh "$@" ;;
+      push)  run_helper bank-push.sh "$@" ;;
+      *)
+        echo "Error: unknown bank subcommand '$sub' (check|push)" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *)
+    echo "Error: unknown command '$cmd'" >&2
+    usage
+    ;;
+esac

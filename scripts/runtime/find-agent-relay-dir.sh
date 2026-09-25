@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/find-agent-relay-dir.sh
+# scripts/runtime/find-agent-relay-dir.sh
 # Resolve the .agent-relay/ directory for a given start directory (or cwd).
 # Walks up looking for an existing .agent-relay/, or the nearest .git root.
 # Bash 3.2+ compatible, POSIX tools only.

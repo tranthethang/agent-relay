@@ -10,19 +10,16 @@ re-plan from scratch — decompose and execute the plan that already exists.
 
 ## Run discovery
 
-Resolve the run directory before reading or writing artifacts. Call the helper
-shipped beside this skill:
+Resolve the run directory before reading or writing artifacts:
 
 ```bash
-RUN_DIR="$(scripts/resolve-run.sh [RUN_ID or path])"
+RUN_DIR="$(atry resolve [RUN_ID or path])"
 ```
 
-If the user passed a `RUN_ID` or a path under a run directory, pass it to the
-helper. If no argument is passed and exactly one run directory exists,
-`resolve-run.sh` will resolve it automatically. If it exits non-zero (ambiguous
-or not found), ask the user for the `RUN_ID` or path.
-
-There is no `CURRENT` file — do not look for or write `CURRENT`.
+If the user passed a `RUN_ID` or a path under a run directory, pass it to
+`atry resolve`. If no argument is passed and exactly one run directory exists,
+it resolves automatically. If it exits non-zero (ambiguous or not found), ask
+the user for the `RUN_ID` or path.
 
 ## Inputs
 
@@ -55,23 +52,23 @@ directory, not the `.md` file) already exists for the resolved run.
 - If it does **not** exist: proceed with the default sequential instructions
   below (hand-write `$RUN_DIR/implement-plan.md` / `$RUN_DIR/implement-report.md`).
 - If it **does** exist: a parallel-mode run was already initialized for this
-  run (via `task-init.sh`, by you or another agent). You must use
-  `scripts/task-claim.sh` (see "Parallel mode" below) for every further
-  status and report write for the rest of this run. Do **not** hand-edit
+  run (via `atry task-init`, by you or another agent). You must use
+  `atry` claim/update/release/list/… (see "Parallel mode" below) for every
+  further status and report write for the rest of this run. Do **not** hand-edit
   `implement-plan.md` or `implement-report.md` directly — both are
   generated rollups; a run has previously been left with `.status` files
   stuck at `pending` while an agent hand-wrote `[done]` straight into the
   rollup, which silently desyncs the two and defeats the per-task
   claim/lock protocol for anyone who joins later. Run
-  `scripts/task-claim.sh check "$RUN_DIR"` at any point to confirm the rollups
+  `atry check "$RUN_DIR"` at any point to confirm the rollups
   still match the per-task files; a `MISMATCH` means something wrote to a
-  rollup outside `task-claim.sh`.
+  rollup outside `atry`.
 
 ## Instructions
 
 1. Resolve `$RUN_DIR` as above. Record stage start in `history.log`:
    ```bash
-   scripts/run-history.sh append "$RUN_DIR" implement started tool=<tool>
+   atry history append "$RUN_DIR" implement started tool=<tool>
    ```
    Read the plan file fully before writing any code. Identify each discrete task.
    If the plan has no `base:` git ref, record one now (`git rev-parse HEAD`) at the top
@@ -113,7 +110,7 @@ directory, not the `.md` file) already exists for the resolved run.
 
 1. Once all tasks are complete, record completion in `history.log`:
    ```bash
-   scripts/run-history.sh append "$RUN_DIR" implement completed tool=<tool>
+   atry history append "$RUN_DIR" implement completed tool=<tool>
    ```
 
 ## Parallel mode
@@ -123,39 +120,44 @@ The default behavior above (sequential, "one at a time" on a single shared
 are explicitly invoked in parallel mode across multiple sub-agents (separate
 sessions).
 
-Call the helpers shipped next to this skill (paths relative to this `SKILL.md`):
+Require the `atry` CLI on PATH (installed to `~/.agent-relay/bin/atry`, with a
+shim at `~/.local/bin/atry`). Flattened verbs:
 
 ```bash
-TASK_INIT="scripts/task-init.sh"
-TASK_CLAIM="scripts/task-claim.sh"
+atry task-init "$RUN_DIR"
+atry list "$RUN_DIR"
+atry claim "$RUN_DIR" <task-id> <session-tag>
+atry update "$RUN_DIR" <task-id> <session-tag> done
+atry release "$RUN_DIR" <task-id> <session-tag>
+atry report-write "$RUN_DIR" <task-id> <session-tag> -
 ```
 
-1. **Setup**: Run `"$TASK_INIT" "$RUN_DIR"` instead of hand-writing
+1. **Setup**: Run `atry task-init "$RUN_DIR"` instead of hand-writing
    `implement-plan.md`. This creates `implement-plan/`, `implement-report/`, and
    their rollup files. Per-task `.status` files follow
    `references/task-status-template.md`.
 
 2. **Per sub-agent loop**:
-   - Run `"$TASK_CLAIM" list "$RUN_DIR"`.
+   - Run `atry list "$RUN_DIR"`.
    - Pick one `pending` task whose deps are claimable (list shows `[blocked: …]`
      when they are not).
-   - Attempt to claim it with `"$TASK_CLAIM" claim "$RUN_DIR" <task-id> <session-tag>`.
+   - Attempt to claim it with `atry claim "$RUN_DIR" <task-id> <session-tag>`.
    - If the claim fails, pick a different pending task or stop.
    - Implement only that task's files (disjoint file sets in one worktree, or
      one worktree/agent when files overlap — claim does not protect content).
-   - Update with `"$TASK_CLAIM" update "$RUN_DIR" <task-id> <session-tag> done`
+   - Update with `atry update "$RUN_DIR" <task-id> <session-tag> done`
      (or `skipped <reason>`).
    - Write the task's report **before releasing** (step 4) — `report-write`
      requires you to still hold the task's lock.
-   - Release with `"$TASK_CLAIM" release "$RUN_DIR" <task-id> <session-tag>`.
+   - Release with `atry release "$RUN_DIR" <task-id> <session-tag>`.
 
 3. **File scoping rule in parallel mode**:
    Do not touch any file owned by another task that is still `pending` or
    `in-progress` under a lock you do not hold. Report the conflict instead.
 
 4. **Implementation report in parallel mode**:
-   Use `"$TASK_CLAIM" report-write "$RUN_DIR" <task-id> <session-tag> -`
-   (stdin) or `"$TASK_CLAIM" report-write "$RUN_DIR" <task-id> <session-tag> <file>"`
+   Use `atry report-write "$RUN_DIR" <task-id> <session-tag> -`
+   (stdin) or `atry report-write "$RUN_DIR" <task-id> <session-tag> <file>`
    under `$RUN_DIR/implement-report/<task-id>.md`. Run this while you still
    hold the lock, before `release`: the session-tag must match the current lock
    owner, and after a release the task is unlocked so `report-write` refuses

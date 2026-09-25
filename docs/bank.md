@@ -6,7 +6,7 @@ run finishes. This is project-level configuration — one bank per repo, declare
 once at `.agent-relay/bank.conf` — not per-run.
 
 This is not a runtime and does not run in the background. Nothing here
-polls, syncs, or watches the bank. `bank-check.sh` and `bank-push.sh` are
+polls, syncs, or watches the bank. `atry bank check` and `atry bank push` are
 one-shot helpers an agent runs when a skill tells it to.
 
 ## What this is not
@@ -25,7 +25,7 @@ one-shot helpers an agent runs when a skill tells it to.
 ## `bank.conf`
 
 Lives at `.agent-relay/bank.conf` in the target repo. Plain `BANK_KEY=value`
-lines only — `scripts/bank-check.sh` parses it line-by-line and never
+lines only — `atry bank check` parses it line-by-line and never
 sources or evals it. A line with `$()`, backticks, `;`, `&&`, `||`, a pipe,
 or a redirect is refused outright, and parsing stops at the first offending
 line.
@@ -48,19 +48,19 @@ BANK_PATH=/absolute/path/to/your/vault
 | `lightrag-http` | Reserved, no driver yet | Would need `BANK_ENDPOINT` and real network egress from wherever the agent runs |
 | `agentmemory-cli` | Reserved, no driver yet | Would need a resolvable CLI command; not wired up |
 
-Declaring `lightrag-http` or `agentmemory-cli` today is harmless: `bank-check.sh`
+Declaring `lightrag-http` or `agentmemory-cli` today is harmless: `atry bank check`
 records them as `reachable: false` with a `detail` explaining there is no
-driver, and `bank-push.sh` refuses (exit `2`) rather than pretending to push.
+driver, and `atry bank push` refuses (exit `2`) rather than pretending to push.
 This is intentional — a stub push that silently no-ops would defeat the
 config check having any use at all.
 
-## `bank-check.sh`
+## `atry bank check`
 
 ```bash
-scripts/bank-check.sh [<start-dir>]
+atry bank check [<start-dir>]
 ```
 
-Walks up from `<start-dir>` (default: cwd) the same way `resolve-run.sh`
+Walks up from `<start-dir>` (default: cwd) the same way `atry resolve`
 does, looking for an existing `.agent-relay/`, or the nearest `.git` root if
 none exists yet. Writes `.agent-relay/bank-status.md`:
 
@@ -77,18 +77,18 @@ detail: vault directory exists and is writable
 No `bank.conf` is a normal, supported state (`configured: false`), not an
 error — most target repos will never set one up. A malformed `bank.conf`
 (anything not `BANK_KEY=value`, or a value with the unsafe characters above)
-is a hard refusal: `bank-check.sh` still exits `1` (so a caller/script that
+is a hard refusal: `atry bank check` still exits `1` (so a caller/script that
 checks the exit code learns something needs fixing), and it also
 **overwrites `bank-status.md`** with `reachable: false` and a `detail`
 naming the offending line, in the same step, before exiting. Refusing to
 parse further (the exit code) and recording the truth (the status file) are
 deliberately independent: a config regression can never leave a stale
-`reachable: true` behind for `bank-push.sh` to trust. Same refuse-rather-
+`reachable: true` behind for `atry bank push` to trust. Same refuse-rather-
 than-guess posture as `targets.conf`'s allowlist, just without the
 side effect of also going silent about the current state.
 
 Run it fresh before every push regardless. Reachability can change between
-runs for reasons `bank-check.sh` has no way to detect on its own (the vault
+runs for reasons `atry bank check` has no way to detect on its own (the vault
 path moves, a drive unmounts) — `bank-status.md` is only ever as current as
 the last time this script actually ran.
 
@@ -97,10 +97,10 @@ permission bits. When running as `root` (e.g. in some container or CI
 environments), `[[ -w ]]` reports true even if the target filesystem is mounted
 read-only. Treat reachability as advisory in such environments.
 
-## `bank-push.sh`
+## `atry bank push`
 
 ```bash
-scripts/bank-push.sh <start-dir> <run-id-or-slug> <title> <body-file-or-->
+atry bank push <start-dir> <run-id-or-slug> <title> <body-file-or-->
 ```
 
 Refuses (exit `2`, not a hard failure) unless the most recent
@@ -111,7 +111,7 @@ with a small frontmatter block (`source`, `run`, `date`) and the given body
 note, not a condensed summary or a note with links back to the run directory).
 Never overwrites an existing bank note with a different run id — the
 filename includes the run id specifically to avoid collisions across runs on
-the same day. Conversely, re-running `bank-push.sh` for the same run id and
+the same day. Conversely, re-running `atry bank push` for the same run id and
 title overwrites that run's existing bank note at the same deterministic path
 rather than versioning or appending.
 
@@ -127,13 +127,13 @@ Same honesty standard as [security.md](security.md):
 | --- | --- | --- |
 | `bank.conf` line parser | Refuses obvious RCE shapes and non-`BANK_KEY=value` lines before ever writing a status file | A proof that the declared path/endpoint is itself safe, or that pushed content is sound |
 | `bank-status.md` | A point-in-time reachability probe | A guarantee the bank stays reachable until the push actually runs |
-| `bank-push.sh` obsidian-vault write | A plain markdown file on disk at a deterministic path | Confirmation your notes app indexed it, or that the note is any good |
+| `atry bank push` obsidian-vault write | A plain markdown file on disk at a deterministic path | Confirmation your notes app indexed it, or that the note is any good |
 
 ## Adding a real second backend later
 
 If `lightrag-http` or `agentmemory-cli` gets implemented, follow the pattern
 already used for `obsidian-vault` in both scripts: one `case` branch in
-`bank-check.sh` that probes reachability without mutating anything, and one
-`case` branch in `bank-push.sh` that writes/POSTs the note. Keep the "record,
+`atry bank check` that probes reachability without mutating anything, and one
+`case` branch in `atry bank push` that writes/POSTs the note. Keep the "record,
 don't enforce" posture — a failed push is always a soft failure (exit `2`)
 for the calling skill, never a reason to fabricate success.

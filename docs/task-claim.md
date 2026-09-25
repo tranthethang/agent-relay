@@ -1,12 +1,12 @@
-# Parallel task helpers (`task-claim` / `task-init`)
+# Parallel task helpers (`atry` claim / `atry task-init`)
 
 Optional protocol for several agents sharing one run `<id>`. Default implement
 flow stays sequential (single `implement-plan.md` / `implement-report.md` inside
 the run folder).
 
-Canonical sources: `scripts/task-init.sh`, `scripts/task-claim.sh`. Bundled
-copies under `skills/atry-implement/scripts/` must match
-(`scripts/sync-references.sh`). Coverage: `tests/tasks.sh`.
+Canonical sources: `scripts/atry` + `scripts/runtime/task-init.sh` /
+`scripts/runtime/task-claim.sh` (invoked as flattened `atry …` verbs). Skill
+bundles do not ship `scripts/`. Coverage: `tests/tasks.sh`.
 
 Artifact layout and status field semantics:
 [file-conventions.md](file-conventions.md) (sections on parallel mode).
@@ -25,8 +25,7 @@ source files — it does not.
 From the target repo (walks up to find `.agent-relay/`):
 
 ```bash
-# next to SKILL.md after install, or from this repo's scripts/
-scripts/task-init.sh <id>
+atry task-init <id>
 ```
 
 Creates `implement-plan/` (`*.status`, `.order`, optional `_meta.md`) and

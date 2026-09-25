@@ -11,8 +11,10 @@ skills/<name>/
   references/           # optional but every current skill ships file-conventions.md
     file-conventions.md # MUST match docs/file-conventions.md (sync script)
     *-template.md       # empty outlines for artifacts that skill writes
-  scripts/              # optional — copies of repo scripts/<same-name>.sh
 ```
+
+Bundles must **not** contain `scripts/`. Runtime helpers are the `atry` CLI
+(`scripts/atry` + `scripts/runtime/`), installed under `~/.agent-relay/`.
 
 Front matter (checked loosely by smoke after install):
 
@@ -34,47 +36,42 @@ description: One or two sentences; tools use this for discovery.
    `tool=` / `model=` when known, else `unknown`. Do not invent. Date via
    `date +%F`.  
 3. **Id resolution** — follow [file-conventions.md](file-conventions.md):
-   user path/id → single `{YMD}-{id}-{slug}` folder → ask. Use `scripts/resolve-run.sh`.
-   There is no `CURRENT` file; each run is self-contained.  
+   user path/id → single `{YMD}-{id}-{slug}` folder → ask. Use `atry resolve`.  
+
 4. **Project rules in the target repo** — typical precedence called out in
    implement skill: `AGENTS.md`, then tool-native rules, then `CLAUDE.md`-like
    files. Do not impose a foreign style guide.  
-5. **Parallel mode** — if `implement-plan/` exists, require `task-claim.sh` for
-   status/report writes; forbid hand-editing rollups; point at `check`. See
-   [task-claim.md](task-claim.md).  
+5. **Parallel mode** — if `implement-plan/` exists, require `atry` claim
+   helpers for status/report writes; forbid hand-editing rollups; point at
+   `atry check`. See [task-claim.md](task-claim.md).  
 6. **Cross-review** — ask for a different tool/model than self-review.
-   `review-section.sh` may **warn** on matching provenance; it must not hard-
-   fail the upsert (project philosophy). Both review skills share
+   `atry review` may **warn** on matching provenance; it must not hard-fail
+   the upsert (project philosophy). Both review skills share
    `reviewer-conduct.md` (escalate genuine tradeoffs; re-derive evidence
    before accepting claims). Self-review adds a broad-vision lens; cross-review
    uses inverted-question framing — see those `SKILL.md` files.  
+7. **Call `atry`, not long absolute paths.** Skills should document short
+   `atry …` commands so agents do not expand helper paths under each tool’s
+   skill directory.
 
 ## Sync workflow
 
 | Source | Copy |
 | --- | --- |
 | `docs/file-conventions.md` | `skills/*/references/file-conventions.md` |
-| `scripts/<file>.sh` | `skills/<skill>/scripts/<file>.sh` (only if the bundle lists that script) |
 | `skills/atry-self-review/references/review-*-template.md` | `skills/atry-cross-review/references/review-*-template.md` (must stay byte-identical) |
 | `skills/atry-self-review/references/reviewer-conduct.md` | `skills/atry-cross-review/references/reviewer-conduct.md` (must stay byte-identical) |
 
 ```bash
-# after editing docs/file-conventions.md, scripts/*.sh, review templates, or reviewer-conduct.md
-bash scripts/sync-references.sh
-bash scripts/sync-references.sh --check
+# after editing docs/file-conventions.md, review templates, or reviewer-conduct.md
+bash scripts/maint/sync-references.sh
+bash scripts/maint/sync-references.sh --check
 ```
 
-Hand-editing only the copy under `skills/*/references/` or `skills/*/scripts/`
-will be overwritten or fail CI `--check`. Add a new helper by placing it in
-`scripts/` first, then copying into the skill(s) that need it (or extend the
-sync script’s expectations by adding the file under the bundle and syncing).
-
-Which scripts belong to which bundle is defined by `get_skill_scripts()` in
-`scripts/sync-references.sh`:
-- `atry-plan`: `find-agent-relay-dir.sh`, `resolve-run.sh`, `run-init.sh`, `run-history.sh`
-- `atry-implement`: `find-agent-relay-dir.sh`, `resolve-run.sh`, `run-init.sh`, `run-history.sh`, `task-init.sh`, `task-claim.sh`
-- `atry-self-review` / `atry-cross-review`: `find-agent-relay-dir.sh`, `resolve-run.sh`, `run-history.sh`, `review-section.sh`
-- `atry-distill`: `find-agent-relay-dir.sh`, `resolve-run.sh`, `run-history.sh`, `bank-check.sh`, `bank-push.sh`
+Hand-editing only the copy under `skills/*/references/` will be overwritten or
+fail CI `--check`. Runtime helpers: edit `scripts/runtime/` (and `scripts/atry`
+if the dispatcher changes), then re-run `./bin/install.sh` to refresh
+`~/.agent-relay`.
 
 Empty artifact outlines live in each skill's `references/*-template.md`.
 `SKILL.md` should tell the agent to read those files before writing the
@@ -83,28 +80,13 @@ matching runtime artifact. Review report/walkthrough templates and
 `atry-cross-review`; edit the self-review copy and re-run sync so both stay
 identical.
 
-Skills with **no** `scripts/` (e.g. historical empty bundles) are fine; sync
-skips empty script dirs (bash 3.2 + `set -u` safe).
-
 ## Adding a skill
 
-1. Create `skills/<name>/SKILL.md` with valid front matter.  
-2. Add `references/file-conventions.md` via `sync-references.sh`.  
-3. Add any `scripts/` needed; keep them byte-identical to `scripts/`.  
-4. Re-run `./bin/install.sh` (or `--skill <name>`) to dogfood.  
-5. Extend smoke if the skill should appear in default install expectations.  
-6. Mention it in the root README stages table if it is part of the public flow.  
+1. Create `skills/<name>/SKILL.md` with front matter.  
+2. Add `references/` as needed; include `file-conventions.md` via sync.  
+3. Document `atry` commands the agent should run.  
+4. Extend `tests/smoke.sh` if the new skill should be installed in smoke.  
+5. Document the stage in the root README table if it is part of the public
+   flow.  
 
-## Dogfooding
-
-Install from the clone overwrites user skill dirs for selected tools. Use
-`--only` / `--skill` to limit blast radius. `--no-clobber` skips existing
-destinations (useful when you do not want to clobber local edits in `~`).
-
-## Anti-patterns
-
-- Promising “enforcement” in skill text when only a script warning or nothing
-  exists  
-- Duplicating long convention text inside `SKILL.md` instead of pointing at
-  `references/file-conventions.md`  
-- Committing divergent bundle script copies without updating `scripts/`  
+Then `./bin/install.sh` and `./bin/verify.sh`.
