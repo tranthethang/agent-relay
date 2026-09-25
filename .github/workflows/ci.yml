@@ -20,10 +20,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check bootstrap sync
-        run: bash ./scripts/sync-bootstrap.sh --check
+        run: bash ./scripts/maint/sync-bootstrap.sh --check
 
-      - name: Check skill bundle sync (references + scripts)
-        run: bash ./scripts/sync-references.sh --check
+      - name: Check skill bundle sync (references)
+        run: bash ./scripts/maint/sync-references.sh --check
 
       - name: Run local smoke tests
         run: bash ./tests/smoke.sh
@@ -49,4 +49,4 @@ jobs:
       - name: Run shellcheck
         # Severity floor: -S error (see CONTRIBUTING.md). Tighten toward
         # -S warning once existing warnings are cleared.
-        run: shellcheck -S error bin/*.sh scripts/*.sh lib/*.sh tests/*.sh skills/*/scripts/*.sh
+        run: shellcheck -S error bin/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh lib/*.sh tests/*.sh

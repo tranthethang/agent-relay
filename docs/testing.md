@@ -9,24 +9,24 @@ app loaded an installed bundle.
 make test                 # smoke + tasks + remote smoke
 make smoke                # same as test today
 ./tests/smoke.sh          # install / uninstall / verify under fake HOME
-./tests/tasks.sh          # task-init / task-claim / review-section
+./tests/tasks.sh          # atry task-init / claim / review helpers
 ./tests/smoke-remote.sh   # --ref path with stubbed curl + fixtures
 ```
 
 Also required before claiming a change that touches sync surfaces:
 
 ```bash
-bash scripts/sync-bootstrap.sh --check
-bash scripts/sync-references.sh --check
-bash -n bin/*.sh lib/*.sh scripts/*.sh tests/*.sh
+bash scripts/maint/sync-bootstrap.sh --check
+bash scripts/maint/sync-references.sh --check
+bash -n bin/*.sh lib/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh tests/*.sh
 ```
 
 CI (`.github/workflows/ci.yml`):
 
 - Matrix: `ubuntu-latest`, `macos-latest` — both sync checks + all three test
   scripts  
-- `shellcheck -S error` on `bin/`, `scripts/`, `lib/`, `tests/`, and
-  `skills/*/scripts/`  
+- `shellcheck -S error` on `bin/`, `scripts/atry`, `scripts/runtime/`,
+  `scripts/maint/`, `lib/`, `tests/`  
 
 Severity floor is **error**, not warning: warning-level findings still exist
 on purpose until cleaned up (see `CONTRIBUTING.md`).
@@ -36,10 +36,11 @@ on purpose until cleaned up (see `CONTRIBUTING.md`).
 ### `tests/smoke.sh`
 
 - Installs into a temporary `HOME` (never your real skill dirs)  
-- Per-tool skill-folder paths for cursor / antigravity / claude / codex  
+- Per-tool skill-folder paths for cursor / antigravity / claude / codex / kiro  
 - Front-matter: each installed `SKILL.md` starts with `---` and has non-empty
   `name:` / `description:` inside that block  
-- Bundle `references/` + executable helpers present under each skill folder  
+- Bundle `references/` present; no skill `scripts/`; `~/.agent-relay` `atry`
+  CLI + PATH shim  
 - Ownership marker `.agent-relay-owned`; uninstall refuses unmarked dirs;
   `--force` uninstall; symlink destination outside tool dir refused  
 - Flag edge cases: `--only`, unknown tool/skill, `--no-clobber`, `--target`
@@ -56,9 +57,10 @@ on purpose until cleaned up (see `CONTRIBUTING.md`).
   steal, update vs steal, release vs release  
 - Rejected inputs: invalid init status / dependency id, failed-init cleanup,
   unowned `report-write` (and `--force` history)  
-- `review-section.sh` upsert idempotency, fenced headings (char/length/indent),
+- `atry review` upsert idempotency, fenced headings (char/length/indent),
   same-tool warning, fence-aware provenance  
-- `sync-references.sh --check` and drift detection  
+- `scripts/maint/sync-references.sh --check` and drift / orphan-scripts
+  detection  
 
 ### `tests/smoke-remote.sh`
 
@@ -76,9 +78,10 @@ Requires fixtures under `tests/fixtures/` (script errors clearly if missing).
 3. For bash heredocs that embed `` ``` `` or `$()`, use `printf` / quoted
    heredocs — unquoted `<<EOF` expands backticks (already burned once in
    review-section tests).  
-4. After changing canonical `scripts/*.sh` or `docs/file-conventions.md`, run
-   `sync-references.sh` (not only `--check`) so bundle copies match before CI.  
-5. After changing `lib/bootstrap.sh`, run `sync-bootstrap.sh`.  
+4. After changing `scripts/runtime/` or `docs/file-conventions.md`, run
+   `scripts/maint/sync-references.sh` (not only `--check`) and reinstall so
+   `~/.agent-relay` matches before dogfooding.  
+5. After changing `lib/bootstrap.sh`, run `scripts/maint/sync-bootstrap.sh`.  
 
 ## What green CI does *not* mean
 

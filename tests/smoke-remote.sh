@@ -213,7 +213,7 @@ fi
 
 # 13. Remote --only is forwarded to the extracted installer.
 # Fixture installs cursor and antigravity; --only cursor must skip antigravity.
-rm -rf "$HOME/.cursor" "$HOME/.gemini" "$HOME/.claude" "$HOME/.codex"
+rm -rf "$HOME/.cursor" "$HOME/.gemini" "$HOME/.claude" "$HOME/.codex" "$HOME/.kiro"
 "$RUN_DIR/install.sh" --ref v0.1.0 --only cursor >/dev/null
 if [[ -f "$HOME/.cursor/skills/atry-implement/SKILL.md" && ! -e "$HOME/.gemini/config/skills/atry-implement" ]]; then
   pass "remote --only cursor is forwarded"
@@ -222,7 +222,7 @@ else
 fi
 
 # 14. Remote --dry-run writes nothing
-rm -rf "$HOME/.cursor" "$HOME/.gemini"
+rm -rf "$HOME/.cursor" "$HOME/.gemini" "$HOME/.kiro"
 "$RUN_DIR/install.sh" --ref v0.1.0 --dry-run >/dev/null
 if [[ ! -e "$HOME/.cursor/skills/atry-implement" && ! -e "$HOME/.gemini/config/skills/atry-implement" ]]; then
   pass "remote --dry-run writes nothing"
@@ -232,7 +232,7 @@ fi
 
 # 15. Clone --ref installs the archive, not the working tree, and forwards --only.
 # Working tree has three skills; the fixture has only atry-implement.
-rm -rf "$HOME/.cursor" "$HOME/.gemini"
+rm -rf "$HOME/.cursor" "$HOME/.gemini" "$HOME/.kiro"
 "$ROOT_DIR/bin/install.sh" --ref v0.1.0 --only cursor >/dev/null
 if [[ -f "$HOME/.cursor/skills/atry-implement/SKILL.md" \
   && ! -e "$HOME/.cursor/skills/atry-self-review" \

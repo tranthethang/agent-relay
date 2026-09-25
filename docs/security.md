@@ -26,9 +26,11 @@ installer plus markdown instructions — not a hardened supply-chain product.
 - Download path (`--ref`) uses the same bootstrap helpers; pinning `--sha256`
   for commit tarballs is available and recommended when you need a content pin.  
 - Each installed skill bundle directory gets `.agent-relay-owned`. Install will
-  not wipe `references/` / `scripts/` in a directory that lacks a valid marker.
+  not wipe `references/` in a directory that lacks a valid marker.
   Uninstall refuses such directories unless `--force`. Install also refuses a
-  skill destination that is a symlink resolving outside the tool’s skills dir.  
+  skill destination that is a symlink resolving outside the tool’s skills dir.
+  (Skill bundles no longer ship `scripts/`; runtime is `~/.agent-relay` /
+  `atry`.)
 
 Treat a downloaded `install.sh` like any other script you run as your user:
 read it, prefer pins, limit `--only` if experimenting.

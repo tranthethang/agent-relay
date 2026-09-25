@@ -2,15 +2,17 @@
 
 [![CI](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml)
 
-Markdown skill **bundles** plus a bash installer. Each skill is a folder
-(`SKILL.md`, `references/`, optional `scripts/`) that tells an agent how to
-plan, implement, self-review, and cross-review work under `.agent-relay/`. The
-installer copies each bundle into every supported tool’s global skill directory.
+Markdown skill **bundles** plus a bash installer and the `atry` CLI. Each skill
+is a folder (`SKILL.md`, `references/`) that tells an agent how to plan,
+implement, self-review, and cross-review work under `.agent-relay/`. The
+installer copies each bundle into every supported tool’s global skill directory
+and installs runtime helpers as `~/.agent-relay/bin/atry` (PATH shim:
+`~/.local/bin/atry`).
 
 This repo does **not** run the stages, pick a model, talk to an agent runtime,
 or prove that following the skills improves outcomes. CI checks the installer
 (local and simulated release-download smoke), shellcheck, reference and
-bootstrap sync, and the task scripts. It does not check whether an agent
+bootstrap sync, and the task helpers. It does not check whether an agent
 follows a skill.
 
 Agent-oriented notes for editing **this** repo: [`AGENTS.md`](AGENTS.md).
@@ -26,13 +28,13 @@ Maintainer docs (architecture, installer, tests, release, …):
 - Not a guarantee that every listed tool loads the installed files the same
   way. Install only copies files to known paths. Smoke tests check that each
   installed `SKILL.md` has non-empty front-matter `name:` / `description:` —
-  not that Cursor, Antigravity, Claude, or Codex actually load the skill.
+  not that Cursor, Antigravity, Claude, Codex, or Kiro actually load the skill.
 
 ## Stages
 
 | Order | Skill | What it is expected to do |
 | ----- | ----- | ------------------------- |
-| 1 | [`skills/atry-plan/`](skills/atry-plan/) | Write `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md` (schema + `run-init.sh`) |
+| 1 | [`skills/atry-plan/`](skills/atry-plan/) | Write `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md` (schema + `atry run-init`) |
 | 2 | [`skills/atry-implement/`](skills/atry-implement/) | Implement that plan; write `implement-plan` / `implement-report` |
 | 3 | [`skills/atry-self-review/`](skills/atry-self-review/) | Review the diff; upsert a dated `Self-Review` section |
 | 4 | [`skills/atry-cross-review/`](skills/atry-cross-review/) | Upsert a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that. |
@@ -45,9 +47,10 @@ outlines for each artifact live in that skill's `references/*-template.md`
 (installed with the bundle). Writing or changing skills:
 [`docs/skills-authoring.md`](docs/skills-authoring.md).
 
-After you change files under `skills/`, run `./bin/install.sh` again. Keep
-`docs/file-conventions.md` and the copies under `skills/*/references/` in sync
-with `bash scripts/sync-references.sh` (CI runs `--check`).
+After you change files under `skills/` or `scripts/runtime/`, run
+`./bin/install.sh` again. Keep `docs/file-conventions.md` and the copies under
+`skills/*/references/` in sync with `bash scripts/maint/sync-references.sh`
+(CI runs `--check`).
 
 ## Working files
 
@@ -56,6 +59,25 @@ Skills read and write under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` in the
 
 Default mode is sequential: one shared `implement-plan.md` and
 `implement-report.md` inside the run folder.
+
+## `atry` CLI
+
+Install puts helpers under `~/.agent-relay/` and a shim on PATH. Skills call
+flattened verbs, for example:
+
+```bash
+atry resolve [RUN_ID or path]
+atry run-init "$id" --slug "$slug" --title "…" --base "$(git rev-parse HEAD)"
+atry history append "$RUN_DIR" implement started tool=cursor
+atry task-init "$RUN_DIR"
+atry list "$RUN_DIR"
+atry claim "$RUN_DIR" T1 session-a
+atry review upsert "$RUN_DIR/review-report.md" Self-Review "$(date +%F)" body.md
+atry bank check "$RUN_DIR"
+```
+
+Canonical sources: `scripts/atry` + `scripts/runtime/`. Maintainer-only scripts
+live under `scripts/maint/`.
 
 ## Knowledge bank (optional)
 
@@ -67,50 +89,54 @@ how to add another backend: [`docs/bank.md`](docs/bank.md).
 
 ## Parallel helpers
 
-If several agents share one run id, use the helpers shipped **inside** the
-implement skill bundle (`scripts/task-init.sh`, `scripts/task-claim.sh` next to
-`SKILL.md`). They use per-task files and `mkdir` locks. Protocol detail:
-[`docs/task-claim.md`](docs/task-claim.md).
+If several agents share one run id, use `atry task-init` / `atry claim` /
+`atry list` / … (same protocol as before). They use per-task files and `mkdir`
+locks. Protocol detail: [`docs/task-claim.md`](docs/task-claim.md).
 
 Covered by `tests/tasks.sh` (including concurrent steal with a per-task mutex,
 ident validation, dependency cycles, and portable sorting):
 
 - Exactly one winner when two agents race a `steal`
 - `claim` never auto-steals a stale lock (use explicit `steal`)
-- Status whitelist; release ownership checks; `--session` in both positions
-- `task-claim.sh check <id>` compares generated rollups to per-task files and
-  exits non-zero on `MISMATCH` (detects hand-edited rollups; does not repair)
-- `task-claim.sh rollup <id>` regenerates the plan rollup on demand; most
-  other subcommands already do this as their last step, so you rarely need
-  it directly
+- Status whitelist; release ownership checks; `--session` before or after the verb
+- `atry check <id>` compares generated rollups to per-task files and exits
+  non-zero on `MISMATCH` (detects hand-edited rollups; does not repair)
+- `atry rollup <id>` regenerates the plan rollup on demand; most other
+  subcommands already do this as their last step, so you rarely need it
+  directly
 
 Still true:
 
 - Serializes **task status** (and per-task reports), not overlapping source edits
 - Use disjoint paths or separate worktrees when files overlap
 - If `implement-plan/` already exists, `atry-implement` tells the agent to
-  use `task-claim.sh` and not hand-edit the rollup `.md` files — that is skill
-  text, not a lock on the filesystem
+  use `atry` claim helpers and not hand-edit the rollup `.md` files — that is
+  skill text, not a lock on the filesystem
 
 ## Install
 
 Requires bash ≥ 3.2. No `sudo`. Writes only under `$HOME`. Each skill installs
-as a **bundle**. Flags, `targets.conf`, and adding a tool:
+as a **bundle** (`SKILL.md` + `references/`). Runtime is the `atry` CLI under
+`~/.agent-relay`. Flags, `targets.conf`, and adding a tool:
 [`docs/installer.md`](docs/installer.md). Trust boundaries:
 [`docs/security.md`](docs/security.md).
 
 | Tool | Destination |
 | ---- | ----------- |
-| Cursor | `~/.cursor/skills/<name>/` (`SKILL.md`, `references/`, `scripts/`) |
+| Cursor | `~/.cursor/skills/<name>/` (`SKILL.md`, `references/`) |
 | Antigravity | `~/.gemini/config/skills/<name>/` |
 | Claude | `~/.claude/skills/<name>/` |
 | Codex | `~/.codex/skills/<name>/` |
+| Kiro | `~/.kiro/skills/<name>/` (macOS and Linux) |
+| (CLI) | `~/.agent-relay/bin/atry` + `lib/`; shim `~/.local/bin/atry` |
 
 ```bash
 git clone https://github.com/tranthethang/agent-relay.git
 cd agent-relay
 ./bin/install.sh
 ./bin/verify.sh
+# ensure ~/.local/bin is on PATH, then:
+atry version
 ```
 
 ### Release install
@@ -123,44 +149,45 @@ redirects, and control operators refused. That is a mitigation, not a proof
 that sourcing is safe. Treat release trust like any other script you download.
 
 ```bash
-REF="v3.1.1"
+REF="v4.0.0"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 shasum -a 256 -c SHA256SUMS
 bash ./install.sh --ref "$REF"
 ```
 
-### Upgrading from 3.0.x
+### Upgrading to 4.0.0
 
-3.0.x installs have no `.agent-relay-owned` marker, so 3.1.x refuses to
-overwrite them. Remove first, then reinstall:
+Reinstall to refresh skill bundles and install `atry`:
 
 ```bash
 ./bin/uninstall.sh --force
 ./bin/install.sh
 ```
 
-Details: [`docs/installer.md`](docs/installer.md). Pre-3.0 run directories
-are unsupported; start new runs under `{YMD}-{RUN_ID}-{RUN_SLUG}/`.
+Ensure `~/.local/bin` is on your PATH. Details:
+[`docs/installer.md`](docs/installer.md).
 
 ## Honest limits
 
 - Nothing forces an agent to follow a skill or to use a different tool for
   cross-review. Provenance lines are **records**, not enforcement.
-  `review-section.sh` prints a **non-blocking** warning when a Cross-Review
+  `atry review` prints a **non-blocking** warning when a Cross-Review
   provenance `tool=`/`model=` matches the latest Self-Review in the same file
   (fence-aware; `unknown` is ignored).
 - Parallel claim does not protect overlapping source-file edits.
 - Antigravity’s skills path has moved before; install can “succeed” while the
   app ignores the files.
+- Skill directories must be real directories under each tool (not symlinks out of
+  the tool skills dir) — Antigravity and some others refuse escaped symlinks.
 - `targets.conf` is still executed as bash after the allowlist check above.
 
 ## Development
 
 ```bash
 make test                 # smoke + tasks + remote smoke
-bash scripts/sync-bootstrap.sh --check
-bash scripts/sync-references.sh --check
+bash scripts/maint/sync-bootstrap.sh --check
+bash scripts/maint/sync-references.sh --check
 ```
 
 | Doc | Topic |

@@ -36,7 +36,7 @@ The release workflow refuses to build if the tag and `VERSION` disagree.
 
 ## What the build produces
 
-`scripts/build-release-assets.sh [vX.Y.Z]`:
+`scripts/maint/build-release-assets.sh [vX.Y.Z]`:
 
 1. Runs `sync-bootstrap.sh` so bin scripts match `lib/bootstrap.sh`  
 2. Stages a tree and packs `dist/agent-relay-vX.Y.Z.tar.gz`  
@@ -51,7 +51,7 @@ notes are a GitHub convenience; the **authoritative** human summary remains
 ## Local dry build (optional)
 
 ```bash
-bash scripts/build-release-assets.sh "$(tr -d '[:space:]' < VERSION)"
+bash scripts/maint/build-release-assets.sh "$(tr -d '[:space:]' < VERSION)"
 ls -la dist/
 ```
 
@@ -74,8 +74,5 @@ See [security.md](security.md).
 
 ## Patch vs minor
 
-This project uses SemVer. Recent patch example (3.0.1): shared
-`reviewer-conduct.md`, review persona framing, templates moved into skill
-`references/`, docs — no intentional breakage of the v3.0.0 run-directory
-layout. Re-install refreshes bundles; no separate migration doc beyond “run
-install again.”
+This project uses SemVer. Re-install refreshes skill bundles and the `atry`
+CLI; there is no separate upgrade path beyond running install again.

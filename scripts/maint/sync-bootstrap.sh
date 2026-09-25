@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/sync-bootstrap.sh
+# scripts/maint/sync-bootstrap.sh
 #
 # Synchronizes the bootstrap functions from lib/bootstrap.sh into
 # bin/install.sh, bin/uninstall.sh, and bin/verify.sh between the markers:
@@ -7,13 +7,13 @@
 #   # END BOOTSTRAP
 #
 # Usage:
-#   bash scripts/sync-bootstrap.sh         # update scripts
-#   bash scripts/sync-bootstrap.sh --check # verify scripts are in sync
+#   bash scripts/maint/sync-bootstrap.sh         # update scripts
+#   bash scripts/maint/sync-bootstrap.sh --check # verify scripts are in sync
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LIB_FILE="$ROOT_DIR/lib/bootstrap.sh"
 
 if [[ ! -f "$LIB_FILE" ]]; then
@@ -102,7 +102,7 @@ for target in "${TARGETS[@]}"; do
 done
 
 if [[ "$CHECK_ONLY" -eq 1 && "$any_diff" -ne 0 ]]; then
-  echo "Error: Bootstrap blocks are out of sync. Run 'bash scripts/sync-bootstrap.sh' to update." >&2
+  echo "Error: Bootstrap blocks are out of sync. Run 'bash scripts/maint/sync-bootstrap.sh' to update." >&2
   exit 1
 fi
 

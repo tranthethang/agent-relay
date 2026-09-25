@@ -419,6 +419,22 @@ echo "Verifying agent-relay install under \$HOME ($HOME)..."
 FAILED=0
 checked=0
 
+# atry CLI home (always expected after install)
+if [[ -x "$HOME/.agent-relay/bin/atry" && -f "$HOME/.agent-relay/lib/task-claim.sh" ]]; then
+  echo "[OK] atry CLI at $HOME/.agent-relay/bin/atry"
+  checked=$((checked + 1))
+else
+  echo "[FAIL] atry CLI missing under $HOME/.agent-relay (bin/atry + lib/)"
+  FAILED=1
+  checked=$((checked + 1))
+fi
+if [[ -L "$HOME/.local/bin/atry" ]] || [[ -x "$HOME/.local/bin/atry" ]]; then
+  echo "[OK] atry PATH shim at $HOME/.local/bin/atry"
+else
+  echo "[FAIL] atry PATH shim missing at $HOME/.local/bin/atry"
+  FAILED=1
+fi
+
 for tool in "${TOOLS[@]}"; do
   tool_selected "$tool" || continue
   dir_var="${tool}_DIR"
@@ -454,14 +470,9 @@ for tool in "${TOOLS[@]}"; do
           echo "[FAIL] $tool skill '$name' unmanaged or missing .agent-relay-owned marker at $dest_dir/$name"
           FAILED=1
         fi
-        # scripts/ is optional per skill (atry-plan may have none); if source has it, dest must.
-        if [[ -d "${skill_dir}scripts" ]] && [[ -n "$(ls -A "${skill_dir}scripts" 2>/dev/null || true)" ]]; then
-          if [[ -d "$dest_dir/$name/scripts" ]]; then
-            echo "[OK] $tool skill '$name' scripts/ present"
-          else
-            echo "[FAIL] $tool skill '$name' missing scripts/"
-            FAILED=1
-          fi
+        if [[ -e "$dest_dir/$name/scripts" ]]; then
+          echo "[FAIL] $tool skill '$name' still has scripts/ (expected atry CLI only)"
+          FAILED=1
         fi
         ;;
       *)

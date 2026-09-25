@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/build-release-assets.sh
+# scripts/maint/build-release-assets.sh
 #
 # Builds distribution release assets in dist/:
 #   - dist/agent-relay-vX.Y.Z.tar.gz (tarball with prefix agent-relay-vX.Y.Z/)
@@ -9,12 +9,12 @@
 #   - dist/SHA256SUMS   (checksums for tarball and scripts)
 #
 # Usage:
-#   bash scripts/build-release-assets.sh [vX.Y.Z]
+#   bash scripts/maint/build-release-assets.sh [vX.Y.Z]
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 VERSION_ARG="${1:-}"
 if [[ -z "$VERSION_ARG" ]]; then
@@ -38,7 +38,7 @@ fi
 echo "Building release assets for $TAG (version $VER)..."
 
 # Ensure bootstrap is synced first
-bash "$ROOT_DIR/scripts/sync-bootstrap.sh"
+bash "$ROOT_DIR/scripts/maint/sync-bootstrap.sh"
 
 DIST_DIR="$ROOT_DIR/dist"
 rm -rf "$DIST_DIR"

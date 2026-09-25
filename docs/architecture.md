@@ -7,7 +7,7 @@ tree, not a roadmap.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│  Human opens Cursor / Claude / Codex / Antigravity          │
+│  Human opens Cursor / Claude / Codex / Antigravity / Kiro   │
 │  and invokes a skill by name                                │
 └───────────────────────────┬─────────────────────────────────┘
                             │ reads installed bundle
@@ -16,7 +16,11 @@ tree, not a roadmap.
 │  ~/.…/skills/<name>/                                        │
 │    SKILL.md          ← instructions to the agent            │
 │    references/       ← e.g. file-conventions.md (copy)      │
-│    scripts/          ← optional helpers the agent may run   │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ agent runs `atry …` (PATH)
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│  ~/.agent-relay/bin/atry + lib/*.sh                         │
 └───────────────────────────┬─────────────────────────────────┘
                             │ agent writes under target repo
                             ▼
@@ -27,8 +31,9 @@ tree, not a roadmap.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Separately, **this** repo’s installer only copies bundles into those global
-skill directories. It does not call agents, pick models, or watch `.agent-relay/`.
+Separately, **this** repo’s installer copies bundles into those global skill
+directories and installs the `atry` CLI under `~/.agent-relay/`. It does not
+call agents, pick models, or watch project `.agent-relay/` run dirs.
 
 ## Layers
 
@@ -36,15 +41,16 @@ skill directories. It does not call agents, pick models, or watch `.agent-relay/
 | --- | --- | --- |
 | Skill text | `skills/<name>/SKILL.md` | Tell an agent what to do; **record**, rarely enforce |
 | Shared conventions | `docs/file-conventions.md` | Artifact names / id / per-run layout (copied into every bundle) |
-| Helpers | `scripts/*.sh` (canonical) → `skills/*/scripts/` (copies) | Optional bash the agent runs (`resolve-run`, `task-claim`, `review-section`, …) |
-| Installer | `bin/install.sh`, `uninstall.sh`, `verify.sh` | Copy / remove / check files under `$HOME` |
+| Helpers | `scripts/atry` + `scripts/runtime/` → `~/.agent-relay/` | Bash the agent runs (`atry resolve`, `atry claim`, `atry review`, …) |
+| Maintainer scripts | `scripts/maint/` | Sync / release only (not installed for agents) |
+| Installer | `bin/install.sh`, `uninstall.sh`, `verify.sh` | Copy / remove / check files under `$HOME` (+ atry home) |
 | Shared install logic | `lib/bootstrap.sh` | Download, checksum verify, `validate_targets_conf` (inlined into bin via `sync-bootstrap.sh`) |
 | Manifest | `targets.conf` | Per-tool install roots; still `source`d after allowlist validation |
 | Tests | `tests/*.sh` | Offline smoke of install + task helpers; not “did the agent obey the skill?” |
 
 ## Stage flow (expected usage)
 
-1. **plan** → create run directory via `run-init.sh`, write `plan.md`  
+1. **plan** → create run directory via `atry run-init`, write `plan.md`  
 2. **implement** → code + `implement-plan.md` / `implement-report.md` (or parallel dirs)  
 3. **self-review** → upsert dated Self-Review section; broad-vision analysis;
    escalate tradeoffs per `reviewer-conduct.md`  
@@ -52,7 +58,7 @@ skill directories. It does not call agents, pick models, or watch `.agent-relay/
    (skill asks for a different tool; nothing enforces it)  
 5. **distill** → summarize reusable patterns/lessons into `distillation.md`;
    optionally push the full distillation note to an external knowledge bank
-   (e.g., Obsidian vault) via `bank-push.sh`
+   (e.g., Obsidian vault) via `atry bank push`
 
 Nothing in this repo schedules that order. Skipping a stage is always possible.
 
@@ -60,11 +66,11 @@ Nothing in this repo schedules that order. Skipping a stage is always possible.
 
 Two copy-vs-source checks keep installable bundles from silently diverging:
 
-- `scripts/sync-references.sh` — `docs/file-conventions.md` and `scripts/<name>.sh`
-  → skill bundle copies; also keeps review `*-template.md` and
-  `reviewer-conduct.md` byte-identical between `atry-self-review` and
-  `atry-cross-review`
-- `scripts/sync-bootstrap.sh` — `lib/bootstrap.sh` body → marked regions in `bin/*.sh`
+- `scripts/maint/sync-references.sh` — `docs/file-conventions.md` → skill
+  bundle copies; also keeps review `*-template.md` and `reviewer-conduct.md`
+  byte-identical between `atry-self-review` and `atry-cross-review`; refuses
+  orphan `skills/*/scripts/`
+- `scripts/maint/sync-bootstrap.sh` — `lib/bootstrap.sh` body → marked regions in `bin/*.sh`
 
 CI runs both with `--check`.
 

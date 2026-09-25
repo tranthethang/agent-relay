@@ -6,8 +6,8 @@ docs for end users — see [`README.md`](README.md).
 
 ## What this repo is
 
-- Markdown skill **bundles** (`skills/<name>/SKILL.md` + `references/` +
-  optional `scripts/`) plus bash install/verify/uninstall.
+- Markdown skill **bundles** (`skills/<name>/SKILL.md` + `references/`) plus
+  bash install/verify/uninstall and the `atry` CLI.
 - Stages are invoked by a person in a tool. Nothing here schedules agents or
   verifies provenance `tool=` / `model=` claims.
 
@@ -22,7 +22,8 @@ docs for end users — see [`README.md`](README.md).
 - Do not claim CI proves skills work end-to-end. CI covers installer smoke
   (`tests/smoke.sh`), task-helper smoke (`tests/tasks.sh`), remote-download
   smoke (`tests/smoke-remote.sh`), shellcheck (`-S error`),
-  `sync-references.sh --check`, and `sync-bootstrap.sh --check`.
+  `scripts/maint/sync-references.sh --check`, and
+  `scripts/maint/sync-bootstrap.sh --check`.
 - Sole-maintainer repo: changes need not support or migrate older versions or
   historical layouts. Do not reintroduce migration paths, layout fallbacks, or
   backward-compatibility code.
@@ -34,10 +35,12 @@ docs for end users — see [`README.md`](README.md).
 | `bin/` | `install.sh`, `uninstall.sh`, `verify.sh` |
 | `lib/bootstrap.sh` | Shared download / checksum / `targets.conf` validation |
 | `targets.conf` | Install destinations (`source`d after allowlist validation) |
-| `skills/<name>/` | Skill bundles (edit here; install copies them out) |
+| `skills/<name>/` | Skill bundles (`SKILL.md` + `references/`; no `scripts/`) |
 | `docs/` | Maintainer docs — start at [`docs/INDEX.md`](docs/INDEX.md) |
 | `docs/file-conventions.md` | Source of truth for `.agent-relay/` names (synced into bundles) |
-| `scripts/` | Canonical helpers; skill `scripts/` copies must match |
+| `scripts/atry` | CLI entrypoint (installed to `~/.agent-relay/bin/atry`) |
+| `scripts/runtime/` | Helpers behind `atry` (installed to `~/.agent-relay/lib/`) |
+| `scripts/maint/` | Maintainer sync/release scripts (not installed for agents) |
 | `tests/` | Offline smoke / tasks / remote-smoke stubs |
 | `VERSION` | Release version; must match the `v*` git tag |
 
@@ -45,40 +48,43 @@ docs for end users — see [`README.md`](README.md).
 
 1. Edit `docs/file-conventions.md` (not the per-skill copies) for run-id /
    artifact rules.
-2. Run `bash scripts/sync-references.sh` so
-   `skills/*/references/file-conventions.md` and bundled `scripts/` match
-   sources. CI fails on drift (`--check`).
-3. After changing skill files locally, re-run `./bin/install.sh` to refresh
-   your user skill dirs if you dogfood from this clone.
+2. Run `bash scripts/maint/sync-references.sh` so
+   `skills/*/references/file-conventions.md` match the source. CI fails on
+   drift (`--check`). Skill bundles must **not** contain `scripts/`.
+3. After changing skill files or `scripts/runtime/`, re-run `./bin/install.sh`
+   to refresh user skill dirs and `~/.agent-relay` if you dogfood from this
+   clone.
 4. Keep skill text honest: provenance is a record; same-tool cross-review is a
-   **warning** in `review-section.sh`, not a hard failure; parallel `claim`
+   **warning** in `atry review`, not a hard failure; parallel `atry claim`
    serializes task **status**, not overlapping source edits.
+5. Skill text calls `atry …` (flattened verbs). Do not teach absolute paths
+   under each tool’s skill directory for helpers.
 
 ## Editing bootstrap (`lib/bootstrap.sh`)
 
 1. Edit **only** [`lib/bootstrap.sh`](lib/bootstrap.sh). Do not hand-edit the
    `# BEGIN BOOTSTRAP` … `# END BOOTSTRAP` blocks in `bin/install.sh`,
    `bin/uninstall.sh`, or `bin/verify.sh`.
-2. Run `bash scripts/sync-bootstrap.sh` so those three bin scripts match.
-3. Confirm with `bash scripts/sync-bootstrap.sh --check` before claiming done.
-   CI fails on drift the same way as `sync-references.sh --check`.
+2. Run `bash scripts/maint/sync-bootstrap.sh` so those three bin scripts match.
+3. Confirm with `bash scripts/maint/sync-bootstrap.sh --check` before claiming
+   done. CI fails on drift the same way as `sync-references.sh --check`.
 
 ### Case study — CI failed after adding `validate_targets_conf`
 
 `lib/bootstrap.sh` gained `validate_targets_conf()`, but the bootstrap blocks
 in `bin/*.sh` were left unchanged. Local/PR work looked fine until CI ran
 `sync-bootstrap.sh --check` and reported all three bin scripts out of sync.
-Fix: `bash scripts/sync-bootstrap.sh`, commit the updated `bin/*.sh`, re-run
-`--check`. Any change under `lib/bootstrap.sh` implies a sync step — treat it
-as mandatory, not optional.
+Fix: `bash scripts/maint/sync-bootstrap.sh`, commit the updated `bin/*.sh`,
+re-run `--check`. Any change under `lib/bootstrap.sh` implies a sync step —
+treat it as mandatory, not optional.
 
 ## Tests before you claim “done”
 
 ```bash
 make test                          # smoke + tasks + remote smoke
-bash scripts/sync-references.sh --check
-bash scripts/sync-bootstrap.sh --check   # required after any lib/bootstrap.sh edit
-bash -n bin/*.sh lib/*.sh scripts/*.sh tests/*.sh
+bash scripts/maint/sync-references.sh --check
+bash scripts/maint/sync-bootstrap.sh --check   # required after any lib/bootstrap.sh edit
+bash -n bin/*.sh lib/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh tests/*.sh
 ```
 
 `shellcheck -S error` runs in CI; warning-level findings still exist.
@@ -98,9 +104,10 @@ builds `dist/` from the tagged commit; it does not rewrite README.
    - Keep README claims honest for what shipped (locks, steal, installer).
 3. Commit on the branch you intend to tag (usually the default branch).
 4. Tag `v$(cat VERSION)` and push it — the workflow refuses a mismatched tag.
-5. Confirm the GitHub Release has assets. `scripts/build-release-assets.sh`
-   produces the tarball, install scripts, and `SHA256SUMS` (checksums detect
-   truncation, not a maliciously replaced asset).
+5. Confirm the GitHub Release has assets.
+   `scripts/maint/build-release-assets.sh` produces the tarball, install
+   scripts, and `SHA256SUMS` (checksums detect truncation, not a maliciously
+   replaced asset).
 
 ## Tone
 

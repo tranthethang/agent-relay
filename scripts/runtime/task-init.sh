@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/task-init.sh
+# scripts/runtime/task-init.sh
 # Initialize task directory for agent-relay parallel mode.
 # Bash 3.2+ compatible, POSIX tools only.
 set -euo pipefail

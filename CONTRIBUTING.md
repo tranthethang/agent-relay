@@ -30,15 +30,15 @@ make test              # local smoke + tasks + remote smoke
 Requires bash ≥ 3.2. All three scripts are offline. Remote smoke stubs
 `curl` and uses `tests/fixtures/`.
 
-CI also runs `shellcheck -S error` on `bin/*.sh`, `scripts/*.sh`, `lib/*.sh`,
-and `tests/*.sh`. The floor is **error**, not warning: warning-level findings
-still exist and would drown the signal. The commitment is to clear warnings
-and raise the floor to `-S warning`, then style, over time — not to disable
-the job.
+CI also runs `shellcheck -S error` on `bin/*.sh`, `scripts/atry`,
+`scripts/runtime/*.sh`, `scripts/maint/*.sh`, `lib/*.sh`, and `tests/*.sh`.
+The floor is **error**, not warning: warning-level findings still exist and
+would drown the signal. The commitment is to clear warnings and raise the
+floor to `-S warning`, then style, over time — not to disable the job.
 
-CI runs `scripts/sync-references.sh --check` so
+CI runs `scripts/maint/sync-references.sh --check` so
 `skills/*/references/file-conventions.md` cannot drift from
-`docs/file-conventions.md`.
+`docs/file-conventions.md`, and skill bundles must not contain `scripts/`.
 
 There is no Markdown formatter and no Python toolchain in this repo.
 
@@ -54,14 +54,14 @@ Include:
 ## Where things live
 
 - Installer: `bin/`
-- Skill bundles: `skills/<name>/` (`SKILL.md`, `references/`, `scripts/`)
+- Skill bundles: `skills/<name>/` (`SKILL.md`, `references/`)
+- CLI: `scripts/atry` + `scripts/runtime/` → `~/.agent-relay/`
+- Maintainer scripts: `scripts/maint/`
 - Install destinations: [`targets.conf`](targets.conf) (sourced after
   `validate_targets_conf`)
 - Artifact names: [`docs/file-conventions.md`](docs/file-conventions.md)
 - Empty outlines (not a sample run): each skill's
   `skills/<name>/references/*-template.md`
-- Task helpers (repo + bundled copies): `scripts/task-*.sh`,
-  `scripts/review-section.sh`
 - Release version: [`VERSION`](VERSION) (must match the `v*` tag)
 
 Install support for a tool is not the same as having used the stages in that

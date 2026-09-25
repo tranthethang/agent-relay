@@ -8,11 +8,18 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-TASK_CLAIM="$ROOT/scripts/task-claim.sh"
-TASK_INIT="$ROOT/scripts/task-init.sh"
-RESOLVE_RUN="$ROOT/scripts/resolve-run.sh"
-RUN_INIT="$ROOT/scripts/run-init.sh"
-RUN_HISTORY="$ROOT/scripts/run-history.sh"
+ATRY="$ROOT/scripts/atry"
+TASK_CLAIM="$ATRY"
+task_init() { "$ATRY" task-init "$@"; }
+TASK_INIT=task_init
+resolve_run() { "$ATRY" resolve "$@"; }
+RESOLVE_RUN=resolve_run
+run_init() { "$ATRY" run-init "$@"; }
+RUN_INIT=run_init
+run_history() { "$ATRY" history "$@"; }
+RUN_HISTORY=run_history
+review_sh() { "$ATRY" review "$@"; }
+REVIEW_SH=review_sh
 
 FAIL=0
 pass() { echo "PASS: $1"; }
@@ -34,7 +41,6 @@ HAPPY_DIR="$("$RUN_INIT" 1700000000 --slug happy --title "Happy Plan" --base mai
 [[ -f "$HAPPY_DIR/history.log" ]] && pass "run-init creates history.log" || fail "run-init creates history.log"
 grep -q 'stage=plan action=created tool=' "$HAPPY_DIR/history.log" && \
   pass "run-init created line includes tool=" || fail "run-init created line includes tool="
-[[ ! -f .agent-relay/CURRENT ]] && pass "no CURRENT created" || fail "no CURRENT created"
 
 cat <<'EOF' > "$HAPPY_DIR/plan.md"
 base: main
@@ -813,7 +819,7 @@ fi
 "$TASK_CLAIM" release walk T1 w1 >/dev/null
 
 # --- T17: review-section.sh upsert preserves other sections ---
-REVIEW_SH="$ROOT/scripts/review-section.sh"
+# review via atry (REVIEW_SH function set at top)
 TODAY="$(date +%F)"
 
 # Missing walkthrough path must create review-walkthrough.md, not clobber report.
@@ -1310,21 +1316,31 @@ done
 [[ $cross_fail -eq 0 ]] && pass "cross-op release vs release ($CROSS_N)" || fail "cross-op release vs release ($cross_fail/$CROSS_N)"
 rm -rf "$CROSS_DIR"
 
-# --- CR-2: skill bundle copies must not drift from their sources ---
-if bash "$ROOT/scripts/sync-references.sh" --check; then
+# --- CR-2: skill bundle references must not drift; no skill scripts/ ---
+if bash "$ROOT/scripts/maint/sync-references.sh" --check; then
   pass "skill bundles in sync with sources"
 else
   fail "skill bundles in sync with sources"
 fi
-_drift_target="$ROOT/skills/atry-implement/scripts/task-claim.sh"
-cp "$_drift_target" "$T/drift-backup.sh"
-printf '# drift\n' >> "$_drift_target"
-if bash "$ROOT/scripts/sync-references.sh" --check >/dev/null 2>&1; then
-  fail "sync --check detects bundle script drift"
+_drift_target="$ROOT/skills/atry-implement/references/file-conventions.md"
+cp "$_drift_target" "$T/drift-backup.md"
+printf '\n<!-- drift -->\n' >> "$_drift_target"
+if bash "$ROOT/scripts/maint/sync-references.sh" --check >/dev/null 2>&1; then
+  fail "sync --check detects reference drift"
 else
-  pass "sync --check detects bundle script drift"
+  pass "sync --check detects reference drift"
 fi
-cp "$T/drift-backup.sh" "$_drift_target"
+cp "$T/drift-backup.md" "$_drift_target"
+
+# Orphan scripts/ under a skill must fail --check
+mkdir -p "$ROOT/skills/atry-implement/scripts"
+echo '#!/bin/sh' > "$ROOT/skills/atry-implement/scripts/orphan.sh"
+if bash "$ROOT/scripts/maint/sync-references.sh" --check >/dev/null 2>&1; then
+  fail "sync --check detects orphan skill scripts/"
+else
+  pass "sync --check detects orphan skill scripts/"
+fi
+rm -rf "$ROOT/skills/atry-implement/scripts"
 
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL TASK TESTS PASSED"

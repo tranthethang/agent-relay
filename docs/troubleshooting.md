@@ -17,24 +17,22 @@ cause over disabling sync/CI checks.
 
 | Symptom | Likely cause | What to try |
 | --- | --- | --- |
-| `Drift: skills/…/file-conventions.md` | Edited docs or only one side | `bash scripts/sync-references.sh` then commit both sides |
-| `Drift: skills/…/scripts/foo.sh` | Edited only the bundle copy or only `scripts/` | Edit `scripts/foo.sh`, then `sync-references.sh` |
-| `Orphan: skills/…/scripts/bar.sh` | Bundle script with no `scripts/bar.sh` | Add the canonical script or remove the orphan |
-| Bootstrap `--check` fails | `lib/bootstrap.sh` edited without sync | `bash scripts/sync-bootstrap.sh` |
+| `Drift: skills/…/file-conventions.md` | Edited docs or only one side | `bash scripts/maint/sync-references.sh` then commit both sides |
+| `Orphan: skills/…/scripts/` | Unexpected `scripts/` under a skill bundle | Remove it; runtime is `atry` under `~/.agent-relay` |
+| Bootstrap `--check` fails | `lib/bootstrap.sh` edited without sync | `bash scripts/maint/sync-bootstrap.sh` |
 | shellcheck job fails | New error-level finding | Fix the script; do not lower `-S error` casually |
 
 ## Run discovery
 
 | Symptom | Likely cause | What to try |
 | --- | --- | --- |
-| `resolve-run.sh`: multiple run directories | Ambiguous `.agent-relay/` | Pass an explicit `RUN_ID`, slug, or path under the run folder |
-| Skills still look for `CURRENT` / `plan-<id>.md` | Installed bundles pre-3.0 | Re-run `./bin/install.sh` (or release install) to refresh skills |
+| `atry resolve`: multiple run directories | Ambiguous `.agent-relay/` | Pass an explicit `RUN_ID`, slug, or path under the run folder |
 
 ## Parallel tasks
 
 | Symptom | Likely cause | What to try |
 | --- | --- | --- |
-| `MISMATCH` from `task-claim.sh check` | Rollup `.md` hand-edited or stale vs `*.status` | Treat directory files as truth; regenerate via claim/update/report-write, or restore rollup deliberately — `check` will not repair |
+| `MISMATCH` from `atry check` | Rollup `.md` hand-edited or stale vs `*.status` | Treat directory files as truth; regenerate via claim/update/report-write, or restore rollup deliberately — `check` will not repair |
 | Second `claim` fails, prints owner | Lock held | Wait; or `steal` if takeover is intentional |
 | `claim` prints steal hint for old lock | Stale lock, no auto-steal | Run the printed `steal` command if appropriate |
 | Deps blocked | Upstream not `done` | Finish deps, or `--allow-skipped-deps` only when skipping is intended |
@@ -45,7 +43,7 @@ cause over disabling sync/CI checks.
 | Symptom | Likely cause | What to try |
 | --- | --- | --- |
 | stderr: Cross-Review provenance matches Self-Review | Same recorded `tool=`/`model=` | Use a different tool/model, or accept that it is not a second opinion — upsert still succeeds |
-| Section truncated / weird upsert | Historical fence bugs | Current `review-section.sh` is fence-aware; update bundles via re-install if the installed copy is old |
+| Section truncated / weird upsert | Fence mismatch in review body | Re-install so `atry review` matches the repo; upsert is fence-aware |
 
 ## Tests locally
 
@@ -58,9 +56,9 @@ cause over disabling sync/CI checks.
 
 | Symptom | Likely cause | What to try |
 | --- | --- | --- |
-| `bank-push.sh` exits 2 (`skipped`) | Bank not configured or reachable per `bank-status.md` | Run `scripts/bank-check.sh` first to probe reachability; verify path/endpoint in `.agent-relay/bank.conf` |
-| `bank-push.sh` exits 1 | Missing arguments or `bank-status.md` missing | Run `scripts/bank-check.sh` before pushing, and supply all four required arguments |
-| `bank-check.sh` exits 1 | Malformed `.agent-relay/bank.conf` | Check `bank.conf`: lines must strictly match `BANK_KEY=value` with no shell metacharacters |
+| `atry bank push` exits 2 (`skipped`) | Bank not configured or reachable per `bank-status.md` | Run `atry bank check` first to probe reachability; verify path/endpoint in `.agent-relay/bank.conf` |
+| `atry bank push` exits 1 | Missing arguments or `bank-status.md` missing | Run `atry bank check` before pushing, and supply all four required arguments |
+| `atry bank check` exits 1 | Malformed `.agent-relay/bank.conf` | Check `bank.conf`: lines must strictly match `BANK_KEY=value` with no shell metacharacters |
 
 ## Still stuck
 

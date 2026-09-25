@@ -34,7 +34,7 @@ jobs:
       - name: Build release assets
         run: |
           TARGET_TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          bash ./scripts/build-release-assets.sh "$TARGET_TAG"
+          bash ./scripts/maint/build-release-assets.sh "$TARGET_TAG"
 
       - name: Publish GitHub Release
         env:

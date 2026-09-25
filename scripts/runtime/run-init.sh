@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/run-init.sh
+# scripts/runtime/run-init.sh
 # Initialize an agent-relay run directory under .agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/
 # Bash 3.2+ compatible, POSIX tools only.
 set -euo pipefail
@@ -13,7 +13,7 @@ EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/find-agent-relay-dir.sh
+# shellcheck source=scripts/runtime/find-agent-relay-dir.sh
 source "$SCRIPT_DIR/find-agent-relay-dir.sh"
 
 # Walk up from cwd looking for .agent-relay/ (stop at / or git root).

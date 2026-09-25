@@ -11,19 +11,16 @@ previous review — it's to catch what a same-family model/tool is likely to mis
 
 ## Run discovery
 
-Resolve the run directory before reading or writing artifacts. Call the helper
-shipped beside this skill:
+Resolve the run directory before reading or writing artifacts:
 
 ```bash
-RUN_DIR="$(scripts/resolve-run.sh [RUN_ID or path])"
+RUN_DIR="$(atry resolve [RUN_ID or path])"
 ```
 
-If the user passed a `RUN_ID` or a path under a run directory, pass it to the
-helper. If no argument is passed and exactly one run directory exists,
-`resolve-run.sh` will resolve it automatically. If it exits non-zero (ambiguous
-or not found), ask the user for the `RUN_ID` or path.
-
-There is no `CURRENT` file — each run is self-contained.
+If the user passed a `RUN_ID` or a path under a run directory, pass it to
+`atry resolve`. If no argument is passed and exactly one run directory exists,
+it resolves automatically. If it exits non-zero (ambiguous or not found), ask
+the user for the `RUN_ID` or path.
 
 ## Inputs
 
@@ -49,7 +46,7 @@ enforcement — nothing here can verify which tool is running you.
 
 1. Resolve `$RUN_DIR` as above. Record stage start in `history.log`:
    ```bash
-   scripts/run-history.sh append "$RUN_DIR" cross-review started tool=<tool>
+   atry history append "$RUN_DIR" cross-review started tool=<tool>
    ```
    Read `references/reviewer-conduct.md` before reviewing. Then read the full
    chain (plan → implement → prior review).
@@ -94,7 +91,7 @@ enforcement — nothing here can verify which tool is running you.
    - Why that should stick for future work
    ```
 
-1. Upsert today's Cross-Review section with the helper beside this skill.
+1. Upsert today's Cross-Review section with `atry review`.
    Before writing the body files, read
    `references/review-report-template.md` and
    `references/review-walkthrough-template.md` and use them as the
@@ -102,19 +99,19 @@ enforcement — nothing here can verify which tool is running you.
 
    ```bash
    TODAY="$(date +%F)"
-   scripts/review-section.sh upsert \
+   atry review upsert \
      "$RUN_DIR/review-report.md" \
      Cross-Review "$TODAY" body.md
-   scripts/review-section.sh upsert \
+   atry review upsert \
      "$RUN_DIR/review-walkthrough.md" \
      Cross-Review "$TODAY" walk-body.md
    ```
 
    Keep prior `## Self-Review — ...` sections intact. Inside the body file, use
    `###` (not bare `##`) for subsections — unfenced `## ` is a section boundary
-   for `review-section.sh`, so a same-day re-upsert would truncate.
+   for `atry review`, so a same-day re-upsert would truncate.
 
 1. Once cross-review is complete, record completion in `history.log`:
    ```bash
-   scripts/run-history.sh append "$RUN_DIR" cross-review completed tool=<tool>
+   atry history append "$RUN_DIR" cross-review completed tool=<tool>
    ```

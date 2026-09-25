@@ -11,7 +11,7 @@ Nothing in this repo enforces the names except the skill text and bash helpers.
 This file is the **source of truth** for those names. Maintainer docs that
 point here (architecture, task-claim, skill authoring, …):
 [`INDEX.md`](INDEX.md). Do not hand-edit the copies under
-`skills/*/references/` — run `bash scripts/sync-references.sh` from the repo
+`skills/*/references/` — run `bash scripts/maint/sync-references.sh` from the repo
 root after changing this file.
 
 | Purpose | Path | Written by |
@@ -21,8 +21,8 @@ root after changing this file.
 | Implement notes | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement` |
 | Review report | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-report.md` | `atry-self-review` creates or overwrites. `atry-cross-review` appends. |
 | Review walkthrough | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md` | Same as the review report. |
-| Metadata | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md` | `run-init.sh` creates; stages update `stage:` and `status:`. |
-| History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log` | `run-history.sh` / stages append events. |
+| Metadata | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md` | `atry run-init` creates; stages update `stage:` and `status:`. |
+| History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log` | `atry history` / stages append events. |
 | Distillation (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distillation.md` | `atry-distill`, run after cross-review (or self-review if cross-review was skipped). |
 
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
@@ -32,13 +32,11 @@ Empty outlines for each artifact live in that skill's
 `references/*-template.md` (installed with the bundle). Runtime files live
 inside their respective run directory.
 
-## No CURRENT / No Central Index
+## Run resolution
 
-There is **no** `.agent-relay/CURRENT` file and **no** root index (such as
-`composer.csv` or `runs.md`). Each run directory is self-contained.
-
-Skills and helpers resolve the active run directory in this strict order (they
-must **never** guess via file mtime):
+Each run directory under `.agent-relay/` is self-contained. Skills and helpers
+resolve the active run directory in this strict order (they must **never**
+guess via file mtime):
 
 1. The user passed a `RUN_ID`, `RUN_SLUG`, full dirname, or any path under a run directory.
 2. Else if exactly one run directory exists matching `[0-9]{8}-*`, use that directory.
@@ -86,7 +84,7 @@ Example:
 2026-09-16T03:45:10Z stage=implement action=completed tool=cursor
 ```
 
-Timestamp must be ISO8601 UTC. Use `scripts/run-history.sh` to safely append to
+Timestamp must be ISO8601 UTC. Use `atry history` to safely append to
 this file.
 
 ## Plan header
@@ -160,30 +158,29 @@ directory:
 - `implement-report/_meta.md` — shared architectural notes.
 - `implement-report.md` — a generated, read-only rollup file of execution notes.
 
-### `task-claim.sh` contract
+### `atry` task helpers (flattened)
 
-The script `scripts/task-claim.sh` manages atomic task claiming, status updates,
+The `atry` CLI (helpers in `scripts/runtime/`, installed to `~/.agent-relay`) manages atomic task claiming, status updates,
 dependency validation, and rollup generation within the run directory. Ids and
 task-ids must match `^[A-Za-z0-9._-]+$` (no path separators).
 
 ```bash
-task-claim.sh [--session <tag>] <subcommand> ...
-task-claim.sh claim [--allow-skipped-deps] <run-dir-or-id> <task-id> <session-tag>
-task-claim.sh steal <run-dir-or-id> <task-id> <session-tag>
-task-claim.sh update [--session <tag>] <run-dir-or-id> <task-id> [<session-tag>] <status> [<reason>]
-task-claim.sh release [--force] [--session <tag>] <run-dir-or-id> <task-id> [<session-tag>]
-task-claim.sh list <run-dir-or-id>
-task-claim.sh rollup <run-dir-or-id>
-task-claim.sh check <run-dir-or-id>
-task-claim.sh report-write [--force] [--session <tag>] <run-dir-or-id> <task-id> [<session-tag>] <path-or-->
-task-claim.sh report-list <run-dir-or-id>
-task-claim.sh report-rollup <run-dir-or-id>
+atry claim [--allow-skipped-deps] <run-dir-or-id> <task-id> <session-tag>
+atry steal <run-dir-or-id> <task-id> <session-tag>
+atry update [--session <tag>] <run-dir-or-id> <task-id> [<session-tag>] <status> [<reason>]
+atry release [--force] [--session <tag>] <run-dir-or-id> <task-id> [<session-tag>]
+atry list <run-dir-or-id>
+atry rollup <run-dir-or-id>
+atry check <run-dir-or-id>
+atry report-write [--force] [--session <tag>] <run-dir-or-id> <task-id> [<session-tag>] <path-or-->
+atry report-list <run-dir-or-id>
+atry report-rollup <run-dir-or-id>
 ```
 
-`--session <tag>` may appear before the subcommand or (for `update`/`release`/
-`report-write`) after it. An explicit `--session` wins over a positional
-session-tag. Ambient `SESSION` / `SESSION_TAG` environment variables are never
-used for auth.
+`--session <tag>` may appear after the verb for `update` / `release` /
+`report-write` (before or among the positional args). An explicit `--session`
+wins over a positional session-tag. Ambient `SESSION` / `SESSION_TAG`
+environment variables are never used for auth.
 
 - `claim`: Atomically creates `implement-plan/.lock-<task-id>` (`mkdir` is
   atomic on POSIX) under the per-task `.mutex-<task-id>` critical section.
@@ -220,11 +217,12 @@ used for auth.
 - Every state-changing plan subcommand regenerates the plan rollup as its last
   step.
 
-### Script resolution
+### CLI resolution
 
-Helpers ship **inside each installed skill bundle** as `scripts/` next to
-`SKILL.md` (for example `~/.cursor/skills/atry-implement/scripts/task-claim.sh`).
-Call them by path relative to the skill directory.
+Runtime helpers are the `atry` CLI installed under `~/.agent-relay/`
+(`bin/atry` + `lib/*.sh`), with a PATH shim at `~/.local/bin/atry`. Skill
+bundles ship `SKILL.md` and `references/`. Canonical sources in this repo:
+`scripts/atry` and `scripts/runtime/`.
 
 Prefer reading `implement-report/` (or `report-list`) over the generated
 `implement-report.md` rollup when the directory exists.
@@ -245,7 +243,7 @@ The claim protocol serializes **task status**, not file contents:
 | Scenario | Safe? |
 |---|---|
 | Multiple runs (different `<RUN_ID>`) in parallel | Yes |
-| Multiple sub-agents, same `<RUN_ID>`, different tasks, via `task-claim.sh` | Yes (for status/report; see isolation above for files) |
+| Multiple sub-agents, same `<RUN_ID>`, different tasks, via `atry` | Yes (for status/report; see isolation above for files) |
 | Multiple sub-agents, same `<RUN_ID>`, same task | No — second claim fails loudly |
 | Hand-editing `implement-plan.md` while parallel mode is active | No — it's generated, gets overwritten |
 
@@ -266,7 +264,7 @@ tend to recur silently across runs otherwise:
   plan.
 - **Directory/rollup drift.** If `implement-plan/` or
   `implement-report/` exists for the run under review, run
-  `scripts/task-claim.sh check <run-dir-or-id>` before writing the review. A
+  `scripts/atry check <run-dir-or-id>` before writing the review. A
   `MISMATCH` means the rollup `.md` was hand-edited outside the claim
   protocol and the per-task `.status`/report files are stale — call this out
   in the review rather than treating the rollup `.md` as ground truth.
@@ -276,7 +274,7 @@ tend to recur silently across runs otherwise:
 `.agent-relay/bank.conf` and `.agent-relay/bank-status.md` live at the
 `.agent-relay/` root, **not** inside a per-run directory — a bank connection
 is a property of the target repo, not of one run. `bank.conf` is parsed
-line-by-line (never sourced/eval'd) by `scripts/bank-check.sh`; see
+line-by-line (never sourced/eval'd) by `atry bank check`; see
 [bank.md](bank.md) for the format, supported `BANK_TYPE` values, and what
 "reachable" does and does not mean. `atry-distill` is the only skill that
 reads/writes these files.

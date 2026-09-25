@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/run-history.sh
+# scripts/runtime/run-history.sh
 # Append and view events in an agent-relay run's history.log
 # Bash 3.2+ compatible, POSIX tools only.
 set -euo pipefail
