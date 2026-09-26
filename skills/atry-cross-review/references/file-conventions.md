@@ -101,7 +101,8 @@ id: <RUN_ID>
 If those lines are missing, `atry-implement` adds them before coding. `base`
 should be a real ref in that repo (`HEAD` before the work, or the branch tip).
 Do not invent one. The plan skill's `references/plan-template.md` also outlines
-`## Non-goals` and numbered tasks that may list `(deps: T1 T2)`.
+`## Non-goals`, the optional `## Decisions` and `## Flow` sections, and
+numbered tasks that may list `(deps: T1 T2)`. Helpers parse only `## Tasks`.
 
 ## Review headings
 

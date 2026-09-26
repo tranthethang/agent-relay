@@ -92,9 +92,17 @@ id: <RUN_ID>
 
 <what this plan must not expand into>
 
+## Decisions
+
+<optional: choices already made that implement must not reopen>
+
+## Flow
+
+<optional: one mermaid diagram, only when the change alters a runtime flow>
+
 ## Constraints
 
-<bash version, no network in tests, etc.>
+<only what is specific to this run>
 
 ## Tasks
 
@@ -115,6 +123,21 @@ Rules for `## Tasks`:
   them aligned by using a single flat list).
 - Use `(deps: )` or `(deps: T1 T2)` at the end of the line.
 - Do not put numbered lists under Goal/Constraints that look like tasks.
+
+Rules for the other sections:
+
+- `## Decisions`: list choices already settled (in discussion, or by you
+  with the user's agreement). If a task would otherwise say "pick one" or
+  "decide X", decide it here or ask the user -- do not defer the choice to
+  implement, which is told not to reinterpret the plan. Omit the section
+  if there is nothing to record.
+- `## Flow`: include one mermaid diagram only when the change alters a
+  runtime flow, a state machine, or calls between components -- the kind
+  of thing that is hard to follow in prose. Do not draw task order; `deps:`
+  already says that. Omit the section otherwise.
+- `## Constraints`: only what is specific to this run. Repo-wide rules
+  already in `AGENTS.md` (or tool rules / `CLAUDE.md`) are read by
+  `atry-implement` anyway; do not copy them here.
 
 ## Done check
 

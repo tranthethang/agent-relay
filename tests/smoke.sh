@@ -84,6 +84,7 @@ if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verif
 out="$("$HOME/.agent-relay/bin/atry" version 2>/dev/null | head -1 || true)"
 [[ -n "$out" ]] && pass "atry version" || fail "atry version"
 [[ -f "$HOME/.cursor/skills/atry-plan/SKILL.md" ]] && pass "atry-plan installed" || fail "atry-plan installed"
+[[ -f "$HOME/.cursor/skills/atry-brainstorm/SKILL.md" ]] && pass "atry-brainstorm installed" || fail "atry-brainstorm installed"
 
 # Each installed skill ships its artifact empty-outline templates under references/
 [[ -f "$HOME/.cursor/skills/atry-plan/references/plan-template.md" ]] && \

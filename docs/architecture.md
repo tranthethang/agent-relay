@@ -50,6 +50,8 @@ call agents, pick models, or watch project `.agent-relay/` run dirs.
 
 ## Stage flow (expected usage)
 
+0. **brainstorm** (optional) → read-only investigation and discussion; writes
+   nothing, no run directory  
 1. **plan** → create run directory via `atry run-init`, write `plan.md`  
 2. **implement** → code + `implement-plan.md` / `implement-report.md` (or parallel dirs)  
 3. **self-review** → upsert dated Self-Review section; broad-vision analysis;

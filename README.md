@@ -2,6 +2,41 @@
 
 [![CI](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml)
 
+## At a glance
+
+You open one of these tools and invoke one stage at a time — nothing here calls them for you:
+
+**Cursor · Claude · Codex · Antigravity · Kiro**
+
+```mermaid
+flowchart LR
+    B0["0 · optional\nbrainstorm\ninvestigate & discuss, read-only"]
+    P1["1\nplan\ngoal, non-goals, tasks with deps"]
+    I2["2\nimplement\ncode the plan, task by task"]
+    R3["3\nself-review\ncheck the diff, not the report"]
+    R4["4\ncross-review\nsecond opinion, ideally another tool"]
+    D5["5 · optional\ndistill\nkeep lessons worth reusing"]
+
+    B0 -.-> P1 --> I2 --> R3 --> R4 -.-> D5
+
+    style B0 stroke-dasharray: 5 5
+    style D5 stroke-dasharray: 5 5
+```
+
+Each stage writes plain markdown into `your-repo/.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` — commit it with the branch, or `.gitignore` it, your choice:
+
+| Stage | Files it writes |
+| --- | --- |
+| 0 · brainstorm | *(writes nothing)* |
+| 1 · plan | `plan.md`, `meta.md`, `history.log` |
+| 2 · implement | `implement-plan.md`, `implement-report.md` |
+| 3 · self-review | `review-report.md`, `review-walkthrough.md` (adds a `Self-Review` section) |
+| 4 · cross-review | same two files (adds a `Cross-Review` section) |
+| 5 · distill | `distillation.md` |
+
+> Not an orchestrator: nothing runs the stages for you, and nothing enforces them — an agent can skip a step.
+> Provenance lines record which tool and model a stage *says* it used. That's a record, not proof.
+
 Markdown skill **bundles** plus a bash installer and the `atry` CLI. Each skill
 is a folder (`SKILL.md`, `references/`) that tells an agent how to plan,
 implement, self-review, and cross-review work under `.agent-relay/`. The
@@ -34,6 +69,7 @@ Maintainer docs (architecture, installer, tests, release, …):
 
 | Order | Skill | What it is expected to do |
 | ----- | ----- | ------------------------- |
+| 0 | [`skills/atry-brainstorm/`](skills/atry-brainstorm/) | Optional. Investigate and discuss only; writes no files and creates no run directory until you name the next skill or lift the rule |
 | 1 | [`skills/atry-plan/`](skills/atry-plan/) | Write `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md` (schema + `atry run-init`) |
 | 2 | [`skills/atry-implement/`](skills/atry-implement/) | Implement that plan; write `implement-plan` / `implement-report` |
 | 3 | [`skills/atry-self-review/`](skills/atry-self-review/) | Review the diff; upsert a dated `Self-Review` section |
