@@ -56,10 +56,10 @@ validate_ident() {
     exit 1
   fi
   case "$value" in
-    *[!A-Za-z0-9._-]*)
-      echo "Error: $kind '$value' must match ^[A-Za-z0-9._-]+$" >&2
-      exit 1
-      ;;
+  *[!A-Za-z0-9._-]*)
+    echo "Error: $kind '$value' must match ^[A-Za-z0-9._-]+$" >&2
+    exit 1
+    ;;
   esac
 }
 
@@ -113,8 +113,8 @@ get_lock_age() {
     lock_time="$(stat -f %m "$lock_dir" 2>/dev/null || stat -c %Y "$lock_dir" 2>/dev/null || true)"
   fi
   case "$lock_time" in
-    ''|*[!0-9]*) echo 0 ;;
-    *) echo "$((now - lock_time))" ;;
+  '' | *[!0-9]*) echo 0 ;;
+  *) echo "$((now - lock_time))" ;;
   esac
 }
 
@@ -136,7 +136,7 @@ get_ordered_tasks() {
       if [[ -n "$tid" && -f "$plan_dir/$tid.status" ]]; then
         echo "$tid"
       fi
-    done < "$order_file"
+    done <"$order_file"
     for f in "$plan_dir"/*.status; do
       [[ -f "$f" ]] || continue
       local fname="${f##*/}"
@@ -182,8 +182,8 @@ status_base() {
   # Strip "skipped (reason)" → skipped
   local s="$1"
   case "$s" in
-    skipped*) echo skipped ;;
-    *) echo "$s" ;;
+  skipped*) echo skipped ;;
+  *) echo "$s" ;;
   esac
 }
 
@@ -230,20 +230,20 @@ validate_task_status() {
   local base
   base="$(status_base "$s")"
   case "$base" in
-    pending|in-progress|done)
-      [[ "$s" == "$base" ]] && return 0
-      return 1
-      ;;
-    skipped)
-      if [[ "$s" == "skipped" ]]; then
-        return 0
-      fi
-      case "$s" in
-        skipped\ *) return 0 ;;
-        *) return 1 ;;
-      esac
-      ;;
+  pending | in-progress | done)
+    [[ "$s" == "$base" ]] && return 0
+    return 1
+    ;;
+  skipped)
+    if [[ "$s" == "skipped" ]]; then
+      return 0
+    fi
+    case "$s" in
+    skipped\ *) return 0 ;;
     *) return 1 ;;
+    esac
+    ;;
+  *) return 1 ;;
   esac
 }
 
@@ -271,7 +271,7 @@ mutex_owner_alive() {
   local pid=""
   pid="$(cat "$mutex_dir/owner_pid" 2>/dev/null || true)"
   case "$pid" in
-    ''|*[!0-9]*) return 1 ;;
+  '' | *[!0-9]*) return 1 ;;
   esac
   kill -0 "$pid" 2>/dev/null
 }
@@ -287,8 +287,8 @@ mutex_recorded_age() {
   now="$(date +%s)"
   epoch="$(cat "$mutex_dir/created_epoch" 2>/dev/null || true)"
   case "$epoch" in
-    ''|*[!0-9]*) echo 0 ;;
-    *) echo "$((now - epoch))" ;;
+  '' | *[!0-9]*) echo 0 ;;
+  *) echo "$((now - epoch))" ;;
   esac
 }
 
@@ -326,9 +326,9 @@ acquire_mkdir_mutex() {
 
   while true; do
     if mkdir "$mutex_dir" 2>/dev/null; then
-      printf '%s\n' "$$" > "$mutex_dir/owner_pid"
-      printf '%s\n' "$(mutex_host)" > "$mutex_dir/owner_host"
-      printf '%s\n' "$(date +%s)" > "$mutex_dir/created_epoch"
+      printf '%s\n' "$$" >"$mutex_dir/owner_pid"
+      printf '%s\n' "$(mutex_host)" >"$mutex_dir/owner_host"
+      printf '%s\n' "$(date +%s)" >"$mutex_dir/created_epoch"
       HELD_MUTEX="$mutex_dir"
       trap 'release_held_mutex' EXIT
       # Test barrier: while HOLD file exists, stay inside the critical section
@@ -404,7 +404,7 @@ regenerate_rollup() {
       desc="$(read_desc_field "$sfile")"
       echo "- [$status] $tid: $desc"
     done < <(get_ordered_tasks "$plan_dir")
-  } > "$tmp_rollup"
+  } >"$tmp_rollup"
 
   mv -f "$tmp_rollup" "$rollup_file"
   release_mkdir_mutex
@@ -460,7 +460,7 @@ regenerate_report_rollup() {
         echo ""
       done
     fi
-  } > "$tmp_rollup"
+  } >"$tmp_rollup"
 
   mv -f "$tmp_rollup" "$rollup_file"
   release_mkdir_mutex
@@ -554,9 +554,9 @@ write_task_status() {
   desc="$(grep -E '^desc[[:space:]]*:' "$task_file" 2>/dev/null | head -n 1 | sed -e 's/^desc[[:space:]]*:[[:space:]]*//' || true)"
   deps="$(grep -E '^deps[[:space:]]*:' "$task_file" 2>/dev/null | head -n 1 | sed -e 's/^deps[[:space:]]*:[[:space:]]*//' || true)"
   if grep -q -E '^deps[[:space:]]*:' "$task_file" 2>/dev/null; then
-    printf 'status: %s\ndesc: %s\ndeps: %s\n' "$new_status" "$desc" "$deps" > "$task_file.tmp"
+    printf 'status: %s\ndesc: %s\ndeps: %s\n' "$new_status" "$desc" "$deps" >"$task_file.tmp"
   else
-    printf 'status: %s\ndesc: %s\n' "$new_status" "$desc" > "$task_file.tmp"
+    printf 'status: %s\ndesc: %s\n' "$new_status" "$desc" >"$task_file.tmp"
   fi
   mv -f "$task_file.tmp" "$task_file"
 }
@@ -568,8 +568,8 @@ acquire_lock() {
   local iso_now="$3"
   local epoch_now="$4"
   if mkdir "$lock_dir" 2>/dev/null; then
-    printf '%s %s\n' "$session_tag" "$iso_now" > "$lock_dir/owner"
-    printf '%s\n' "$epoch_now" > "$lock_dir/created_epoch"
+    printf '%s %s\n' "$session_tag" "$iso_now" >"$lock_dir/owner"
+    printf '%s\n' "$epoch_now" >"$lock_dir/created_epoch"
     return 0
   fi
   return 1
@@ -588,11 +588,11 @@ take_lock_forced() {
     echo "Error: could not stage replacement lock at '$staging'" >&2
     return 1
   fi
-  if ! printf '%s %s\n' "$session_tag" "$iso_now" > "$staging/owner"; then
+  if ! printf '%s %s\n' "$session_tag" "$iso_now" >"$staging/owner"; then
     rm -rf "$staging"
     return 1
   fi
-  if ! printf '%s\n' "$epoch_now" > "$staging/created_epoch"; then
+  if ! printf '%s\n' "$epoch_now" >"$staging/created_epoch"; then
     rm -rf "$staging"
     return 1
   fi
@@ -612,30 +612,30 @@ FORCE_RELEASE=0
 
 while [[ $# -ge 1 ]]; do
   case "$1" in
-    --session)
-      [[ $# -ge 2 ]] || usage
-      OPT_SESSION="$2"
-      shift 2
-      ;;
-    --allow-skipped-deps)
-      ALLOW_SKIPPED_DEPS=1
-      shift
-      ;;
-    --force)
-      FORCE_RELEASE=1
-      shift
-      ;;
-    --)
-      shift
-      break
-      ;;
-    -*)
-      echo "Error: unknown option '$1'" >&2
-      usage
-      ;;
-    *)
-      break
-      ;;
+  --session)
+    [[ $# -ge 2 ]] || usage
+    OPT_SESSION="$2"
+    shift 2
+    ;;
+  --allow-skipped-deps)
+    ALLOW_SKIPPED_DEPS=1
+    shift
+    ;;
+  --force)
+    FORCE_RELEASE=1
+    shift
+    ;;
+  --)
+    shift
+    break
+    ;;
+  -*)
+    echo "Error: unknown option '$1'" >&2
+    usage
+    ;;
+  *)
+    break
+    ;;
   esac
 done
 
@@ -644,400 +644,304 @@ SUBCMD="$1"
 shift
 
 case "$SUBCMD" in
-  claim)
-    [[ $# -eq 3 ]] || usage
-    TARGET="$1"
-    TASK_ID="$2"
-    SESSION_TAG="$3"
-    validate_ident "task-id" "$TASK_ID"
+claim)
+  [[ $# -eq 3 ]] || usage
+  TARGET="$1"
+  TASK_ID="$2"
+  SESSION_TAG="$3"
+  validate_ident "task-id" "$TASK_ID"
 
-    resolve_paths "$TARGET"
-    [[ -d "$PLAN_DIR" ]] || {
-      echo "Error: plan directory '$PLAN_DIR' does not exist. Run task-init.sh first." >&2
-      exit 1
-    }
+  resolve_paths "$TARGET"
+  [[ -d "$PLAN_DIR" ]] || {
+    echo "Error: plan directory '$PLAN_DIR' does not exist. Run task-init.sh first." >&2
+    exit 1
+  }
 
-    TASK_FILE="$PLAN_DIR/$TASK_ID.status"
-    [[ -f "$TASK_FILE" ]] || {
-      echo "Error: task '$TASK_ID' does not exist in '$PLAN_DIR'" >&2
-      exit 1
-    }
+  TASK_FILE="$PLAN_DIR/$TASK_ID.status"
+  [[ -f "$TASK_FILE" ]] || {
+    echo "Error: task '$TASK_ID' does not exist in '$PLAN_DIR'" >&2
+    exit 1
+  }
 
-    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
-    if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
-      exit 1
-    fi
+  MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+  if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
+    exit 1
+  fi
 
-    DEPS="$(read_deps_field "$TASK_FILE")"
-    if [[ -n "$DEPS" ]]; then
-      block_reason=""
-      if ! block_reason="$(deps_satisfied "$PLAN_DIR" "$DEPS" "$ALLOW_SKIPPED_DEPS")"; then
-        release_mkdir_mutex
-        echo "Error: $block_reason. Cannot claim '$TASK_ID'." >&2
-        exit 1
-      fi
-    fi
-
-    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
-    ISO_NOW="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    EPOCH_NOW="$(date +%s)"
-
-    if acquire_lock "$LOCK_DIR" "$SESSION_TAG" "$ISO_NOW" "$EPOCH_NOW"; then
-      write_task_status "$TASK_FILE" "in-progress"
+  DEPS="$(read_deps_field "$TASK_FILE")"
+  if [[ -n "$DEPS" ]]; then
+    block_reason=""
+    if ! block_reason="$(deps_satisfied "$PLAN_DIR" "$DEPS" "$ALLOW_SKIPPED_DEPS")"; then
       release_mkdir_mutex
-    else
-      LOCK_AGE="$(get_lock_age "$LOCK_DIR")"
-      OLD_OWNER="$(cat "$LOCK_DIR/owner" 2>/dev/null || echo "unknown")"
-      release_mkdir_mutex
-      if [[ "$LOCK_AGE" -ge "$STALE_THRESHOLD" ]]; then
-        echo "Error: lock on task '$TASK_ID' is stale (held by $OLD_OWNER for ${LOCK_AGE}s > ${STALE_THRESHOLD}s)." >&2
-        echo "Run: atry steal $TARGET $TASK_ID $SESSION_TAG" >&2
-        exit 1
-      fi
-      retries=5
-      while [[ (! -s "$LOCK_DIR/owner") && $retries -gt 0 ]]; do
-        sleep 0.1
-        retries=$((retries - 1))
-      done
-      cat "$LOCK_DIR/owner" 2>/dev/null || echo "locked"
+      echo "Error: $block_reason. Cannot claim '$TASK_ID'." >&2
       exit 1
     fi
+  fi
 
-    regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
-    ;;
+  LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
+  ISO_NOW="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  EPOCH_NOW="$(date +%s)"
 
-  steal)
-    [[ $# -eq 3 ]] || usage
-    TARGET="$1"
-    TASK_ID="$2"
-    SESSION_TAG="$3"
-    validate_ident "task-id" "$TASK_ID"
-
-    resolve_paths "$TARGET"
-    [[ -d "$PLAN_DIR" ]] || {
-      echo "Error: plan directory '$PLAN_DIR' does not exist. Run task-init.sh first." >&2
-      exit 1
-    }
-
-    TASK_FILE="$PLAN_DIR/$TASK_ID.status"
-    [[ -f "$TASK_FILE" ]] || {
-      echo "Error: task '$TASK_ID' does not exist in '$PLAN_DIR'" >&2
-      exit 1
-    }
-
-    # Compare-and-swap on the lock owner. The mutex alone cannot express
-    # "exactly one stealer wins": waiting on it would let a second stealer take
-    # the lock straight back off the first. So read the owner we intend to take
-    # over from *before* entering the mutex, then refuse inside if it moved.
-    # That keeps the single-winner rule while letting steal wait out an
-    # unrelated claim/update/release instead of failing on it.
-    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
-    EXPECTED_OWNER="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
-
-    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
-    if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'" wait "$STEAL_WAIT_MAX"; then
-      exit 1
-    fi
-
-    # Steal takes over an existing lock — not a backdoor claim. Same dep
-    # rules as claim so unmet deps cannot be skipped by stealing.
-    DEPS="$(read_deps_field "$TASK_FILE")"
-    if [[ -n "$DEPS" ]]; then
-      block_reason=""
-      if ! block_reason="$(deps_satisfied "$PLAN_DIR" "$DEPS" "$ALLOW_SKIPPED_DEPS")"; then
-        release_mkdir_mutex
-        echo "Error: $block_reason. Cannot steal '$TASK_ID'." >&2
-        exit 1
-      fi
-    fi
-
-    ISO_NOW="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    EPOCH_NOW="$(date +%s)"
-
-    # Critical section under per-task mutex: require existing lock → take over.
-    if [[ ! -d "$LOCK_DIR" ]]; then
-      release_mkdir_mutex
-      echo "Error: task '$TASK_ID' is not locked; use claim instead of steal" >&2
-      exit 1
-    fi
-
-    CURRENT_OWNER="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
-    if [[ "$CURRENT_OWNER" != "$EXPECTED_OWNER" ]]; then
-      release_mkdir_mutex
-      echo "Error: task '$TASK_ID' was already taken over by '${CURRENT_OWNER:-unknown}' while waiting; re-read the task list before stealing again" >&2
-      exit 1
-    fi
-
-    LOCK_AGE="$(get_lock_age "$LOCK_DIR")"
-    OLD_OWNER="$(cat "$LOCK_DIR/owner" 2>/dev/null || echo "unknown")"
-    echo "Stealing lock on task '$TASK_ID' (was held by $OLD_OWNER, age ${LOCK_AGE}s)" >&2
-
-    if ! take_lock_forced "$LOCK_DIR" "$SESSION_TAG" "$ISO_NOW" "$EPOCH_NOW"; then
-      release_mkdir_mutex
-      exit 1
-    fi
-
+  if acquire_lock "$LOCK_DIR" "$SESSION_TAG" "$ISO_NOW" "$EPOCH_NOW"; then
     write_task_status "$TASK_FILE" "in-progress"
     release_mkdir_mutex
-
-    regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
-    ;;
-
-  update)
-    # Allow --session after subcommand too.
-    while [[ $# -ge 1 ]]; do
-      case "$1" in
-        --session)
-          [[ $# -ge 2 ]] || usage
-          OPT_SESSION="$2"
-          shift 2
-          ;;
-        *)
-          break
-          ;;
-      esac
+  else
+    LOCK_AGE="$(get_lock_age "$LOCK_DIR")"
+    OLD_OWNER="$(cat "$LOCK_DIR/owner" 2>/dev/null || echo "unknown")"
+    release_mkdir_mutex
+    if [[ "$LOCK_AGE" -ge "$STALE_THRESHOLD" ]]; then
+      echo "Error: lock on task '$TASK_ID' is stale (held by $OLD_OWNER for ${LOCK_AGE}s > ${STALE_THRESHOLD}s)." >&2
+      echo "Run: atry steal $TARGET $TASK_ID $SESSION_TAG" >&2
+      exit 1
+    fi
+    retries=5
+    while [[ (! -s "$LOCK_DIR/owner") && $retries -gt 0 ]]; do
+      sleep 0.1
+      retries=$((retries - 1))
     done
+    cat "$LOCK_DIR/owner" 2>/dev/null || echo "locked"
+    exit 1
+  fi
 
-    [[ $# -ge 3 ]] || usage
-    TARGET="$1"
-    TASK_ID="$2"
-    shift 2
-    validate_ident "task-id" "$TASK_ID"
+  regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
+  ;;
 
-    resolve_paths "$TARGET"
-    [[ -d "$PLAN_DIR" ]] || {
-      echo "Error: plan directory '$PLAN_DIR' does not exist." >&2
-      exit 1
-    }
+steal)
+  [[ $# -eq 3 ]] || usage
+  TARGET="$1"
+  TASK_ID="$2"
+  SESSION_TAG="$3"
+  validate_ident "task-id" "$TASK_ID"
 
-    TASK_FILE="$PLAN_DIR/$TASK_ID.status"
-    [[ -f "$TASK_FILE" ]] || {
-      echo "Error: task '$TASK_ID' does not exist in '$PLAN_DIR'" >&2
-      exit 1
-    }
+  resolve_paths "$TARGET"
+  [[ -d "$PLAN_DIR" ]] || {
+    echo "Error: plan directory '$PLAN_DIR' does not exist. Run task-init.sh first." >&2
+    exit 1
+  }
 
-    ARG_SESSION=""
-    ARG_STATUS=""
-    REASON=""
+  TASK_FILE="$PLAN_DIR/$TASK_ID.status"
+  [[ -f "$TASK_FILE" ]] || {
+    echo "Error: task '$TASK_ID' does not exist in '$PLAN_DIR'" >&2
+    exit 1
+  }
 
-    FIRST_ARG="$1"
-    case "$FIRST_ARG" in
-      pending|in-progress|done|skipped)
-        ARG_STATUS="$FIRST_ARG"
-        shift
-        REASON="$*"
-        ;;
-      *)
-        ARG_SESSION="$FIRST_ARG"
-        shift
-        [[ $# -ge 1 ]] || usage
-        ARG_STATUS="$1"
-        shift
-        REASON="$*"
-        ;;
-    esac
+  # Compare-and-swap on the lock owner. The mutex alone cannot express
+  # "exactly one stealer wins": waiting on it would let a second stealer take
+  # the lock straight back off the first. So read the owner we intend to take
+  # over from *before* entering the mutex, then refuse inside if it moved.
+  # That keeps the single-winner rule while letting steal wait out an
+  # unrelated claim/update/release instead of failing on it.
+  LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
+  EXPECTED_OWNER="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
 
-    # Explicit --session wins over positional session-tag. No ambient env.
-    CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
+  MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+  if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'" wait "$STEAL_WAIT_MAX"; then
+    exit 1
+  fi
 
-    if [[ -z "$CALLER_SESSION" ]]; then
-      echo "Error: session-tag required to update task '$TASK_ID'" >&2
-      exit 1
-    fi
-
-    case "$ARG_STATUS" in
-      pending|in-progress|done|skipped) ;;
-      *)
-        echo "Error: invalid status '$ARG_STATUS' (allowed: pending, in-progress, done, skipped)" >&2
-        exit 1
-        ;;
-    esac
-
-    FINAL_STATUS="$ARG_STATUS"
-    if [[ "$ARG_STATUS" == "skipped" ]]; then
-      if [[ -z "$REASON" ]]; then
-        echo "Error: skipped requires a reason" >&2
-        exit 1
-      fi
-      CLEAN_REASON="$(echo "$REASON" | sed -e 's/^[[:space:]]*(//' -e 's/)[[:space:]]*$//')"
-      FINAL_STATUS="skipped ($CLEAN_REASON)"
-    elif [[ -n "$REASON" ]]; then
-      echo "Error: status '$ARG_STATUS' does not take a reason" >&2
-      exit 1
-    fi
-
-    if ! validate_task_status "$FINAL_STATUS"; then
-      echo "Error: invalid status '$FINAL_STATUS'" >&2
-      exit 1
-    fi
-
-    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
-    if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
-      exit 1
-    fi
-
-    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
-    if [[ ! -d "$LOCK_DIR" ]]; then
+  # Steal takes over an existing lock — not a backdoor claim. Same dep
+  # rules as claim so unmet deps cannot be skipped by stealing.
+  DEPS="$(read_deps_field "$TASK_FILE")"
+  if [[ -n "$DEPS" ]]; then
+    block_reason=""
+    if ! block_reason="$(deps_satisfied "$PLAN_DIR" "$DEPS" "$ALLOW_SKIPPED_DEPS")"; then
       release_mkdir_mutex
-      echo "Error: task '$TASK_ID' is not claimed/locked" >&2
+      echo "Error: $block_reason. Cannot steal '$TASK_ID'." >&2
       exit 1
     fi
+  fi
 
+  ISO_NOW="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  EPOCH_NOW="$(date +%s)"
+
+  # Critical section under per-task mutex: require existing lock → take over.
+  if [[ ! -d "$LOCK_DIR" ]]; then
+    release_mkdir_mutex
+    echo "Error: task '$TASK_ID' is not locked; use claim instead of steal" >&2
+    exit 1
+  fi
+
+  CURRENT_OWNER="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
+  if [[ "$CURRENT_OWNER" != "$EXPECTED_OWNER" ]]; then
+    release_mkdir_mutex
+    echo "Error: task '$TASK_ID' was already taken over by '${CURRENT_OWNER:-unknown}' while waiting; re-read the task list before stealing again" >&2
+    exit 1
+  fi
+
+  LOCK_AGE="$(get_lock_age "$LOCK_DIR")"
+  OLD_OWNER="$(cat "$LOCK_DIR/owner" 2>/dev/null || echo "unknown")"
+  echo "Stealing lock on task '$TASK_ID' (was held by $OLD_OWNER, age ${LOCK_AGE}s)" >&2
+
+  if ! take_lock_forced "$LOCK_DIR" "$SESSION_TAG" "$ISO_NOW" "$EPOCH_NOW"; then
+    release_mkdir_mutex
+    exit 1
+  fi
+
+  write_task_status "$TASK_FILE" "in-progress"
+  release_mkdir_mutex
+
+  regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
+  ;;
+
+update)
+  # Allow --session after subcommand too.
+  while [[ $# -ge 1 ]]; do
+    case "$1" in
+    --session)
+      [[ $# -ge 2 ]] || usage
+      OPT_SESSION="$2"
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+    esac
+  done
+
+  [[ $# -ge 3 ]] || usage
+  TARGET="$1"
+  TASK_ID="$2"
+  shift 2
+  validate_ident "task-id" "$TASK_ID"
+
+  resolve_paths "$TARGET"
+  [[ -d "$PLAN_DIR" ]] || {
+    echo "Error: plan directory '$PLAN_DIR' does not exist." >&2
+    exit 1
+  }
+
+  TASK_FILE="$PLAN_DIR/$TASK_ID.status"
+  [[ -f "$TASK_FILE" ]] || {
+    echo "Error: task '$TASK_ID' does not exist in '$PLAN_DIR'" >&2
+    exit 1
+  }
+
+  ARG_SESSION=""
+  ARG_STATUS=""
+  REASON=""
+
+  FIRST_ARG="$1"
+  case "$FIRST_ARG" in
+  pending | in-progress | done | skipped)
+    ARG_STATUS="$FIRST_ARG"
+    shift
+    REASON="$*"
+    ;;
+  *)
+    ARG_SESSION="$FIRST_ARG"
+    shift
+    [[ $# -ge 1 ]] || usage
+    ARG_STATUS="$1"
+    shift
+    REASON="$*"
+    ;;
+  esac
+
+  # Explicit --session wins over positional session-tag. No ambient env.
+  CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
+
+  if [[ -z "$CALLER_SESSION" ]]; then
+    echo "Error: session-tag required to update task '$TASK_ID'" >&2
+    exit 1
+  fi
+
+  case "$ARG_STATUS" in
+  pending | in-progress | done | skipped) ;;
+  *)
+    echo "Error: invalid status '$ARG_STATUS' (allowed: pending, in-progress, done, skipped)" >&2
+    exit 1
+    ;;
+  esac
+
+  FINAL_STATUS="$ARG_STATUS"
+  if [[ "$ARG_STATUS" == "skipped" ]]; then
+    if [[ -z "$REASON" ]]; then
+      echo "Error: skipped requires a reason" >&2
+      exit 1
+    fi
+    CLEAN_REASON="$(echo "$REASON" | sed -e 's/^[[:space:]]*(//' -e 's/)[[:space:]]*$//')"
+    FINAL_STATUS="skipped ($CLEAN_REASON)"
+  elif [[ -n "$REASON" ]]; then
+    echo "Error: status '$ARG_STATUS' does not take a reason" >&2
+    exit 1
+  fi
+
+  if ! validate_task_status "$FINAL_STATUS"; then
+    echo "Error: invalid status '$FINAL_STATUS'" >&2
+    exit 1
+  fi
+
+  MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+  if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
+    exit 1
+  fi
+
+  LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
+  if [[ ! -d "$LOCK_DIR" ]]; then
+    release_mkdir_mutex
+    echo "Error: task '$TASK_ID' is not claimed/locked" >&2
+    exit 1
+  fi
+
+  OWNER_TAG="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
+  if [[ "$CALLER_SESSION" != "$OWNER_TAG" ]]; then
+    release_mkdir_mutex
+    echo "Error: caller session tag '$CALLER_SESSION' does not match lock owner '$OWNER_TAG' for task '$TASK_ID'" >&2
+    exit 1
+  fi
+
+  write_task_status "$TASK_FILE" "$FINAL_STATUS"
+  release_mkdir_mutex
+  regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
+  ;;
+
+release)
+  while [[ $# -ge 1 ]]; do
+    case "$1" in
+    --session)
+      [[ $# -ge 2 ]] || usage
+      OPT_SESSION="$2"
+      shift 2
+      ;;
+    --force)
+      FORCE_RELEASE=1
+      shift
+      ;;
+    *)
+      break
+      ;;
+    esac
+  done
+
+  [[ $# -ge 2 ]] || usage
+  TARGET="$1"
+  TASK_ID="$2"
+  shift 2
+  validate_ident "task-id" "$TASK_ID"
+
+  ARG_SESSION=""
+  if [[ $# -ge 1 ]]; then
+    ARG_SESSION="$1"
+  fi
+  CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
+
+  resolve_paths "$TARGET"
+
+  MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+  if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
+    exit 1
+  fi
+
+  LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
+
+  if [[ -d "$LOCK_DIR" ]]; then
     OWNER_TAG="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
-    if [[ "$CALLER_SESSION" != "$OWNER_TAG" ]]; then
-      release_mkdir_mutex
-      echo "Error: caller session tag '$CALLER_SESSION' does not match lock owner '$OWNER_TAG' for task '$TASK_ID'" >&2
-      exit 1
-    fi
-
-    write_task_status "$TASK_FILE" "$FINAL_STATUS"
-    release_mkdir_mutex
-    regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
-    ;;
-
-  release)
-    while [[ $# -ge 1 ]]; do
-      case "$1" in
-        --session)
-          [[ $# -ge 2 ]] || usage
-          OPT_SESSION="$2"
-          shift 2
-          ;;
-        --force)
-          FORCE_RELEASE=1
-          shift
-          ;;
-        *)
-          break
-          ;;
-      esac
-    done
-
-    [[ $# -ge 2 ]] || usage
-    TARGET="$1"
-    TASK_ID="$2"
-    shift 2
-    validate_ident "task-id" "$TASK_ID"
-
-    ARG_SESSION=""
-    if [[ $# -ge 1 ]]; then
-      ARG_SESSION="$1"
-    fi
-    CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
-
-    resolve_paths "$TARGET"
-
-    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
-    if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
-      exit 1
-    fi
-
-    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
-
-    if [[ -d "$LOCK_DIR" ]]; then
-      OWNER_TAG="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
-      if [[ "$FORCE_RELEASE" -eq 1 ]]; then
-        echo "WARNING: force-releasing lock on task '$TASK_ID' (owner was '$OWNER_TAG')" >&2
-      else
-        if [[ -z "$CALLER_SESSION" ]]; then
-          release_mkdir_mutex
-          echo "Error: session-tag required to release task '$TASK_ID' (held by '$OWNER_TAG'); use --force to override" >&2
-          exit 1
-        fi
-        if [[ "$CALLER_SESSION" != "$OWNER_TAG" ]]; then
-          release_mkdir_mutex
-          echo "Error: caller session tag '$CALLER_SESSION' does not match lock owner '$OWNER_TAG' for task '$TASK_ID'" >&2
-          exit 1
-        fi
-      fi
-      rm -rf "$LOCK_DIR"
-    fi
-
-    release_mkdir_mutex
-    regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
-    ;;
-
-  list)
-    [[ $# -eq 1 ]] || usage
-    TARGET="$1"
-    resolve_paths "$TARGET"
-    [[ -d "$PLAN_DIR" ]] || {
-      echo "Error: plan directory '$PLAN_DIR' does not exist." >&2
-      exit 1
-    }
-    list_tasks "$PLAN_DIR"
-    ;;
-
-  report-write)
-    while [[ $# -ge 1 ]]; do
-      case "$1" in
-        --session)
-          [[ $# -ge 2 ]] || usage
-          OPT_SESSION="$2"
-          shift 2
-          ;;
-        --force)
-          FORCE_RELEASE=1
-          shift
-          ;;
-        *)
-          break
-          ;;
-      esac
-    done
-
-    [[ $# -ge 3 ]] || usage
-    TARGET="$1"
-    TASK_ID="$2"
-    shift 2
-    validate_ident "task-id" "$TASK_ID"
-
-    ARG_SESSION=""
-    IN_FILE=""
-    if [[ $# -eq 1 ]]; then
-      IN_FILE="$1"
-    elif [[ $# -eq 2 ]]; then
-      ARG_SESSION="$1"
-      IN_FILE="$2"
-    else
-      usage
-    fi
-
-    CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
-
-    resolve_paths "$TARGET"
-    mkdir -p "$REPORT_DIR"
-
-    MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
-    if [[ -d "$PLAN_DIR" ]]; then
-      if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
-        exit 1
-      fi
-    fi
-
-    LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
-    OWNER_TAG=""
-    if [[ -d "$LOCK_DIR" ]]; then
-      OWNER_TAG="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
-    fi
-
     if [[ "$FORCE_RELEASE" -eq 1 ]]; then
-      if [[ -n "$OWNER_TAG" && ( -z "$CALLER_SESSION" || "$CALLER_SESSION" != "$OWNER_TAG" ) ]]; then
-        echo "WARNING: force report-write for task '$TASK_ID' (lock owner '${OWNER_TAG:-none}', caller '${CALLER_SESSION:-none}')" >&2
-      fi
-      if [[ -x "$SCRIPT_DIR/run-history.sh" ]]; then
-        "$SCRIPT_DIR/run-history.sh" append "$RUN_DIR" implement report-write-force \
-          "task=$TASK_ID" "owner=${OWNER_TAG:-none}" "caller=${CALLER_SESSION:-none}" >/dev/null 2>&1 || true
-      fi
+      echo "WARNING: force-releasing lock on task '$TASK_ID' (owner was '$OWNER_TAG')" >&2
     else
-      if [[ ! -d "$LOCK_DIR" ]]; then
-        [[ -d "$PLAN_DIR" ]] && release_mkdir_mutex
-        echo "Error: task '$TASK_ID' is not claimed/locked; claim it before report-write, or use --force" >&2
-        exit 1
-      fi
       if [[ -z "$CALLER_SESSION" ]]; then
         release_mkdir_mutex
-        echo "Error: session-tag required to report-write task '$TASK_ID' (held by '$OWNER_TAG')" >&2
+        echo "Error: session-tag required to release task '$TASK_ID' (held by '$OWNER_TAG'); use --force to override" >&2
         exit 1
       fi
       if [[ "$CALLER_SESSION" != "$OWNER_TAG" ]]; then
@@ -1046,79 +950,175 @@ case "$SUBCMD" in
         exit 1
       fi
     fi
+    rm -rf "$LOCK_DIR"
+  fi
 
-    if [[ "$IN_FILE" == "-" ]]; then
-      cat > "$REPORT_DIR/$TASK_ID.md"
-    else
-      cp "$IN_FILE" "$REPORT_DIR/$TASK_ID.md"
-    fi
+  release_mkdir_mutex
+  regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
+  ;;
 
-    [[ -d "$PLAN_DIR" ]] && release_mkdir_mutex
-    regenerate_report_rollup "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
-    ;;
+list)
+  [[ $# -eq 1 ]] || usage
+  TARGET="$1"
+  resolve_paths "$TARGET"
+  [[ -d "$PLAN_DIR" ]] || {
+    echo "Error: plan directory '$PLAN_DIR' does not exist." >&2
+    exit 1
+  }
+  list_tasks "$PLAN_DIR"
+  ;;
 
-  report-list)
-    [[ $# -eq 1 ]] || usage
-    TARGET="$1"
-    resolve_paths "$TARGET"
-    [[ -d "$REPORT_DIR" ]] || {
-      echo "Error: report directory '$REPORT_DIR' does not exist." >&2
-      exit 1
-    }
+report-write)
+  while [[ $# -ge 1 ]]; do
+    case "$1" in
+    --session)
+      [[ $# -ge 2 ]] || usage
+      OPT_SESSION="$2"
+      shift 2
+      ;;
+    --force)
+      FORCE_RELEASE=1
+      shift
+      ;;
+    *)
+      break
+      ;;
+    esac
+  done
 
-    if [[ -d "$PLAN_DIR" ]]; then
-      while IFS= read -r tid || [[ -n "$tid" ]]; do
-        [[ -n "$tid" ]] || continue
-        if [[ -f "$REPORT_DIR/$tid.md" ]]; then
-          echo "$REPORT_DIR/$tid.md"
-        fi
-      done < <(get_ordered_tasks "$PLAN_DIR")
-    else
-      for f in "$REPORT_DIR"/*.md; do
-        [[ -f "$f" ]] || continue
-        fname="${f##*/}"
-        [[ "$fname" == "_meta.md" ]] && continue
-        [[ "$fname" == .rollup* ]] && continue
-        echo "$f"
-      done
-    fi
-    ;;
+  [[ $# -ge 3 ]] || usage
+  TARGET="$1"
+  TASK_ID="$2"
+  shift 2
+  validate_ident "task-id" "$TASK_ID"
 
-  report-rollup)
-    [[ $# -eq 1 ]] || usage
-    TARGET="$1"
-    resolve_paths "$TARGET"
-    [[ -d "$REPORT_DIR" ]] || {
-      echo "Error: report directory '$REPORT_DIR' does not exist." >&2
-      exit 1
-    }
-    regenerate_report_rollup "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
-    ;;
-
-  rollup)
-    [[ $# -eq 1 ]] || usage
-    TARGET="$1"
-    resolve_paths "$TARGET"
-    [[ -d "$PLAN_DIR" ]] || {
-      echo "Error: plan directory '$PLAN_DIR' does not exist." >&2
-      exit 1
-    }
-    regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
-    ;;
-
-  check)
-    [[ $# -eq 1 ]] || usage
-    TARGET="$1"
-    resolve_paths "$TARGET"
-    if [[ ! -d "$PLAN_DIR" && ! -d "$REPORT_DIR" ]]; then
-      echo "Error: neither '$PLAN_DIR' nor an implement-report directory exists for id '$ID'." >&2
-      echo "Nothing to check (this id has no parallel-mode directories)." >&2
-      exit 1
-    fi
-    check_consistency "$PLAN_DIR" "$ROLLUP_FILE" "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
-    ;;
-
-  *)
+  ARG_SESSION=""
+  IN_FILE=""
+  if [[ $# -eq 1 ]]; then
+    IN_FILE="$1"
+  elif [[ $# -eq 2 ]]; then
+    ARG_SESSION="$1"
+    IN_FILE="$2"
+  else
     usage
-    ;;
+  fi
+
+  CALLER_SESSION="${OPT_SESSION:-$ARG_SESSION}"
+
+  resolve_paths "$TARGET"
+  mkdir -p "$REPORT_DIR"
+
+  MUTEX_DIR="$PLAN_DIR/.mutex-$TASK_ID"
+  if [[ -d "$PLAN_DIR" ]]; then
+    if ! acquire_mkdir_mutex "$MUTEX_DIR" "task mutex for '$TASK_ID'"; then
+      exit 1
+    fi
+  fi
+
+  LOCK_DIR="$PLAN_DIR/.lock-$TASK_ID"
+  OWNER_TAG=""
+  if [[ -d "$LOCK_DIR" ]]; then
+    OWNER_TAG="$(awk '{print $1}' "$LOCK_DIR/owner" 2>/dev/null || true)"
+  fi
+
+  if [[ "$FORCE_RELEASE" -eq 1 ]]; then
+    if [[ -n "$OWNER_TAG" && (-z "$CALLER_SESSION" || "$CALLER_SESSION" != "$OWNER_TAG") ]]; then
+      echo "WARNING: force report-write for task '$TASK_ID' (lock owner '${OWNER_TAG:-none}', caller '${CALLER_SESSION:-none}')" >&2
+    fi
+    if [[ -x "$SCRIPT_DIR/run-history.sh" ]]; then
+      "$SCRIPT_DIR/run-history.sh" append "$RUN_DIR" implement report-write-force \
+        "task=$TASK_ID" "owner=${OWNER_TAG:-none}" "caller=${CALLER_SESSION:-none}" >/dev/null 2>&1 || true
+    fi
+  else
+    if [[ ! -d "$LOCK_DIR" ]]; then
+      [[ -d "$PLAN_DIR" ]] && release_mkdir_mutex
+      echo "Error: task '$TASK_ID' is not claimed/locked; claim it before report-write, or use --force" >&2
+      exit 1
+    fi
+    if [[ -z "$CALLER_SESSION" ]]; then
+      release_mkdir_mutex
+      echo "Error: session-tag required to report-write task '$TASK_ID' (held by '$OWNER_TAG')" >&2
+      exit 1
+    fi
+    if [[ "$CALLER_SESSION" != "$OWNER_TAG" ]]; then
+      release_mkdir_mutex
+      echo "Error: caller session tag '$CALLER_SESSION' does not match lock owner '$OWNER_TAG' for task '$TASK_ID'" >&2
+      exit 1
+    fi
+  fi
+
+  if [[ "$IN_FILE" == "-" ]]; then
+    cat >"$REPORT_DIR/$TASK_ID.md"
+  else
+    cp "$IN_FILE" "$REPORT_DIR/$TASK_ID.md"
+  fi
+
+  [[ -d "$PLAN_DIR" ]] && release_mkdir_mutex
+  regenerate_report_rollup "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
+  ;;
+
+report-list)
+  [[ $# -eq 1 ]] || usage
+  TARGET="$1"
+  resolve_paths "$TARGET"
+  [[ -d "$REPORT_DIR" ]] || {
+    echo "Error: report directory '$REPORT_DIR' does not exist." >&2
+    exit 1
+  }
+
+  if [[ -d "$PLAN_DIR" ]]; then
+    while IFS= read -r tid || [[ -n "$tid" ]]; do
+      [[ -n "$tid" ]] || continue
+      if [[ -f "$REPORT_DIR/$tid.md" ]]; then
+        echo "$REPORT_DIR/$tid.md"
+      fi
+    done < <(get_ordered_tasks "$PLAN_DIR")
+  else
+    for f in "$REPORT_DIR"/*.md; do
+      [[ -f "$f" ]] || continue
+      fname="${f##*/}"
+      [[ "$fname" == "_meta.md" ]] && continue
+      [[ "$fname" == .rollup* ]] && continue
+      echo "$f"
+    done
+  fi
+  ;;
+
+report-rollup)
+  [[ $# -eq 1 ]] || usage
+  TARGET="$1"
+  resolve_paths "$TARGET"
+  [[ -d "$REPORT_DIR" ]] || {
+    echo "Error: report directory '$REPORT_DIR' does not exist." >&2
+    exit 1
+  }
+  regenerate_report_rollup "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
+  ;;
+
+rollup)
+  [[ $# -eq 1 ]] || usage
+  TARGET="$1"
+  resolve_paths "$TARGET"
+  [[ -d "$PLAN_DIR" ]] || {
+    echo "Error: plan directory '$PLAN_DIR' does not exist." >&2
+    exit 1
+  }
+  regenerate_rollup "$PLAN_DIR" "$ROLLUP_FILE" "$ID"
+  ;;
+
+check)
+  [[ $# -eq 1 ]] || usage
+  TARGET="$1"
+  resolve_paths "$TARGET"
+  if [[ ! -d "$PLAN_DIR" && ! -d "$REPORT_DIR" ]]; then
+    echo "Error: neither '$PLAN_DIR' nor an implement-report directory exists for id '$ID'." >&2
+    echo "Nothing to check (this id has no parallel-mode directories)." >&2
+    exit 1
+  fi
+  check_consistency "$PLAN_DIR" "$ROLLUP_FILE" "$REPORT_DIR" "$REPORT_ROLLUP_FILE" "$ID"
+  ;;
+
+*)
+  usage
+  ;;
 esac

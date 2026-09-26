@@ -27,18 +27,18 @@ preflight").
 
 ### Commands used in this stage
 
-| Command | Meaning of a non-zero exit |
-| --- | --- |
-| `atry version` | atry is missing or broken on PATH -- stop, see Preflight above |
-| `atry resolve [RUN_ID or path]` | ambiguous or not found -- ask the user for the `RUN_ID` or path |
-| `atry history append <run-dir> implement started\|completed tool=<tool>` | run dir invalid |
-| `atry task-init "$RUN_DIR"` (parallel mode setup) | the plan doesn't parse (bad checkbox status or dependency id) |
-| `atry list "$RUN_DIR"` (parallel mode) | informational only -- no special non-zero meaning |
-| `atry claim "$RUN_DIR" <task-id> <session-tag>` (parallel mode) | already locked, or a dep isn't `done` -- pick a different task |
-| `atry update "$RUN_DIR" <task-id> <session-tag> done\|skipped <reason>` (parallel mode) | the caller's session doesn't own the lock |
-| `atry release "$RUN_DIR" <task-id> <session-tag>` (parallel mode) | the caller's session doesn't own the lock (use `--force` to override) |
-| `atry report-write "$RUN_DIR" <task-id> <session-tag> -` (parallel mode) | the lock isn't held -- use `--force` (logs `report-write-force`) |
-| `atry check "$RUN_DIR"` (parallel mode) | `MISMATCH` -- a rollup was hand-edited outside the claim protocol |
+| Command                                                                                 | Meaning of a non-zero exit                                            |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `atry version`                                                                          | atry is missing or broken on PATH -- stop, see Preflight above        |
+| `atry resolve [RUN_ID or path]`                                                         | ambiguous or not found -- ask the user for the `RUN_ID` or path       |
+| `atry history append <run-dir> implement started\|completed tool=<tool>`                | run dir invalid                                                       |
+| `atry task-init "$RUN_DIR"` (parallel mode setup)                                       | the plan doesn't parse (bad checkbox status or dependency id)         |
+| `atry list "$RUN_DIR"` (parallel mode)                                                  | informational only -- no special non-zero meaning                     |
+| `atry claim "$RUN_DIR" <task-id> <session-tag>` (parallel mode)                         | already locked, or a dep isn't `done` -- pick a different task        |
+| `atry update "$RUN_DIR" <task-id> <session-tag> done\|skipped <reason>` (parallel mode) | the caller's session doesn't own the lock                             |
+| `atry release "$RUN_DIR" <task-id> <session-tag>` (parallel mode)                       | the caller's session doesn't own the lock (use `--force` to override) |
+| `atry report-write "$RUN_DIR" <task-id> <session-tag> -` (parallel mode)                | the lock isn't held -- use `--force` (logs `report-write-force`)      |
+| `atry check "$RUN_DIR"` (parallel mode)                                                 | `MISMATCH` -- a rollup was hand-edited outside the claim protocol     |
 
 ## Run discovery
 

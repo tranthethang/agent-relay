@@ -86,10 +86,10 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then
   # Argument is a RUN_ID
   id="$arg"
   case "$id" in
-    *[!A-Za-z0-9._-]*|"")
-      echo "Error: invalid RUN_ID '$id'" >&2
-      exit 1
-      ;;
+  *[!A-Za-z0-9._-]* | "")
+    echo "Error: invalid RUN_ID '$id'" >&2
+    exit 1
+    ;;
   esac
 
   BASE_DIR="$(find_base_dir)"

@@ -234,14 +234,14 @@ validate_targets_conf() {
   while IFS= read -r line || [[ -n "$line" ]]; do
     lineno=$((lineno + 1))
     case "$line" in
-      ''|[[:space:]]*'#'*|'#'*) continue ;;
+    '' | [[:space:]]*'#'* | '#'*) continue ;;
     esac
     case "$line" in
-      *'$('*|*'`'*|*';'*|*'&&'*|*'||'*|*'|'*|*'>'*|*'<'*|*'$IFS'*)
-        printf 'Error: targets.conf line %d contains a construct that is not allowed in this manifest: %s\n' "$lineno" "$line" >&2
-        printf 'Refusing to source targets.conf (command substitution, pipes/redirects, control operators are blocked as a safety measure). Inspect the file manually, then remove the offending construct if it is expected.\n' >&2
-        return 1
-        ;;
+    *'$('* | *'`'* | *';'* | *'&&'* | *'||'* | *'|'* | *'>'* | *'<'* | *'$IFS'*)
+      printf 'Error: targets.conf line %d contains a construct that is not allowed in this manifest: %s\n' "$lineno" "$line" >&2
+      printf 'Refusing to source targets.conf (command substitution, pipes/redirects, control operators are blocked as a safety measure). Inspect the file manually, then remove the offending construct if it is expected.\n' >&2
+      return 1
+      ;;
     esac
     if [[ "$line" =~ $re_dq || "$line" =~ $re_sq || "$line" =~ $re_bare || "$line" =~ $re_array ]]; then
       continue
@@ -249,37 +249,50 @@ validate_targets_conf() {
     printf 'Error: targets.conf line %d is not a plain KEY=value / KEY=(...) assignment: %s\n' "$lineno" "$line" >&2
     printf 'Refusing to source targets.conf (only blank lines, comments, and simple assignments are allowed).\n' >&2
     return 1
-  done < "$conf"
+  done <"$conf"
   return 0
 }
 # END BOOTSTRAP
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --only)
-      need_arg "$1" "${2:-}"
-      ONLY_TOOLS="$(normalize_csv "$2")"
-      shift 2
-      ;;
-    --skill)
-      need_arg "$1" "${2:-}"
-      ONLY_SKILLS="$(normalize_csv "$2")"
-      shift 2
-      ;;
-    --ref)
-      need_arg "$1" "${2:-}"
-      CLI_REF="$2"
-      shift 2
-      ;;
-    --sha256)
-      need_arg "$1" "${2:-}"
-      CLI_SHA256="$2"
-      shift 2
-      ;;
-    --dry-run) DRY_RUN=1; shift ;;
-    --force) FORCE_UNINSTALL=1; shift ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
+  --only)
+    need_arg "$1" "${2:-}"
+    ONLY_TOOLS="$(normalize_csv "$2")"
+    shift 2
+    ;;
+  --skill)
+    need_arg "$1" "${2:-}"
+    ONLY_SKILLS="$(normalize_csv "$2")"
+    shift 2
+    ;;
+  --ref)
+    need_arg "$1" "${2:-}"
+    CLI_REF="$2"
+    shift 2
+    ;;
+  --sha256)
+    need_arg "$1" "${2:-}"
+    CLI_SHA256="$2"
+    shift 2
+    ;;
+  --dry-run)
+    DRY_RUN=1
+    shift
+    ;;
+  --force)
+    FORCE_UNINSTALL=1
+    shift
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "Unknown option: $1" >&2
+    usage
+    exit 1
+    ;;
   esac
 done
 
@@ -303,7 +316,7 @@ elif [[ -f "$SCRIPT_DIR/lib/bootstrap.sh" ]]; then
 fi
 
 # Standalone download, or an explicit --ref / AGENT_RELAY_REF (even from a clone).
-if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && ( -z "$REPO_ROOT" || -n "${CLI_REF:-}" || -n "${AGENT_RELAY_REF:-}" ) ]]; then
+if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && (-z "$REPO_ROOT" || -n "${CLI_REF:-}" || -n "${AGENT_RELAY_REF:-}") ]]; then
   echo "Uninstaller running in Remote Mode..."
   TARGET_REF="$(resolve_ref "${CLI_REF:-}" "${AGENT_RELAY_REF:-}" "${DEFAULT_REF:-}")"
   TARGET_SHA256="${CLI_SHA256:-${AGENT_RELAY_SHA256:-}}"
@@ -357,7 +370,7 @@ done
 
 shopt -s nullglob
 skill_dirs=()
-for _d in "$SKILLS_DIR"/*/ ; do
+for _d in "$SKILLS_DIR"/*/; do
   [[ -f "${_d}SKILL.md" ]] || continue
   skill_dirs+=("$_d")
 done
@@ -369,13 +382,15 @@ if [[ ${#skill_dirs[@]} -eq 0 ]]; then
 fi
 
 tool_selected() {
-  local tool_lc; tool_lc="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+  local tool_lc
+  tool_lc="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
   [[ -z "$ONLY_TOOLS" ]] && return 0
   [[ ",$ONLY_TOOLS," == *",$tool_lc,"* ]]
 }
 
 skill_selected() {
-  local name_lc; name_lc="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+  local name_lc
+  name_lc="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
   [[ -z "$ONLY_SKILLS" ]] && return 0
   [[ ",$ONLY_SKILLS," == *",$name_lc,"* ]]
 }
@@ -387,12 +402,15 @@ csv_has_unknown() {
   local -a tokens
   local unknown=0 token v ok
   [[ -z "$csv" ]] && return 1
-  IFS=',' read -r -a tokens <<< "$csv"
+  IFS=',' read -r -a tokens <<<"$csv"
   for token in "${tokens[@]}"; do
     [[ -z "$token" ]] && continue
     ok=0
     for v in "${valids[@]}"; do
-      if [[ "$token" == "$v" ]]; then ok=1; break; fi
+      if [[ "$token" == "$v" ]]; then
+        ok=1
+        break
+      fi
     done
     if [[ "$ok" -eq 0 ]]; then
       echo "Unknown $kind: $token" >&2
@@ -474,13 +492,13 @@ for tool in "${TOOLS[@]}"; do
     skill_selected "$name" || continue
 
     case "$fmt" in
-      skill-folder)
-        remove_skill_folder "$dest_dir/$name" "$name"
-        ;;
-      *)
-        echo "Unknown format '$fmt' for $tool (only skill-folder is supported)" >&2
-        exit 1
-        ;;
+    skill-folder)
+      remove_skill_folder "$dest_dir/$name" "$name"
+      ;;
+    *)
+      echo "Unknown format '$fmt' for $tool (only skill-folder is supported)" >&2
+      exit 1
+      ;;
     esac
   done
 done

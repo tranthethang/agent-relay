@@ -11,7 +11,7 @@ Distills lessons from a completed run (plan -> implement -> self-review ->
 cross-review) into `distillation.md`, and optionally pushes the full note to
 a configured external knowledge bank.
 
-You are summarizing what a *finished* run taught, for whoever starts the next
+You are summarizing what a _finished_ run taught, for whoever starts the next
 run. You are not re-reviewing the diff and not judging whether the run was
 "good" — only what is worth remembering from it. Do not invent lessons that
 are not actually supported by the run's own files.
@@ -29,13 +29,13 @@ preflight").
 
 ### Commands used in this stage
 
-| Command | Meaning of a non-zero exit |
-| --- | --- |
-| `atry version` | atry is missing or broken on PATH -- stop, see Preflight above |
-| `atry resolve [RUN_ID or path]` | ambiguous or not found -- ask the user for the `RUN_ID` or path |
-| `atry history append <run-dir> distill started\|completed tool=<tool>` | run dir invalid |
-| `atry bank check "$RUN_DIR"` | `1`: `bank.conf` is malformed; `2`: no `.agent-relay/` / git repo found above `$RUN_DIR` -- either way, treat as "no usable bank" and skip the push |
-| `atry bank push "$RUN_DIR" <run-id> <title> <file>` | `2`: bank not configured/reachable (or no `.agent-relay/` found) -- expected, not an error |
+| Command                                                                | Meaning of a non-zero exit                                                                                                                          |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atry version`                                                         | atry is missing or broken on PATH -- stop, see Preflight above                                                                                      |
+| `atry resolve [RUN_ID or path]`                                        | ambiguous or not found -- ask the user for the `RUN_ID` or path                                                                                     |
+| `atry history append <run-dir> distill started\|completed tool=<tool>` | run dir invalid                                                                                                                                     |
+| `atry bank check "$RUN_DIR"`                                           | `1`: `bank.conf` is malformed; `2`: no `.agent-relay/` / git repo found above `$RUN_DIR` -- either way, treat as "no usable bank" and skip the push |
+| `atry bank push "$RUN_DIR" <run-id> <title> <file>`                    | `2`: bank not configured/reachable (or no `.agent-relay/` found) -- expected, not an error                                                          |
 
 ## Run discovery
 
@@ -108,7 +108,7 @@ runtime proof, same as every other stage.
    atry bank check "$RUN_DIR"
    ```
 
-   `(`atry bank check` walks up from `$RUN_DIR` to find `.agent-relay/` at the
+   ``(``atry bank check``walks up from``$RUN_DIR``to find``.agent-relay/` at the
    repo root.)
 
    Check its exit code, do not just read the file it may or may not have

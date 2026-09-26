@@ -42,11 +42,11 @@ trap cleanup EXIT INT TERM
 awk '
   /^# Requires: bash/ { in_code=1; next }
   in_code { print }
-' "$LIB_FILE" > "$tmp_bootstrap"
+' "$LIB_FILE" >"$tmp_bootstrap"
 
 # Fallback if empty
 if [[ ! -s "$tmp_bootstrap" ]]; then
-  awk 'NR>1 { print }' "$LIB_FILE" > "$tmp_bootstrap"
+  awk 'NR>1 { print }' "$LIB_FILE" >"$tmp_bootstrap"
 fi
 
 new_hash="$(shasum -a 256 "$tmp_bootstrap" | awk '{print $1}')"
@@ -69,7 +69,7 @@ for target in "${TARGETS[@]}"; do
     /# BEGIN BOOTSTRAP/ { in_block=1; next }
     /# END BOOTSTRAP/ { in_block=0 }
     in_block { print }
-  ' "$target" > "$tmp_existing"
+  ' "$target" >"$tmp_existing"
 
   existing_hash="$(shasum -a 256 "$tmp_existing" | awk '{print $1}')"
   rm -f "$tmp_existing"
@@ -92,7 +92,7 @@ for target in "${TARGETS[@]}"; do
         elif [[ $in_block -eq 0 ]]; then
           echo "$line"
         fi
-      done < "$target" > "$tmp_out"
+      done <"$target" >"$tmp_out"
 
       mv "$tmp_out" "$target"
       chmod +x "$target"

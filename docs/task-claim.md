@@ -13,9 +13,9 @@ Artifact layout and status field semantics:
 
 ## When to use
 
-- Multiple agents update **status / per-task reports** for the same `<id>`  
+- Multiple agents update **status / per-task reports** for the same `<id>`
 - File sets for those tasks are **disjoint**, or each agent has its own
-  worktree/branch  
+  worktree/branch
 
 Do **not** rely on this protocol to serialize overlapping edits to the same
 source files — it does not.
@@ -38,12 +38,12 @@ dependency cycles refuse the plan and remove the partially written
 
 Per-task status values (whitelist):
 
-| Status | Meaning |
-| --- | --- |
-| `pending` | Not started; may be blocked on deps |
-| `in-progress` | Claimed (or stolen); an agent holds the lock |
-| `done` | Finished |
-| `skipped (reason)` | Waived; reason required |
+| Status             | Meaning                                      |
+| ------------------ | -------------------------------------------- |
+| `pending`          | Not started; may be blocked on deps          |
+| `in-progress`      | Claimed (or stolen); an agent holds the lock |
+| `done`             | Finished                                     |
+| `skipped (reason)` | Waived; reason required                      |
 
 Typical transitions under the lock:
 
@@ -63,10 +63,10 @@ change `.status`.
 (`implement-plan/.mutex-<task-id>/`) before touching the ownership lock or
 status file, then releases it before regenerating rollups.
 
-| Artifact | Role |
-| --- | --- |
+| Artifact            | Role                                                                            |
+| ------------------- | ------------------------------------------------------------------------------- |
 | `.mutex-<task-id>/` | Short-lived critical-section mutex (`owner_pid`, `owner_host`, `created_epoch`) |
-| `.lock-<task-id>/` | Session ownership (`owner` + `created_epoch`) |
+| `.lock-<task-id>/`  | Session ownership (`owner` + `created_epoch`)                                   |
 
 Stale mutex recovery uses the **recorded** epoch age plus pid liveness: a live
 slow holder is never evicted because a waiter has been blocked for N seconds.
@@ -77,10 +77,10 @@ The old `.lock-steal-<task-id>` directory is gone.
 A pid is only evidence on the machine that recorded it, so every mutex also
 records `owner_host` (`uname -n`) and recovery has two branches:
 
-| Recorded host | Reclaim rule | Default |
-| --- | --- | --- |
-| Same as this machine | Owner pid dead **and** recorded age ≥ `MUTEX_STALE_AGE` | 10s |
-| Different, or not recorded | Recorded age ≥ `MUTEX_FOREIGN_STALE_AGE`; the pid is ignored | 900s |
+| Recorded host              | Reclaim rule                                                 | Default |
+| -------------------------- | ------------------------------------------------------------ | ------- |
+| Same as this machine       | Owner pid dead **and** recorded age ≥ `MUTEX_STALE_AGE`      | 10s     |
+| Different, or not recorded | Recorded age ≥ `MUTEX_FOREIGN_STALE_AGE`; the pid is ignored | 900s    |
 
 agent-relay assumes the agents working one run share a machine. Sharing a run
 directory across machines (a network filesystem, separate containers) still
@@ -121,17 +121,17 @@ task-claim.sh [--session <tag>] <subcommand> ...
   report-rollup <id>
 ```
 
-| Command | Behavior |
-| --- | --- |
-| `claim` | Under task mutex: re-check deps, atomic `mkdir` ownership lock; deps must be exactly `done` (`skipped` does not count unless `--allow-skipped-deps`); sets status `in-progress` |
-| `steal` | Intentional lock takeover under the same task mutex: short bounded wait plus compare-and-swap on the lock owner. **No** auto-steal by age |
-| `update` | Under task mutex: session must match lock owner; status whitelist `pending` \| `in-progress` \| `done` \| `skipped` (`skipped` needs a reason) |
-| `release` | Under task mutex: drop lock if session matches, or `--force` |
-| `list` | Print tasks; pending + unmet deps get `[blocked: …]` |
-| `rollup` | Regenerate the plan rollup on demand. Every state-changing subcommand above already does this as its last step, so this is mostly for manual recovery |
-| `check` | Regenerate expected rollups into temps beside the plan/report dirs; `cmp` to on-disk rollups; `MISMATCH` → exit non-zero. **Does not repair** |
-| `report-write` | Under task mutex: session must own the lock (or `--force`, which appends `report-write-force` to `history.log`); writes per-task report + report rollup |
-| `report-*` | Per-task report files + generated `implement-report.md` |
+| Command        | Behavior                                                                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `claim`        | Under task mutex: re-check deps, atomic `mkdir` ownership lock; deps must be exactly `done` (`skipped` does not count unless `--allow-skipped-deps`); sets status `in-progress` |
+| `steal`        | Intentional lock takeover under the same task mutex: short bounded wait plus compare-and-swap on the lock owner. **No** auto-steal by age                                       |
+| `update`       | Under task mutex: session must match lock owner; status whitelist `pending` \| `in-progress` \| `done` \| `skipped` (`skipped` needs a reason)                                  |
+| `release`      | Under task mutex: drop lock if session matches, or `--force`                                                                                                                    |
+| `list`         | Print tasks; pending + unmet deps get `[blocked: …]`                                                                                                                            |
+| `rollup`       | Regenerate the plan rollup on demand. Every state-changing subcommand above already does this as its last step, so this is mostly for manual recovery                           |
+| `check`        | Regenerate expected rollups into temps beside the plan/report dirs; `cmp` to on-disk rollups; `MISMATCH` → exit non-zero. **Does not repair**                                   |
+| `report-write` | Under task mutex: session must own the lock (or `--force`, which appends `report-write-force` to `history.log`); writes per-task report + report rollup                         |
+| `report-*`     | Per-task report files + generated `implement-report.md`                                                                                                                         |
 
 `--session` may appear before the subcommand or (for `update`/`release`/
 `report-write`) after it. Ambient `SESSION` / `SESSION_TAG` env vars are
@@ -143,11 +143,11 @@ disables pathname globbing.
 
 ## Locks
 
-- Per-task ownership: `implement-plan/.lock-<task-id>/` (`mkdir` is the mutex)  
-- Per-task mutation mutex: `implement-plan/.mutex-<task-id>/`  
-- Owner file records `session-tag` + timestamp  
+- Per-task ownership: `implement-plan/.lock-<task-id>/` (`mkdir` is the mutex)
+- Per-task mutation mutex: `implement-plan/.mutex-<task-id>/`
+- Owner file records `session-tag` + timestamp
 - Stale ownership locks: `claim` fails and prints the `steal` command — human/agent
-  decision, not a timer  
+  decision, not a timer
 - Rollup locks use the same recorded-age + pid-liveness recovery as task mutexes
   (not “waited 5s → steal”)
 
@@ -163,10 +163,10 @@ nothing filesystem-locks the rollup `.md` against editors.
 
 ## Isolation summary
 
-| Scenario | Safe for status/report? |
-| --- | --- |
-| Different tasks, disjoint source files, one worktree | Yes |
-| Different tasks, overlapping source files, one worktree | No |
-| One agent per worktree/branch, then merge | Yes (recommended when files overlap) |
-| Two agents `claim` the same task | No — second fails loudly |
-| Concurrent `steal` vs `release` on one task | Serialized by task mutex; release cannot be silently undone |
+| Scenario                                                | Safe for status/report?                                     |
+| ------------------------------------------------------- | ----------------------------------------------------------- |
+| Different tasks, disjoint source files, one worktree    | Yes                                                         |
+| Different tasks, overlapping source files, one worktree | No                                                          |
+| One agent per worktree/branch, then merge               | Yes (recommended when files overlap)                        |
+| Two agents `claim` the same task                        | No — second fails loudly                                    |
+| Concurrent `steal` vs `release` on one task             | Serialized by task mutex; release cannot be silently undone |

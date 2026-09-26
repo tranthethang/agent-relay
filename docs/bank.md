@@ -42,11 +42,11 @@ BANK_TYPE=obsidian-vault
 BANK_PATH=/absolute/path/to/your/vault
 ```
 
-| `BANK_TYPE` | Status | What it needs |
-| --- | --- | --- |
-| `obsidian-vault` | Implemented | `BANK_PATH` — an existing, writable local directory (your vault root, or any folder Obsidian watches) |
-| `lightrag-http` | Reserved, no driver yet | Would need `BANK_ENDPOINT` and real network egress from wherever the agent runs |
-| `agentmemory-cli` | Reserved, no driver yet | Would need a resolvable CLI command; not wired up |
+| `BANK_TYPE`       | Status                  | What it needs                                                                                         |
+| ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| `obsidian-vault`  | Implemented             | `BANK_PATH` — an existing, writable local directory (your vault root, or any folder Obsidian watches) |
+| `lightrag-http`   | Reserved, no driver yet | Would need `BANK_ENDPOINT` and real network egress from wherever the agent runs                       |
+| `agentmemory-cli` | Reserved, no driver yet | Would need a resolvable CLI command; not wired up                                                     |
 
 Declaring `lightrag-http` or `agentmemory-cli` today is harmless: `atry bank check`
 records them as `reachable: false` with a `detail` explaining there is no
@@ -92,7 +92,7 @@ runs for reasons `atry bank check` has no way to detect on its own (the vault
 path moves, a drive unmounts) — `bank-status.md` is only ever as current as
 the last time this script actually ran.
 
-*Known limitation*: `[[ -w "$BANK_PATH" ]]` tests writability via file
+_Known limitation_: `[[ -w "$BANK_PATH" ]]` tests writability via file
 permission bits. When running as `root` (e.g. in some container or CI
 environments), `[[ -w ]]` reports true even if the target filesystem is mounted
 read-only. Treat reachability as advisory in such environments.
@@ -123,11 +123,11 @@ push happened. See that skill's `SKILL.md` for how it reports the outcome.
 
 Same honesty standard as [security.md](security.md):
 
-| Surface | What you get | What you do not get |
-| --- | --- | --- |
-| `bank.conf` line parser | Refuses obvious RCE shapes and non-`BANK_KEY=value` lines before ever writing a status file | A proof that the declared path/endpoint is itself safe, or that pushed content is sound |
-| `bank-status.md` | A point-in-time reachability probe | A guarantee the bank stays reachable until the push actually runs |
-| `atry bank push` obsidian-vault write | A plain markdown file on disk at a deterministic path | Confirmation your notes app indexed it, or that the note is any good |
+| Surface                               | What you get                                                                                | What you do not get                                                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `bank.conf` line parser               | Refuses obvious RCE shapes and non-`BANK_KEY=value` lines before ever writing a status file | A proof that the declared path/endpoint is itself safe, or that pushed content is sound |
+| `bank-status.md`                      | A point-in-time reachability probe                                                          | A guarantee the bank stays reachable until the push actually runs                       |
+| `atry bank push` obsidian-vault write | A plain markdown file on disk at a deterministic path                                       | Confirmation your notes app indexed it, or that the note is any good                    |
 
 ## Adding a real second backend later
 

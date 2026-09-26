@@ -177,14 +177,14 @@ validate_targets_conf() {
   while IFS= read -r line || [[ -n "$line" ]]; do
     lineno=$((lineno + 1))
     case "$line" in
-      ''|[[:space:]]*'#'*|'#'*) continue ;;
+    '' | [[:space:]]*'#'* | '#'*) continue ;;
     esac
     case "$line" in
-      *'$('*|*'`'*|*';'*|*'&&'*|*'||'*|*'|'*|*'>'*|*'<'*|*'$IFS'*)
-        printf 'Error: targets.conf line %d contains a construct that is not allowed in this manifest: %s\n' "$lineno" "$line" >&2
-        printf 'Refusing to source targets.conf (command substitution, pipes/redirects, control operators are blocked as a safety measure). Inspect the file manually, then remove the offending construct if it is expected.\n' >&2
-        return 1
-        ;;
+    *'$('* | *'`'* | *';'* | *'&&'* | *'||'* | *'|'* | *'>'* | *'<'* | *'$IFS'*)
+      printf 'Error: targets.conf line %d contains a construct that is not allowed in this manifest: %s\n' "$lineno" "$line" >&2
+      printf 'Refusing to source targets.conf (command substitution, pipes/redirects, control operators are blocked as a safety measure). Inspect the file manually, then remove the offending construct if it is expected.\n' >&2
+      return 1
+      ;;
     esac
     if [[ "$line" =~ $re_dq || "$line" =~ $re_sq || "$line" =~ $re_bare || "$line" =~ $re_array ]]; then
       continue
@@ -192,6 +192,6 @@ validate_targets_conf() {
     printf 'Error: targets.conf line %d is not a plain KEY=value / KEY=(...) assignment: %s\n' "$lineno" "$line" >&2
     printf 'Refusing to source targets.conf (only blank lines, comments, and simple assignments are allowed).\n' >&2
     return 1
-  done < "$conf"
+  done <"$conf"
   return 0
 }

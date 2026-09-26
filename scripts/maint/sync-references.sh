@@ -27,13 +27,19 @@ if [[ "${1:-}" == "--check" ]]; then
   CHECK_ONLY=1
 fi
 
-[[ -f "$SRC" ]] || { echo "Error: $SRC not found" >&2; exit 1; }
+[[ -f "$SRC" ]] || {
+  echo "Error: $SRC not found" >&2
+  exit 1
+}
 
 shopt -s nullglob
 skill_dirs=("$ROOT_DIR"/skills/*/)
 shopt -u nullglob
 
-[[ ${#skill_dirs[@]} -gt 0 ]] || { echo "Error: no skills/*/ directories" >&2; exit 1; }
+[[ ${#skill_dirs[@]} -gt 0 ]] || {
+  echo "Error: no skills/*/ directories" >&2
+  exit 1
+}
 
 drift=0
 for d in "${skill_dirs[@]}"; do

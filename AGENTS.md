@@ -30,19 +30,19 @@ docs for end users — see [`README.md`](README.md).
 
 ## Layout
 
-| Path | Role |
-| ---- | ---- |
-| `bin/` | `install.sh`, `uninstall.sh`, `verify.sh` |
-| `lib/bootstrap.sh` | Shared download / checksum / `targets.conf` validation |
-| `targets.conf` | Install destinations (`source`d after allowlist validation) |
-| `skills/<name>/` | Skill bundles (`SKILL.md` + `references/`; no `scripts/`) |
-| `docs/` | Maintainer docs — start at [`docs/INDEX.md`](docs/INDEX.md) |
+| Path                       | Role                                                            |
+| -------------------------- | --------------------------------------------------------------- |
+| `bin/`                     | `install.sh`, `uninstall.sh`, `verify.sh`                       |
+| `lib/bootstrap.sh`         | Shared download / checksum / `targets.conf` validation          |
+| `targets.conf`             | Install destinations (`source`d after allowlist validation)     |
+| `skills/<name>/`           | Skill bundles (`SKILL.md` + `references/`; no `scripts/`)       |
+| `docs/`                    | Maintainer docs — start at [`docs/INDEX.md`](docs/INDEX.md)     |
 | `docs/file-conventions.md` | Source of truth for `.agent-relay/` names (synced into bundles) |
-| `scripts/atry` | CLI entrypoint (installed to `~/.agent-relay/bin/atry`) |
-| `scripts/runtime/` | Helpers behind `atry` (installed to `~/.agent-relay/lib/`) |
-| `scripts/maint/` | Maintainer sync/release scripts (not installed for agents) |
-| `tests/` | Offline smoke / tasks / remote-smoke stubs |
-| `VERSION` | Release version; must match the `v*` git tag |
+| `scripts/atry`             | CLI entrypoint (installed to `~/.agent-relay/bin/atry`)         |
+| `scripts/runtime/`         | Helpers behind `atry` (installed to `~/.agent-relay/lib/`)      |
+| `scripts/maint/`           | Maintainer sync/release scripts (not installed for agents)      |
+| `tests/`                   | Offline smoke / tasks / remote-smoke stubs                      |
+| `VERSION`                  | Release version; must match the `v*` git tag                    |
 
 ## Editing skills and docs
 

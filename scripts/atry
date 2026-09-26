@@ -40,8 +40,8 @@ resolve_lib() {
   while [[ -L "$src" ]]; do
     target="$(readlink "$src")"
     case "$target" in
-      /*) src="$target" ;;
-      *)  src="$(cd -P "$(dirname "$src")" && pwd)/$target" ;;
+    /*) src="$target" ;;
+    *) src="$(cd -P "$(dirname "$src")" && pwd)/$target" ;;
     esac
   done
   self="$(cd -P "$(dirname "$src")" && pwd)"
@@ -80,18 +80,21 @@ fi
 TASK_GLOBALS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --session)
-      [[ $# -ge 2 ]] || { echo "Error: --session requires a value" >&2; exit 1; }
-      TASK_GLOBALS+=("$1" "$2")
-      shift 2
-      ;;
-    --allow-skipped-deps)
-      TASK_GLOBALS+=("$1")
-      shift
-      ;;
-    *)
-      break
-      ;;
+  --session)
+    [[ $# -ge 2 ]] || {
+      echo "Error: --session requires a value" >&2
+      exit 1
+    }
+    TASK_GLOBALS+=("$1" "$2")
+    shift 2
+    ;;
+  --allow-skipped-deps)
+    TASK_GLOBALS+=("$1")
+    shift
+    ;;
+  *)
+    break
+    ;;
   esac
 done
 
@@ -101,64 +104,82 @@ cmd="$1"
 shift
 
 case "$cmd" in
-  -h|--help|help)
-    usage
-    ;;
-  version)
-    if [[ -f "$ATRY_ROOT/VERSION" ]]; then
-      tr -d '[:space:]' < "$ATRY_ROOT/VERSION"
-      echo
-    else
-      echo "unknown"
-    fi
-    echo "lib=$ATRY_LIB"
-    exit 0
-    ;;
-  resolve)
-    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for resolve" >&2; exit 1; }
-    run_helper resolve-run.sh "$@"
-    ;;
-  run-init)
-    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for run-init" >&2; exit 1; }
-    run_helper run-init.sh "$@"
-    ;;
-  history)
-    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for history" >&2; exit 1; }
-    [[ $# -ge 1 ]] || usage
-    run_helper run-history.sh "$@"
-    ;;
-  task-init)
-    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for task-init" >&2; exit 1; }
-    run_helper task-init.sh "$@"
-    ;;
-  claim|steal|update|release|list|rollup|check|report-write|report-list|report-rollup)
-    if [[ ${#TASK_GLOBALS[@]} -gt 0 ]]; then
-      run_helper task-claim.sh "${TASK_GLOBALS[@]}" "$cmd" "$@"
-    else
-      run_helper task-claim.sh "$cmd" "$@"
-    fi
-    ;;
-  review)
-    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for review" >&2; exit 1; }
-    [[ $# -ge 1 ]] || usage
-    run_helper review-section.sh "$@"
-    ;;
-  bank)
-    [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || { echo "Error: global flags not valid for bank" >&2; exit 1; }
-    [[ $# -ge 1 ]] || usage
-    sub="$1"
-    shift
-    case "$sub" in
-      check) run_helper bank-check.sh "$@" ;;
-      push)  run_helper bank-push.sh "$@" ;;
-      *)
-        echo "Error: unknown bank subcommand '$sub' (check|push)" >&2
-        exit 1
-        ;;
-    esac
-    ;;
+-h | --help | help)
+  usage
+  ;;
+version)
+  if [[ -f "$ATRY_ROOT/VERSION" ]]; then
+    tr -d '[:space:]' <"$ATRY_ROOT/VERSION"
+    echo
+  else
+    echo "unknown"
+  fi
+  echo "lib=$ATRY_LIB"
+  exit 0
+  ;;
+resolve)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for resolve" >&2
+    exit 1
+  }
+  run_helper resolve-run.sh "$@"
+  ;;
+run-init)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for run-init" >&2
+    exit 1
+  }
+  run_helper run-init.sh "$@"
+  ;;
+history)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for history" >&2
+    exit 1
+  }
+  [[ $# -ge 1 ]] || usage
+  run_helper run-history.sh "$@"
+  ;;
+task-init)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for task-init" >&2
+    exit 1
+  }
+  run_helper task-init.sh "$@"
+  ;;
+claim | steal | update | release | list | rollup | check | report-write | report-list | report-rollup)
+  if [[ ${#TASK_GLOBALS[@]} -gt 0 ]]; then
+    run_helper task-claim.sh "${TASK_GLOBALS[@]}" "$cmd" "$@"
+  else
+    run_helper task-claim.sh "$cmd" "$@"
+  fi
+  ;;
+review)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for review" >&2
+    exit 1
+  }
+  [[ $# -ge 1 ]] || usage
+  run_helper review-section.sh "$@"
+  ;;
+bank)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for bank" >&2
+    exit 1
+  }
+  [[ $# -ge 1 ]] || usage
+  sub="$1"
+  shift
+  case "$sub" in
+  check) run_helper bank-check.sh "$@" ;;
+  push) run_helper bank-push.sh "$@" ;;
   *)
-    echo "Error: unknown command '$cmd'" >&2
-    usage
+    echo "Error: unknown bank subcommand '$sub' (check|push)" >&2
+    exit 1
     ;;
+  esac
+  ;;
+*)
+  echo "Error: unknown command '$cmd'" >&2
+  usage
+  ;;
 esac

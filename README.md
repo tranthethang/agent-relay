@@ -25,17 +25,17 @@ flowchart LR
 
 Each stage writes plain markdown into `your-repo/.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` — commit it with the branch, or `.gitignore` it, your choice:
 
-| Stage | Files it writes |
-| --- | --- |
-| 0 · brainstorm | *(writes nothing)* |
-| 1 · plan | `plan.md`, `meta.md`, `history.log` |
-| 2 · implement | `implement-plan.md`, `implement-report.md` |
-| 3 · self-review | `review-report.md`, `review-walkthrough.md` (adds a `Self-Review` section) |
-| 4 · cross-review | same two files (adds a `Cross-Review` section) |
-| 5 · distill | `distillation.md` |
+| Stage            | Files it writes                                                            |
+| ---------------- | -------------------------------------------------------------------------- |
+| 0 · brainstorm   | _(writes nothing)_                                                         |
+| 1 · plan         | `plan.md`, `meta.md`, `history.log`                                        |
+| 2 · implement    | `implement-plan.md`, `implement-report.md`                                 |
+| 3 · self-review  | `review-report.md`, `review-walkthrough.md` (adds a `Self-Review` section) |
+| 4 · cross-review | same two files (adds a `Cross-Review` section)                             |
+| 5 · distill      | `distillation.md`                                                          |
 
 > Not an orchestrator: nothing runs the stages for you, and nothing enforces them — an agent can skip a step.
-> Provenance lines record which tool and model a stage *says* it used. That's a record, not proof.
+> Provenance lines record which tool and model a stage _says_ it used. That's a record, not proof.
 
 Markdown skill **bundles** plus a bash installer and the `atry` CLI. Each skill
 is a folder (`SKILL.md`, `references/`) that tells an agent how to plan,
@@ -59,7 +59,7 @@ Maintainer docs (architecture, installer, tests, release, …):
 - Not a message bus, orchestrator, or multi-agent runtime. You open a tool and
   invoke a skill yourself.
 - Not a measured result. Provenance comments record which tool/model a stage
-  *claims* to have used; nothing verifies that claim.
+  _claims_ to have used; nothing verifies that claim.
 - Not a guarantee that every listed tool loads the installed files the same
   way. Install only copies files to known paths. Smoke tests check that each
   installed `SKILL.md` has non-empty front-matter `name:` / `description:` —
@@ -67,14 +67,14 @@ Maintainer docs (architecture, installer, tests, release, …):
 
 ## Stages
 
-| Order | Skill | What it is expected to do |
-| ----- | ----- | ------------------------- |
-| 0 | [`skills/atry-brainstorm/`](skills/atry-brainstorm/) | Optional. Investigate and discuss only; writes no files and creates no run directory until you name the next skill or lift the rule |
-| 1 | [`skills/atry-plan/`](skills/atry-plan/) | Write `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md` (schema + `atry run-init`) |
-| 2 | [`skills/atry-implement/`](skills/atry-implement/) | Implement that plan; write `implement-plan` / `implement-report` |
-| 3 | [`skills/atry-self-review/`](skills/atry-self-review/) | Review the diff; upsert a dated `Self-Review` section |
-| 4 | [`skills/atry-cross-review/`](skills/atry-cross-review/) | Upsert a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that. |
-| 5 | [`skills/atry-distill/`](skills/atry-distill/) | Write `distillation.md`: lessons from the finished run; optionally push the full distillation note to a configured knowledge bank |
+| Order | Skill                                                    | What it is expected to do                                                                                                           |
+| ----- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | [`skills/atry-brainstorm/`](skills/atry-brainstorm/)     | Optional. Investigate and discuss only; writes no files and creates no run directory until you name the next skill or lift the rule |
+| 1     | [`skills/atry-plan/`](skills/atry-plan/)                 | Write `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md` (schema + `atry run-init`)                                                   |
+| 2     | [`skills/atry-implement/`](skills/atry-implement/)       | Implement that plan; write `implement-plan` / `implement-report`                                                                    |
+| 3     | [`skills/atry-self-review/`](skills/atry-self-review/)   | Review the diff; upsert a dated `Self-Review` section                                                                               |
+| 4     | [`skills/atry-cross-review/`](skills/atry-cross-review/) | Upsert a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that.                |
+| 5     | [`skills/atry-distill/`](skills/atry-distill/)           | Write `distillation.md`: lessons from the finished run; optionally push the full distillation note to a configured knowledge bank   |
 
 Names, run directory layout, and id resolution:
 [`docs/file-conventions.md`](docs/file-conventions.md) (also shipped as
@@ -157,14 +157,14 @@ as a **bundle** (`SKILL.md` + `references/`). Runtime is the `atry` CLI under
 [`docs/installer.md`](docs/installer.md). Trust boundaries:
 [`docs/security.md`](docs/security.md).
 
-| Tool | Destination |
-| ---- | ----------- |
-| Cursor | `~/.cursor/skills/<name>/` (`SKILL.md`, `references/`) |
-| Antigravity | `~/.gemini/config/skills/<name>/` |
-| Claude | `~/.claude/skills/<name>/` |
-| Codex | `~/.codex/skills/<name>/` |
-| Kiro | `~/.kiro/skills/<name>/` (macOS and Linux) |
-| (CLI) | `~/.agent-relay/bin/atry` + `lib/`; shim `~/.local/bin/atry` |
+| Tool        | Destination                                                  |
+| ----------- | ------------------------------------------------------------ |
+| Cursor      | `~/.cursor/skills/<name>/` (`SKILL.md`, `references/`)       |
+| Antigravity | `~/.gemini/config/skills/<name>/`                            |
+| Claude      | `~/.claude/skills/<name>/`                                   |
+| Codex       | `~/.codex/skills/<name>/`                                    |
+| Kiro        | `~/.kiro/skills/<name>/` (macOS and Linux)                   |
+| (CLI)       | `~/.agent-relay/bin/atry` + `lib/`; shim `~/.local/bin/atry` |
 
 ```bash
 git clone https://github.com/tranthethang/agent-relay.git
@@ -238,18 +238,18 @@ bash scripts/maint/sync-bootstrap.sh --check
 bash scripts/maint/sync-references.sh --check
 ```
 
-| Doc | Topic |
-| --- | --- |
-| [`docs/INDEX.md`](docs/INDEX.md) | Full maintainer doc index |
-| [`docs/architecture.md`](docs/architecture.md) | How layers fit; non-goals |
-| [`docs/installer.md`](docs/installer.md) | Install/uninstall/verify mechanics, `targets.conf`, adding a tool |
-| [`docs/skills-authoring.md`](docs/skills-authoring.md) | Bundle layout, sync workflow, adding a skill |
+| Doc                                                    | Topic                                                                   |
+| ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| [`docs/INDEX.md`](docs/INDEX.md)                       | Full maintainer doc index                                               |
+| [`docs/architecture.md`](docs/architecture.md)         | How layers fit; non-goals                                               |
+| [`docs/installer.md`](docs/installer.md)               | Install/uninstall/verify mechanics, `targets.conf`, adding a tool       |
+| [`docs/skills-authoring.md`](docs/skills-authoring.md) | Bundle layout, sync workflow, adding a skill                            |
 | [`docs/file-conventions.md`](docs/file-conventions.md) | `.agent-relay/` artifact names, per-run directory layout, id resolution |
-| [`docs/task-claim.md`](docs/task-claim.md) | Parallel task helpers, locks, `check` |
-| [`docs/testing.md`](docs/testing.md) | Suites, CI, adding regressions |
-| [`docs/release.md`](docs/release.md) | `VERSION`, tag, `dist/` assets |
-| [`docs/security.md`](docs/security.md) | Trust boundaries, what checksums do and do not prove |
-| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Install / sync / lock triage |
+| [`docs/task-claim.md`](docs/task-claim.md)             | Parallel task helpers, locks, `check`                                   |
+| [`docs/testing.md`](docs/testing.md)                   | Suites, CI, adding regressions                                          |
+| [`docs/release.md`](docs/release.md)                   | `VERSION`, tag, `dist/` assets                                          |
+| [`docs/security.md`](docs/security.md)                 | Trust boundaries, what checksums do and do not prove                    |
+| [`docs/troubleshooting.md`](docs/troubleshooting.md)   | Install / sync / lock triage                                            |
 
 Also: [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md),
 [`CHANGELOG.md`](CHANGELOG.md).

@@ -260,14 +260,14 @@ validate_targets_conf() {
   while IFS= read -r line || [[ -n "$line" ]]; do
     lineno=$((lineno + 1))
     case "$line" in
-      ''|[[:space:]]*'#'*|'#'*) continue ;;
+    '' | [[:space:]]*'#'* | '#'*) continue ;;
     esac
     case "$line" in
-      *'$('*|*'`'*|*';'*|*'&&'*|*'||'*|*'|'*|*'>'*|*'<'*|*'$IFS'*)
-        printf 'Error: targets.conf line %d contains a construct that is not allowed in this manifest: %s\n' "$lineno" "$line" >&2
-        printf 'Refusing to source targets.conf (command substitution, pipes/redirects, control operators are blocked as a safety measure). Inspect the file manually, then remove the offending construct if it is expected.\n' >&2
-        return 1
-        ;;
+    *'$('* | *'`'* | *';'* | *'&&'* | *'||'* | *'|'* | *'>'* | *'<'* | *'$IFS'*)
+      printf 'Error: targets.conf line %d contains a construct that is not allowed in this manifest: %s\n' "$lineno" "$line" >&2
+      printf 'Refusing to source targets.conf (command substitution, pipes/redirects, control operators are blocked as a safety measure). Inspect the file manually, then remove the offending construct if it is expected.\n' >&2
+      return 1
+      ;;
     esac
     if [[ "$line" =~ $re_dq || "$line" =~ $re_sq || "$line" =~ $re_bare || "$line" =~ $re_array ]]; then
       continue
@@ -275,42 +275,55 @@ validate_targets_conf() {
     printf 'Error: targets.conf line %d is not a plain KEY=value / KEY=(...) assignment: %s\n' "$lineno" "$line" >&2
     printf 'Refusing to source targets.conf (only blank lines, comments, and simple assignments are allowed).\n' >&2
     return 1
-  done < "$conf"
+  done <"$conf"
   return 0
 }
 # END BOOTSTRAP
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --target)
-      echo "Error: --target is no longer supported. Skills install globally under \$HOME." >&2
-      echo "See README Install, or run with -h." >&2
-      exit 1
-      ;;
-    --only)
-      need_arg "$1" "${2:-}"
-      ONLY_TOOLS="$(normalize_csv "$2")"
-      shift 2
-      ;;
-    --skill)
-      need_arg "$1" "${2:-}"
-      ONLY_SKILLS="$(normalize_csv "$2")"
-      shift 2
-      ;;
-    --ref)
-      need_arg "$1" "${2:-}"
-      CLI_REF="$2"
-      shift 2
-      ;;
-    --sha256)
-      need_arg "$1" "${2:-}"
-      CLI_SHA256="$2"
-      shift 2
-      ;;
-    --dry-run) DRY_RUN=1; shift ;;
-    --no-clobber) NO_CLOBBER=1; shift ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
+  --target)
+    echo "Error: --target is no longer supported. Skills install globally under \$HOME." >&2
+    echo "See README Install, or run with -h." >&2
+    exit 1
+    ;;
+  --only)
+    need_arg "$1" "${2:-}"
+    ONLY_TOOLS="$(normalize_csv "$2")"
+    shift 2
+    ;;
+  --skill)
+    need_arg "$1" "${2:-}"
+    ONLY_SKILLS="$(normalize_csv "$2")"
+    shift 2
+    ;;
+  --ref)
+    need_arg "$1" "${2:-}"
+    CLI_REF="$2"
+    shift 2
+    ;;
+  --sha256)
+    need_arg "$1" "${2:-}"
+    CLI_SHA256="$2"
+    shift 2
+    ;;
+  --dry-run)
+    DRY_RUN=1
+    shift
+    ;;
+  --no-clobber)
+    NO_CLOBBER=1
+    shift
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "Unknown option: $1" >&2
+    usage
+    exit 1
+    ;;
   esac
 done
 
@@ -337,7 +350,7 @@ fi
 # --ref / AGENT_RELAY_REF also fetch, even from a clone. Otherwise a checkout
 # would ignore the pin and install the working tree. DEFAULT_REF alone does
 # not override a checkout (clone scripts leave it empty).
-if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && ( -z "$REPO_ROOT" || -n "${CLI_REF:-}" || -n "${AGENT_RELAY_REF:-}" ) ]]; then
+if [[ -z "${AGENT_RELAY_BOOTSTRAPPED:-}" && (-z "$REPO_ROOT" || -n "${CLI_REF:-}" || -n "${AGENT_RELAY_REF:-}") ]]; then
   echo "Installer running in Remote Mode..."
   TARGET_REF="$(resolve_ref "${CLI_REF:-}" "${AGENT_RELAY_REF:-}" "${DEFAULT_REF:-}")"
   TARGET_SHA256="${CLI_SHA256:-${AGENT_RELAY_SHA256:-}}"
@@ -415,7 +428,7 @@ act_write() {
 
 read_install_version() {
   if [[ -f "$SRC_DIR/VERSION" ]]; then
-    tr -d '[:space:]' < "$SRC_DIR/VERSION"
+    tr -d '[:space:]' <"$SRC_DIR/VERSION"
   else
     echo "unknown"
   fi
@@ -431,7 +444,7 @@ write_ownership_marker() {
   local marker version
   marker="$(ownership_marker_path "$dest_root")"
   version="$(read_install_version)"
-  cat > "$marker" <<EOF
+  cat >"$marker" <<EOF
 tool=$tool
 skill=$skill
 version=$version
@@ -466,11 +479,11 @@ dest_resolves_inside_tool_dir() {
       return 1
     fi
     case "$dest_resolved" in
-      "$tool_resolved"|"$tool_resolved"/*) return 0 ;;
-      *)
-        echo "Error: skill destination '$dest_root' resolves to '$dest_resolved', outside tool dir '$tool_resolved'" >&2
-        return 1
-        ;;
+    "$tool_resolved" | "$tool_resolved"/*) return 0 ;;
+    *)
+      echo "Error: skill destination '$dest_root' resolves to '$dest_resolved', outside tool dir '$tool_resolved'" >&2
+      return 1
+      ;;
     esac
   fi
   return 0
@@ -552,13 +565,15 @@ install_atry_home() {
 }
 
 tool_selected() {
-  local tool_lc; tool_lc="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+  local tool_lc
+  tool_lc="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
   [[ -z "$ONLY_TOOLS" ]] && return 0
   [[ ",$ONLY_TOOLS," == *",$tool_lc,"* ]]
 }
 
 skill_selected() {
-  local name_lc; name_lc="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+  local name_lc
+  name_lc="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
   [[ -z "$ONLY_SKILLS" ]] && return 0
   [[ ",$ONLY_SKILLS," == *",$name_lc,"* ]]
 }
@@ -572,12 +587,15 @@ csv_has_unknown() {
   local -a tokens
   local unknown=0 token v ok
   [[ -z "$csv" ]] && return 1
-  IFS=',' read -r -a tokens <<< "$csv"
+  IFS=',' read -r -a tokens <<<"$csv"
   for token in "${tokens[@]}"; do
     [[ -z "$token" ]] && continue
     ok=0
     for v in "${valids[@]}"; do
-      if [[ "$token" == "$v" ]]; then ok=1; break; fi
+      if [[ "$token" == "$v" ]]; then
+        ok=1
+        break
+      fi
     done
     if [[ "$ok" -eq 0 ]]; then
       echo "Unknown $kind: $token" >&2
@@ -587,11 +605,10 @@ csv_has_unknown() {
   [[ "$unknown" -eq 1 ]]
 }
 
-
 # Collect skill bundles (skills/<name>/SKILL.md).
 shopt -s nullglob
 skill_dirs=()
-for _d in "$SKILLS_DIR"/*/ ; do
+for _d in "$SKILLS_DIR"/*/; do
   [[ -f "${_d}SKILL.md" ]] || continue
   skill_dirs+=("$_d")
 done
@@ -638,37 +655,34 @@ for tool in "${TOOLS[@]}"; do
   dest_dir="${!dir_var}"
   fmt="${!fmt_var}"
 
-
-
   echo "[$tool] -> $dest_dir ($fmt)"
   for skill_dir in "${skill_dirs[@]}"; do
     name="$(basename "${skill_dir%/}")"
     skill_selected "$name" || continue
 
     case "$fmt" in
-      skill-folder)
-        dest_root="$dest_dir/$name"
-        dest="$dest_root/SKILL.md"
-        if act_write "$dest_root" "-> $dest_root/ (bundle)"; then
-          if [[ "$DRY_RUN" -eq 0 ]]; then
-            if ! write_skill_folder "$skill_dir" "$dest" "$tool" "$name"; then
-              echo "Error: failed to install skill '$name' for $tool" >&2
-              exit 1
-            fi
+    skill-folder)
+      dest_root="$dest_dir/$name"
+      dest="$dest_root/SKILL.md"
+      if act_write "$dest_root" "-> $dest_root/ (bundle)"; then
+        if [[ "$DRY_RUN" -eq 0 ]]; then
+          if ! write_skill_folder "$skill_dir" "$dest" "$tool" "$name"; then
+            echo "Error: failed to install skill '$name' for $tool" >&2
+            exit 1
           fi
-          installed=$((installed + 1))
-        else
-          skipped=$((skipped + 1))
         fi
-        ;;
-      *)
-        echo "Unknown format '$fmt' for $tool (only skill-folder is supported)" >&2
-        exit 1
-        ;;
+        installed=$((installed + 1))
+      else
+        skipped=$((skipped + 1))
+      fi
+      ;;
+    *)
+      echo "Unknown format '$fmt' for $tool (only skill-folder is supported)" >&2
+      exit 1
+      ;;
     esac
   done
 done
-
 
 if [[ "$installed" -eq 0 && "$skipped" -eq 0 ]]; then
   echo "Nothing to install (filters matched no tool/skill combinations)." >&2

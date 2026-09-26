@@ -31,25 +31,25 @@ description: Use when <concrete trigger condition>, not a summary of the workflo
 
 1. **Instructions, not a runtime.** The agent may ignore you. Prefer clear
    steps and explicit “do not invent” / “ask if unsure” over pretending the
-   filesystem will enforce behavior.  
+   filesystem will enforce behavior.
 2. **Provenance is a record.** Use the HTML comment form with real
    `tool=` / `model=` when known, else `unknown`. Do not invent. Date via
-   `date +%F`.  
+   `date +%F`.
 3. **Id resolution** — follow [file-conventions.md](file-conventions.md):
-   user path/id → single `{YMD}-{id}-{slug}` folder → ask. Use `atry resolve`.  
+   user path/id → single `{YMD}-{id}-{slug}` folder → ask. Use `atry resolve`.
 
 4. **Project rules in the target repo** — typical precedence called out in
    implement skill: `AGENTS.md`, then tool-native rules, then `CLAUDE.md`-like
-   files. Do not impose a foreign style guide.  
+   files. Do not impose a foreign style guide.
 5. **Parallel mode** — if `implement-plan/` exists, require `atry` claim
    helpers for status/report writes; forbid hand-editing rollups; point at
-   `atry check`. See [task-claim.md](task-claim.md).  
+   `atry check`. See [task-claim.md](task-claim.md).
 6. **Cross-review** — ask for a different tool/model than self-review.
    `atry review` may **warn** on matching provenance; it must not hard-fail
    the upsert (project philosophy). Both review skills share
    `reviewer-conduct.md` (escalate genuine tradeoffs; re-derive evidence
    before accepting claims). Self-review adds a broad-vision lens; cross-review
-   uses inverted-question framing — see those `SKILL.md` files.  
+   uses inverted-question framing — see those `SKILL.md` files.
 7. **Call `atry`, not long absolute paths.** Skills should document short
    `atry …` commands so agents do not expand helper paths under each tool’s
    skill directory.
@@ -63,11 +63,11 @@ description: Use when <concrete trigger condition>, not a summary of the workflo
 
 ## Sync workflow
 
-| Source | Copy |
-| --- | --- |
-| `docs/file-conventions.md` | `skills/*/references/file-conventions.md` |
+| Source                                                    | Copy                                                                                  |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `docs/file-conventions.md`                                | `skills/*/references/file-conventions.md`                                             |
 | `skills/atry-self-review/references/review-*-template.md` | `skills/atry-cross-review/references/review-*-template.md` (must stay byte-identical) |
-| `skills/atry-self-review/references/reviewer-conduct.md` | `skills/atry-cross-review/references/reviewer-conduct.md` (must stay byte-identical) |
+| `skills/atry-self-review/references/reviewer-conduct.md`  | `skills/atry-cross-review/references/reviewer-conduct.md` (must stay byte-identical)  |
 
 ```bash
 # after editing docs/file-conventions.md, review templates, or reviewer-conduct.md
@@ -89,11 +89,11 @@ identical.
 
 ## Adding a skill
 
-1. Create `skills/<name>/SKILL.md` with front matter.  
-2. Add `references/` as needed; include `file-conventions.md` via sync.  
-3. Document `atry` commands the agent should run.  
-4. Extend `tests/smoke.sh` if the new skill should be installed in smoke.  
+1. Create `skills/<name>/SKILL.md` with front matter.
+2. Add `references/` as needed; include `file-conventions.md` via sync.
+3. Document `atry` commands the agent should run.
+4. Extend `tests/smoke.sh` if the new skill should be installed in smoke.
 5. Document the stage in the root README table if it is part of the public
-   flow.  
+   flow.
 
 Then `./bin/install.sh` and `./bin/verify.sh`.

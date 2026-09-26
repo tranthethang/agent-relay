@@ -35,11 +35,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/find-agent-relay-dir.sh"
 
 [[ $# -eq 4 ]] || usage
-START_DIR="$1"; RUN_REF="$2"; TITLE="$3"; BODY_SRC="$4"
+START_DIR="$1"
+RUN_REF="$2"
+TITLE="$3"
+BODY_SRC="$4"
 
-[[ -d "$START_DIR" ]] || { echo "Error: not a directory: $START_DIR" >&2; exit 1; }
+[[ -d "$START_DIR" ]] || {
+  echo "Error: not a directory: $START_DIR" >&2
+  exit 1
+}
 case "$RUN_REF" in
-  *[!A-Za-z0-9._-]*|"") echo "Error: invalid run-id-or-slug '$RUN_REF'" >&2; exit 1 ;;
+*[!A-Za-z0-9._-]* | "")
+  echo "Error: invalid run-id-or-slug '$RUN_REF'" >&2
+  exit 1
+  ;;
 esac
 
 if ! AGENT_RELAY_DIR="$(find_agent_relay_dir "$START_DIR")"; then
@@ -48,7 +57,10 @@ if ! AGENT_RELAY_DIR="$(find_agent_relay_dir "$START_DIR")"; then
 fi
 BANK_STATUS="$AGENT_RELAY_DIR/bank-status.md"
 
-[[ -f "$BANK_STATUS" ]] || { echo "bank-push: no $BANK_STATUS (run bank-check.sh first)" >&2; exit 1; }
+[[ -f "$BANK_STATUS" ]] || {
+  echo "bank-push: no $BANK_STATUS (run bank-check.sh first)" >&2
+  exit 1
+}
 
 read_field() {
   local field="$1"
@@ -70,7 +82,10 @@ fi
 if [[ "$BODY_SRC" == "-" ]]; then
   BODY="$(cat)"
 else
-  [[ -f "$BODY_SRC" ]] || { echo "Error: body file not found: $BODY_SRC" >&2; exit 1; }
+  [[ -f "$BODY_SRC" ]] || {
+    echo "Error: body file not found: $BODY_SRC" >&2
+    exit 1
+  }
   BODY="$(cat "$BODY_SRC")"
 fi
 
@@ -89,25 +104,28 @@ slugify() {
 TITLE_SLUG="$(slugify "$TITLE")"
 
 case "$BANK_TYPE" in
-  obsidian-vault)
-    [[ -n "$BANK_PATH" && -d "$BANK_PATH" ]] || { echo "bank-push: BANK_PATH '$BANK_PATH' is not a directory" >&2; exit 2; }
-    DEST_DIR="$BANK_PATH/agent-relay"
-    mkdir -p "$DEST_DIR"
-    DEST_FILE="$DEST_DIR/${YMD}-${RUN_REF}-${TITLE_SLUG}.md"
-    {
-      printf -- '---\n'
-      printf 'source: agent-relay\n'
-      printf 'run: %s\n' "$RUN_REF"
-      printf 'date: %s\n' "$TODAY"
-      printf -- '---\n\n'
-      printf '# %s\n\n' "$TITLE"
-      printf '%s\n' "$BODY"
-    } > "$DEST_FILE"
-    echo "bank-push: wrote $DEST_FILE"
-    exit 0
-    ;;
-  *)
-    echo "bank-push: backend '$BANK_TYPE' has no driver in this MVP" >&2
+obsidian-vault)
+  [[ -n "$BANK_PATH" && -d "$BANK_PATH" ]] || {
+    echo "bank-push: BANK_PATH '$BANK_PATH' is not a directory" >&2
     exit 2
-    ;;
+  }
+  DEST_DIR="$BANK_PATH/agent-relay"
+  mkdir -p "$DEST_DIR"
+  DEST_FILE="$DEST_DIR/${YMD}-${RUN_REF}-${TITLE_SLUG}.md"
+  {
+    printf -- '---\n'
+    printf 'source: agent-relay\n'
+    printf 'run: %s\n' "$RUN_REF"
+    printf 'date: %s\n' "$TODAY"
+    printf -- '---\n\n'
+    printf '# %s\n\n' "$TITLE"
+    printf '%s\n' "$BODY"
+  } >"$DEST_FILE"
+  echo "bank-push: wrote $DEST_FILE"
+  exit 0
+  ;;
+*)
+  echo "bank-push: backend '$BANK_TYPE' has no driver in this MVP" >&2
+  exit 2
+  ;;
 esac

@@ -23,7 +23,10 @@ REVIEW_SH=review_sh
 
 FAIL=0
 pass() { echo "PASS: $1"; }
-fail() { echo "FAIL: $1"; FAIL=1; }
+fail() {
+  echo "FAIL: $1"
+  FAIL=1
+}
 
 # Never inherit steal-race hooks from the parent environment.
 unset AGENT_RELAY_TEST_STEAL_BARRIER AGENT_RELAY_TEST_STEAL_PAUSE
@@ -44,10 +47,10 @@ HAPPY_DIR="$("$RUN_INIT" 1700000000 --slug happy --title "Happy Plan" --base mai
 [[ -d "$HAPPY_DIR" ]] && pass "run-init creates directory" || fail "run-init creates directory"
 [[ -f "$HAPPY_DIR/meta.md" ]] && pass "run-init creates meta.md" || fail "run-init creates meta.md"
 [[ -f "$HAPPY_DIR/history.log" ]] && pass "run-init creates history.log" || fail "run-init creates history.log"
-grep -q 'stage=plan action=created tool=' "$HAPPY_DIR/history.log" && \
+grep -q 'stage=plan action=created tool=' "$HAPPY_DIR/history.log" &&
   pass "run-init created line includes tool=" || fail "run-init created line includes tool="
 
-cat <<'EOF' > "$HAPPY_DIR/plan.md"
+cat <<'EOF' >"$HAPPY_DIR/plan.md"
 base: main
 id: 1700000000
 
@@ -106,7 +109,7 @@ fi
 
 # Hand-edit the rollup to simulate drift (the bug from real runs)
 cp "$HAPPY_DIR/implement-plan.md" "$T/happy-rollup.bak"
-sed -e 's/- \[pending\] T2:/- [done] T2:/' "$T/happy-rollup.bak" > "$HAPPY_DIR/implement-plan.md"
+sed -e 's/- \[pending\] T2:/- [done] T2:/' "$T/happy-rollup.bak" >"$HAPPY_DIR/implement-plan.md"
 
 CHECK_OUT="$("$TASK_CLAIM" check happy 2>&1 || true)"
 if "$TASK_CLAIM" check happy >/dev/null 2>&1; then
@@ -130,7 +133,7 @@ echo "$SECOND_OUT" | grep -q "agent-first" && pass "collision prints existing ow
 
 # 3. Concurrent claim: launch two background claims, exactly one succeeds
 CONC_DIR="$("$RUN_INIT" 1700000001 --slug conc --title "Concurrency Plan" --base main)"
-cat <<'EOF' > "$CONC_DIR/plan.md"
+cat <<'EOF' >"$CONC_DIR/plan.md"
 base: main
 id: 1700000001
 
@@ -170,14 +173,14 @@ for i in {1..5}; do
     fail "concurrent claim iteration $i: corrupted lock owner ($owner)"
   fi
 
-  grep -q "status: in-progress" "$CONC_DIR/implement-plan/T1.status" && \
-    pass "concurrent claim iteration $i: uncorrupted .status file" || \
+  grep -q "status: in-progress" "$CONC_DIR/implement-plan/T1.status" &&
+    pass "concurrent claim iteration $i: uncorrupted .status file" ||
     fail "concurrent claim iteration $i: corrupted .status file"
 done
 
 # 4. Stale lock (>2h): claim fails with steal hint; steal takes ownership
 STALE_DIR="$("$RUN_INIT" 1700000002 --slug stale --title "Stale Plan" --base main)"
-cat <<'EOF' > "$STALE_DIR/plan.md"
+cat <<'EOF' >"$STALE_DIR/plan.md"
 base: main
 id: 1700000002
 
@@ -190,8 +193,8 @@ EOF
 "$TASK_CLAIM" claim stale T1 old-agent >/dev/null
 
 # Set lock epoch to 3 hours ago (10800 seconds)
-OLD_EPOCH=$(( $(date +%s) - 10800 ))
-echo "$OLD_EPOCH" > "$STALE_DIR/implement-plan/.lock-T1/created_epoch"
+OLD_EPOCH=$(($(date +%s) - 10800))
+echo "$OLD_EPOCH" >"$STALE_DIR/implement-plan/.lock-T1/created_epoch"
 
 CLAIM_STALE_OUT="$("$TASK_CLAIM" claim stale T1 new-agent 2>&1 || true)"
 echo "$CLAIM_STALE_OUT" | grep -q "stale" && pass "stale lock claim fails with message" || fail "stale lock claim fails with message"
@@ -206,7 +209,7 @@ grep -q "new-agent" "$STALE_DIR/implement-plan/.lock-T1/owner" && pass "steal ta
 # 6. Self-review overwrite bug test: replacing only that day's section
 REVIEW_FILE="$T/review-report-test.md"
 TODAY="$(date +%Y-%m-%d)"
-cat <<EOF > "$REVIEW_FILE"
+cat <<EOF >"$REVIEW_FILE"
 ## Self-Review — $TODAY
 
 Initial self-review content.
@@ -227,7 +230,7 @@ awk -v today="$TODAY" '
   }
   in_self && /^## / { in_self=0 }
   !in_self { print }
-' "$REVIEW_FILE" > "$REVIEW_FILE.tmp"
+' "$REVIEW_FILE" >"$REVIEW_FILE.tmp"
 mv "$REVIEW_FILE.tmp" "$REVIEW_FILE"
 
 grep -q "Updated self-review content fixing confirmed issue." "$REVIEW_FILE" && pass "self-review replaced" || fail "self-review replaced"
@@ -236,7 +239,7 @@ grep -q "Cross-review notes that must not be deleted." "$REVIEW_FILE" && pass "c
 
 # 7. task-init ## Tasks section scoping: numbered items outside the section must not be parsed
 SCOPED_DIR="$("$RUN_INIT" 1700000003 --slug scoped --title "Plan With Sections" --base main)"
-cat <<'EOF' > "$SCOPED_DIR/plan.md"
+cat <<'EOF' >"$SCOPED_DIR/plan.md"
 base: main
 id: 1700000003
 
@@ -254,7 +257,7 @@ id: 1700000003
 1. **Not a task.** Must NOT become a task.
 EOF
 
-"$TASK_INIT" scoped > /dev/null
+"$TASK_INIT" scoped >/dev/null
 COUNT=$(ls "$SCOPED_DIR/implement-plan"/*.status 2>/dev/null | wc -l | tr -d ' ')
 [[ "$COUNT" -eq 2 ]] && pass "task-init only parses ## Tasks section (count=$COUNT)" || fail "task-init only parses ## Tasks section (got $COUNT, want 2)"
 [[ -f "$SCOPED_DIR/implement-plan/T1.status" ]] && pass "scoped: T1 exists" || fail "scoped: T1 exists"
@@ -264,7 +267,7 @@ ROLLUP_LINES=$(grep -c '^\- \[' "$SCOPED_DIR/implement-plan.md" || true)
 
 # 8. task-init must not clobber an existing sequential rollup
 CLOBBER_DIR="$("$RUN_INIT" 1700000004 --slug clobber --title "Clobber Plan" --base main)"
-cat <<'EOF' > "$CLOBBER_DIR/plan.md"
+cat <<'EOF' >"$CLOBBER_DIR/plan.md"
 base: main
 id: 1700000004
 
@@ -272,7 +275,7 @@ id: 1700000004
 
 1. **Only task.** From plan.
 EOF
-cat <<'EOF' > "$CLOBBER_DIR/implement-plan.md"
+cat <<'EOF' >"$CLOBBER_DIR/implement-plan.md"
 # implement-plan (clobber)
 
 - [done] T1: Preserved sequential progress
@@ -282,16 +285,16 @@ if "$TASK_INIT" clobber >/dev/null 2>&1; then
 else
   pass "task-init refuses when rollup exists"
 fi
-grep -q "Preserved sequential progress" "$CLOBBER_DIR/implement-plan.md" && \
-  pass "task-init left rollup untouched" || \
+grep -q "Preserved sequential progress" "$CLOBBER_DIR/implement-plan.md" &&
+  pass "task-init left rollup untouched" ||
   fail "task-init left rollup untouched"
-[[ ! -d "$CLOBBER_DIR/implement-plan" ]] && \
-  pass "task-init did not create plan dir on refuse" || \
+[[ ! -d "$CLOBBER_DIR/implement-plan" ]] &&
+  pass "task-init did not create plan dir on refuse" ||
   fail "task-init did not create plan dir on refuse"
 
 # 9. Concurrent claims on different tasks leave rollup consistent
 DIFF_DIR="$("$RUN_INIT" 1700000005 --slug difftask --title "Diff Plan" --base main)"
-cat <<'EOF' > "$DIFF_DIR/plan.md"
+cat <<'EOF' >"$DIFF_DIR/plan.md"
 base: main
 id: 1700000005
 
@@ -310,13 +313,13 @@ for i in 1 2 3 4 5; do
   pid_b=$!
   wait $pid_a || true
   wait $pid_b || true
-  if ! grep -q -- "- \[in-progress\] T1:" "$DIFF_DIR/implement-plan.md" || \
-     ! grep -q -- "- \[in-progress\] T2:" "$DIFF_DIR/implement-plan.md"; then
+  if ! grep -q -- "- \[in-progress\] T1:" "$DIFF_DIR/implement-plan.md" ||
+    ! grep -q -- "- \[in-progress\] T2:" "$DIFF_DIR/implement-plan.md"; then
     diff_lost=$((diff_lost + 1))
   fi
 done
-[[ "$diff_lost" -eq 0 ]] && \
-  pass "concurrent different-task claims: rollup consistent (5 iters)" || \
+[[ "$diff_lost" -eq 0 ]] &&
+  pass "concurrent different-task claims: rollup consistent (5 iters)" ||
   fail "concurrent different-task claims: rollup lost updates ($diff_lost/5)"
 
 # 9b. T2 harness: N=50 concurrent steals — exactly one winner per round
@@ -325,7 +328,7 @@ STALE_RACE_N=50
 stale_race_fail=0
 export AGENT_RELAY_TEST_STEAL_PAUSE=0.02
 RACE_DIR="$("$RUN_INIT" 1700000006 --slug stalerace --title "Stale Race" --base main)"
-cat <<'EOF' > "$RACE_DIR/plan.md"
+cat <<'EOF' >"$RACE_DIR/plan.md"
 base: main
 id: 1700000006
 
@@ -338,8 +341,8 @@ while [[ $i -le $STALE_RACE_N ]]; do
   rm -rf "$RACE_DIR/implement-plan" "$RACE_DIR/implement-plan.md"
   "$TASK_INIT" stalerace >/dev/null
   "$TASK_CLAIM" claim stalerace T1 seed-owner >/dev/null
-  OLD_EPOCH=$(( $(date +%s) - 10800 ))
-  echo "$OLD_EPOCH" > "$RACE_DIR/implement-plan/.lock-T1/created_epoch"
+  OLD_EPOCH=$(($(date +%s) - 10800))
+  echo "$OLD_EPOCH" >"$RACE_DIR/implement-plan/.lock-T1/created_epoch"
 
   code1=0
   code2=0
@@ -368,7 +371,7 @@ rm -rf "$RACE_DIR"
 
 # 9c. T2 harness: 8 claimants on 8 distinct tasks — rollup matches list
 EIGHT_DIR="$("$RUN_INIT" 1700000007 --slug eight --title "Eight Plan" --base main)"
-cat <<'EOF' > "$EIGHT_DIR/plan.md"
+cat <<'EOF' >"$EIGHT_DIR/plan.md"
 base: main
 id: 1700000007
 
@@ -403,8 +406,8 @@ while [[ $ei -le $eight_iters ]]; do
   ROLLUP="$(cat "$EIGHT_DIR/implement-plan.md")"
   t=1
   while [[ $t -le 8 ]]; do
-    if ! echo "$LIST_OUT" | grep -q -- "- \[in-progress\] T$t:" || \
-       ! echo "$ROLLUP" | grep -q -- "- \[in-progress\] T$t:"; then
+    if ! echo "$LIST_OUT" | grep -q -- "- \[in-progress\] T$t:" ||
+      ! echo "$ROLLUP" | grep -q -- "- \[in-progress\] T$t:"; then
       eight_lost=$((eight_lost + 1))
       break
     fi
@@ -418,14 +421,14 @@ while [[ $ei -le $eight_iters ]]; do
   fi
   ei=$((ei + 1))
 done
-[[ "$eight_lost" -eq 0 ]] && \
-  pass "8-way different-task claims: list matches rollup ($eight_iters iters)" || \
+[[ "$eight_lost" -eq 0 ]] &&
+  pass "8-way different-task claims: list matches rollup ($eight_iters iters)" ||
   fail "8-way different-task claims: inconsistency ($eight_lost events)"
 rm -rf "$EIGHT_DIR"
 
 # 10. deps: dependency check during claim
 DEPS_DIR="$("$RUN_INIT" 1700000008 --slug deps --title "Deps Plan" --base main)"
-cat <<'EOF' > "$DEPS_DIR/plan.md"
+cat <<'EOF' >"$DEPS_DIR/plan.md"
 base: main
 id: 1700000008
 
@@ -435,9 +438,9 @@ id: 1700000008
 2. **Task B.** Depends on A (deps: T1)
 EOF
 "$TASK_INIT" deps >/dev/null
-grep -q '^deps: T1$' "$DEPS_DIR/implement-plan/T2.status" && \
-  pass "init writes deps: into .status" || \
-  fail "init writes deps: into .status (got: $(tr '\n' ' ' < "$DEPS_DIR/implement-plan/T2.status"))"
+grep -q '^deps: T1$' "$DEPS_DIR/implement-plan/T2.status" &&
+  pass "init writes deps: into .status" ||
+  fail "init writes deps: into .status (got: $(tr '\n' ' ' <"$DEPS_DIR/implement-plan/T2.status"))"
 # Claim T2 -> should fail because T1 is pending
 if "$TASK_CLAIM" claim deps T2 worker >/dev/null 2>&1; then
   fail "claim T2 should fail when T1 is pending"
@@ -454,13 +457,13 @@ else
   fail "claim T2 should succeed when T1 is done"
 fi
 # deps preserved after update
-grep -q '^deps: T1$' "$DEPS_DIR/implement-plan/T2.status" && \
-  pass "claim preserves deps: line" || \
+grep -q '^deps: T1$' "$DEPS_DIR/implement-plan/T2.status" &&
+  pass "claim preserves deps: line" ||
   fail "claim preserves deps: line"
 
 # 11. report-write / report-list / report-rollup
 R1_DIR="$("$RUN_INIT" 1700000009 --slug reports --title "Report Plan" --base main)"
-cat <<'PLAN' > "$R1_DIR/plan.md"
+cat <<'PLAN' >"$R1_DIR/plan.md"
 base: main
 id: 1700000009
 
@@ -474,24 +477,24 @@ PLAN
 "$TASK_CLAIM" claim reports rT2 agent-r2 >/dev/null
 
 echo "report 1 content" | "$TASK_CLAIM" report-write reports rT1 agent-r1 -
-[[ -f "$R1_DIR/implement-report/rT1.md" ]] && \
-  pass "report-write creates file from stdin" || \
+[[ -f "$R1_DIR/implement-report/rT1.md" ]] &&
+  pass "report-write creates file from stdin" ||
   fail "report-write creates file from stdin"
 
-echo "report 2 content" > "$T/rt2.txt"
+echo "report 2 content" >"$T/rt2.txt"
 "$TASK_CLAIM" report-write reports rT2 agent-r2 "$T/rt2.txt"
-[[ -f "$R1_DIR/implement-report/rT2.md" ]] && \
-  pass "report-write creates file from path" || \
+[[ -f "$R1_DIR/implement-report/rT2.md" ]] &&
+  pass "report-write creates file from path" ||
   fail "report-write creates file from path"
 
 rlist="$("$TASK_CLAIM" report-list reports)"
-echo "$rlist" | grep -q 'rT1.md' && echo "$rlist" | grep -q 'rT2.md' && \
-  pass "report-list shows tasks" || \
+echo "$rlist" | grep -q 'rT1.md' && echo "$rlist" | grep -q 'rT2.md' &&
+  pass "report-list shows tasks" ||
   fail "report-list shows tasks ($rlist)"
 
 rollup="$(cat "$R1_DIR/implement-report.md")"
-echo "$rollup" | grep -q 'report 1 content' && echo "$rollup" | grep -q 'report 2 content' && \
-  pass "report-write updates rollup" || \
+echo "$rollup" | grep -q 'report 1 content' && echo "$rollup" | grep -q 'report 2 content' &&
+  pass "report-write updates rollup" ||
   fail "report-write updates rollup"
 
 # Concurrent report-write should not lose updates
@@ -505,13 +508,13 @@ for i in 1 2 3 4 5; do
   pid_b=$!
   wait $pid_a || true
   wait $pid_b || true
-  if ! grep -q "concurrent-a-$i" "$R1_DIR/implement-report.md" || \
-     ! grep -q "concurrent-b-$i" "$R1_DIR/implement-report.md"; then
+  if ! grep -q "concurrent-a-$i" "$R1_DIR/implement-report.md" ||
+    ! grep -q "concurrent-b-$i" "$R1_DIR/implement-report.md"; then
     report_lost=$((report_lost + 1))
   fi
 done
-[[ "$report_lost" -eq 0 ]] && \
-  pass "concurrent report-write: rollup consistent (5 iters)" || \
+[[ "$report_lost" -eq 0 ]] &&
+  pass "concurrent report-write: rollup consistent (5 iters)" ||
   fail "concurrent report-write: rollup lost updates ($report_lost/5)"
 
 # Unowned report-write fails; --force records history
@@ -547,7 +550,7 @@ fi
 
 # --- T4: global counter + require ## Tasks + nested list fails ---
 T4_DIR="$("$RUN_INIT" 1700000010 --slug tfix --title "T4 Plan" --base main)"
-cat <<'EOF' > "$T4_DIR/plan.md"
+cat <<'EOF' >"$T4_DIR/plan.md"
 base: main
 id: 1700000010
 
@@ -565,13 +568,13 @@ id: 1700000010
 1. **Also not.** from constraints.
 EOF
 "$TASK_INIT" tfix >/dev/null
-[[ -f "$T4_DIR/implement-plan/T1.status" && -f "$T4_DIR/implement-plan/T2.status" ]] && \
+[[ -f "$T4_DIR/implement-plan/T1.status" && -f "$T4_DIR/implement-plan/T2.status" ]] &&
   pass "T4 fixture yields T1 and T2" || fail "T4 fixture yields T1 and T2"
 t4count="$(ls "$T4_DIR/implement-plan"/*.status | wc -l | tr -d ' ')"
 [[ "$t4count" == "2" ]] && pass "T4 fixture count=2" || fail "T4 fixture count=$t4count"
 
 NESTED_DIR="$("$RUN_INIT" 1700000011 --slug nested --title "Nested Plan" --base main)"
-cat <<'EOF' > "$NESTED_DIR/plan.md"
+cat <<'EOF' >"$NESTED_DIR/plan.md"
 base: main
 id: 1700000011
 ## Tasks
@@ -585,7 +588,7 @@ else
 fi
 
 DESC_DIR="$("$RUN_INIT" 1700000012 --slug desc --title "Desc Plan" --base main)"
-cat <<'EOF' > "$DESC_DIR/plan.md"
+cat <<'EOF' >"$DESC_DIR/plan.md"
 base: main
 id: 1700000012
 ## Tasks
@@ -604,7 +607,7 @@ fi
 
 # --- T6: --session in both positions ---
 SESS_DIR="$("$RUN_INIT" 1700000013 --slug sess --title "Session Plan" --base main)"
-cat <<'EOF' > "$SESS_DIR/plan.md"
+cat <<'EOF' >"$SESS_DIR/plan.md"
 base: main
 id: 1700000013
 ## Tasks
@@ -640,7 +643,7 @@ else
 fi
 "$TASK_CLAIM" release sess T1 agentA >/dev/null
 "$TASK_CLAIM" claim sess T1 agentA >/dev/null
-"$TASK_CLAIM" release --force sess T1 >/dev/null 2>&1 && \
+"$TASK_CLAIM" release --force sess T1 >/dev/null 2>&1 &&
   pass "release --force works" || fail "release --force works"
 
 # --- T8: status whitelist ---
@@ -668,7 +671,7 @@ fi
 
 # --- T9: cycle detection + blocked list + allow-skipped-deps ---
 CYCLE_DIR="$("$RUN_INIT" 1700000014 --slug cycle --title "Cycle Plan" --base main)"
-cat <<'EOF' > "$CYCLE_DIR/plan.md"
+cat <<'EOF' >"$CYCLE_DIR/plan.md"
 base: main
 id: 1700000014
 ## Tasks
@@ -682,7 +685,7 @@ else
 fi
 
 BLOCK_DIR="$("$RUN_INIT" 1700000015 --slug block --title "Block Plan" --base main)"
-cat <<'EOF' > "$BLOCK_DIR/plan.md"
+cat <<'EOF' >"$BLOCK_DIR/plan.md"
 base: main
 id: 1700000015
 ## Tasks
@@ -694,7 +697,7 @@ LIST_BLOCK="$("$TASK_CLAIM" list block)"
 echo "$LIST_BLOCK" | grep -q 'blocked:' && pass "list shows blocked reason" || fail "list shows blocked reason"
 
 SKIP_DIR="$("$RUN_INIT" 1700000016 --slug skipdep --title "Skip Plan" --base main)"
-cat <<'EOF' > "$SKIP_DIR/plan.md"
+cat <<'EOF' >"$SKIP_DIR/plan.md"
 base: main
 id: 1700000016
 ## Tasks
@@ -725,7 +728,7 @@ else
 fi
 
 STEAL_DIR="$("$RUN_INIT" 1700000017 --slug stealdep --title "Steal Plan" --base main)"
-cat <<'EOF' > "$STEAL_DIR/plan.md"
+cat <<'EOF' >"$STEAL_DIR/plan.md"
 base: main
 id: 1700000017
 ## Tasks
@@ -735,8 +738,8 @@ EOF
 "$TASK_INIT" stealdep >/dev/null
 # Hung lock on T2 while T1 still pending — steal must refuse unmet deps
 mkdir -p "$STEAL_DIR/implement-plan/.lock-T2"
-printf 'holder %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$STEAL_DIR/implement-plan/.lock-T2/owner"
-echo "$(( $(date +%s) - 10800 ))" > "$STEAL_DIR/implement-plan/.lock-T2/created_epoch"
+printf 'holder %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >"$STEAL_DIR/implement-plan/.lock-T2/owner"
+echo "$(($(date +%s) - 10800))" >"$STEAL_DIR/implement-plan/.lock-T2/created_epoch"
 if "$TASK_CLAIM" steal stealdep T2 taker >/dev/null 2>&1; then
   fail "steal respects unmet deps"
 else
@@ -752,7 +755,7 @@ fi
 "$TASK_CLAIM" release stealdep T2 taker >/dev/null
 
 MISSING_DIR="$("$RUN_INIT" 1700000018 --slug missingdep --title "Missing Plan" --base main)"
-cat <<'EOF' > "$MISSING_DIR/plan.md"
+cat <<'EOF' >"$MISSING_DIR/plan.md"
 base: main
 id: 1700000018
 ## Tasks
@@ -766,7 +769,7 @@ fi
 
 # --- T10: portable sort without sort -V ---
 SORT_DIR="$("$RUN_INIT" 1700000019 --slug sort --title "Sort Plan" --base main)"
-cat <<'EOF' > "$SORT_DIR/plan.md"
+cat <<'EOF' >"$SORT_DIR/plan.md"
 base: main
 id: 1700000019
 ## Tasks
@@ -778,10 +781,10 @@ EOF
 # Drop .order so get_ordered_tasks falls back to sorting status filenames
 rm -f "$SORT_DIR/implement-plan/.order"
 # Add an out-of-order id that needs numeric-aware sort
-printf 'status: pending\ndesc: ten\ndeps: \n' > "$SORT_DIR/implement-plan/T10.status"
+printf 'status: pending\ndesc: ten\ndeps: \n' >"$SORT_DIR/implement-plan/T10.status"
 FAKEBIN="$T/fakebin"
 mkdir -p "$FAKEBIN"
-cat > "$FAKEBIN/sort" <<'FAKE'
+cat >"$FAKEBIN/sort" <<'FAKE'
 #!/usr/bin/env bash
 for a in "$@"; do
   if [[ "$a" == "-V" ]]; then
@@ -804,7 +807,7 @@ t10n="$(echo "$ORDER_OUT" | grep -n 'T10:' | head -1 | cut -d: -f1)"
 
 # --- T11: base dir walk-up ---
 WALK_DIR="$("$RUN_INIT" 1700000020 --slug walk --title "Walk Plan" --base main)"
-cat <<'EOF' > "$WALK_DIR/plan.md"
+cat <<'EOF' >"$WALK_DIR/plan.md"
 base: main
 id: 1700000020
 ## Tasks
@@ -830,9 +833,9 @@ TODAY="$(date +%F)"
 # Missing walkthrough path must create review-walkthrough.md, not clobber report.
 RW_DIR="$T/rw-run/.agent-relay/20260916-1700000021-rwtestid"
 mkdir -p "$RW_DIR"
-echo 'id: 1700000021' > "$RW_DIR/meta.md"
-printf '%s\n' 'report body only' > "$T/rw-report-body.md"
-printf '%s\n' 'walk body only' > "$T/rw-walk-body.md"
+echo 'id: 1700000021' >"$RW_DIR/meta.md"
+printf '%s\n' 'report body only' >"$T/rw-report-body.md"
+printf '%s\n' 'walk body only' >"$T/rw-walk-body.md"
 "$REVIEW_SH" upsert "$RW_DIR/review-report.md" Cross-Review "$TODAY" "$T/rw-report-body.md"
 "$REVIEW_SH" upsert "$RW_DIR/review-walkthrough.md" Cross-Review "$TODAY" "$T/rw-walk-body.md"
 [[ -f "$RW_DIR/review-walkthrough.md" ]] && pass "upsert creates walkthrough file" || fail "upsert creates walkthrough file"
@@ -841,7 +844,7 @@ grep -q 'report body only' "$RW_DIR/review-report.md" && pass "upsert walkthroug
 grep -q 'walk body only' "$RW_DIR/review-report.md" && fail "upsert walkthrough does not clobber report" || pass "upsert walkthrough leaves report body"
 
 RF="$T/review-upsert.md"
-cat > "$RF" <<EOF
+cat >"$RF" <<EOF
 ## Self-Review — $TODAY
 
 self body v1
@@ -850,7 +853,7 @@ self body v1
 
 cross body must survive
 EOF
-printf '%s\n' 'self body v2' > "$T/self-body.md"
+printf '%s\n' 'self body v2' >"$T/self-body.md"
 "$REVIEW_SH" upsert "$RF" Self-Review "$TODAY" "$T/self-body.md"
 grep -q 'self body v2' "$RF" && pass "upsert replaces Self-Review" || fail "upsert replaces Self-Review"
 grep -q 'cross body must survive' "$RF" && pass "upsert keeps Cross-Review bytes" || fail "upsert keeps Cross-Review bytes"
@@ -859,7 +862,7 @@ grep -q "## Cross-Review — $TODAY" "$RF" && pass "upsert keeps Cross-Review he
 
 # --- CR-1: headings inside fenced code blocks are not section boundaries ---
 FRF="$T/review-fence.md"
-cat > "$FRF" <<EOF
+cat >"$FRF" <<EOF
 ## Self-Review — $TODAY
 
 old body
@@ -868,7 +871,7 @@ old body
 
 cross body must survive
 EOF
-cat > "$T/fence-body.md" <<'EOF'
+cat >"$T/fence-body.md" <<'EOF'
 Use this heading form:
 
 ```markdown
@@ -902,7 +905,7 @@ fi
 # Unbalanced fence: already-malformed input must warn and fall back, not
 # swallow every following section.
 UF="$T/review-unbalanced.md"
-printf '## Self-Review — %s\n\n```\nunclosed\n\n## Cross-Review — %s\n\nkeep me\n' "$TODAY" "$TODAY" > "$UF"
+printf '## Self-Review — %s\n\n```\nunclosed\n\n## Cross-Review — %s\n\nkeep me\n' "$TODAY" "$TODAY" >"$UF"
 "$REVIEW_SH" upsert "$UF" Self-Review "$TODAY" "$T/self-body.md" 2>/dev/null
 if grep -q 'keep me' "$UF"; then
   pass "unbalanced fence falls back without dropping sections"
@@ -912,7 +915,7 @@ fi
 
 # Idempotency when the target section is not at line 1.
 MID="$T/review-mid.md"
-cat > "$MID" <<EOF
+cat >"$MID" <<EOF
 # Report title
 
 intro paragraph
@@ -942,25 +945,25 @@ fi
 
 # --- CR-1b: Cross-Review provenance matching the last Self-Review warns ---
 WARN_FILE="$T/review-report-warn.md"
-printf '<!-- relay: stage=self-review tool=cursor model=composer-unknown base=abc date=%s -->\nSelf body.\n' "$TODAY" > "$T/warn-self-body.md"
+printf '<!-- relay: stage=self-review tool=cursor model=composer-unknown base=abc date=%s -->\nSelf body.\n' "$TODAY" >"$T/warn-self-body.md"
 "$REVIEW_SH" upsert "$WARN_FILE" Self-Review "$TODAY" "$T/warn-self-body.md" >/dev/null 2>&1
 
-printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=abc date=%s -->\nCross body.\n' "$TODAY" > "$T/warn-cross-same.md"
+printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=abc date=%s -->\nCross body.\n' "$TODAY" >"$T/warn-cross-same.md"
 WARN_OUT="$("$REVIEW_SH" upsert "$WARN_FILE" Cross-Review "$TODAY" "$T/warn-cross-same.md" 2>&1 >/dev/null)"
 echo "$WARN_OUT" | grep -qi "warning.*Cross-Review" && pass "same tool/model cross-review warns" || fail "same tool/model cross-review warns"
 
 WARN_FILE2="$T/review-report-warn2.md"
 "$REVIEW_SH" upsert "$WARN_FILE2" Self-Review "$TODAY" "$T/warn-self-body.md" >/dev/null 2>&1
-printf '<!-- relay: stage=cross-review tool=gemini model=gemini-3.1-pro-low base=abc date=%s -->\nCross body.\n' "$TODAY" > "$T/warn-cross-diff.md"
+printf '<!-- relay: stage=cross-review tool=gemini model=gemini-3.1-pro-low base=abc date=%s -->\nCross body.\n' "$TODAY" >"$T/warn-cross-diff.md"
 WARN_OUT2="$("$REVIEW_SH" upsert "$WARN_FILE2" Cross-Review "$TODAY" "$T/warn-cross-diff.md" 2>&1 >/dev/null)"
 [[ -z "$WARN_OUT2" ]] && pass "different tool/model cross-review is silent" || fail "different tool/model cross-review is silent"
 
 # --- CR-1c: the same-tool warning must not fire on a provenance line that is
 # only quoted inside a fenced code block
 WARN_FILE3="$T/review-report-warn3.md"
-printf '<!-- relay: stage=self-review tool=gemini model=weak-model base=abc date=%s -->\nSelf body quoting the provenance format for reference:\n\n```\n<!-- relay: stage=self-review tool=cursor model=composer-unknown base=zzz date=2000-01-01 -->\n```\n' "$TODAY" > "$T/warn-self-fenced.md"
+printf '<!-- relay: stage=self-review tool=gemini model=weak-model base=abc date=%s -->\nSelf body quoting the provenance format for reference:\n\n```\n<!-- relay: stage=self-review tool=cursor model=composer-unknown base=zzz date=2000-01-01 -->\n```\n' "$TODAY" >"$T/warn-self-fenced.md"
 "$REVIEW_SH" upsert "$WARN_FILE3" Self-Review "$TODAY" "$T/warn-self-fenced.md" >/dev/null 2>&1
-printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=abc date=%s -->\nCross body.\n' "$TODAY" > "$T/warn-cross-fenced.md"
+printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=abc date=%s -->\nCross body.\n' "$TODAY" >"$T/warn-cross-fenced.md"
 WARN_OUT3="$("$REVIEW_SH" upsert "$WARN_FILE3" Cross-Review "$TODAY" "$T/warn-cross-fenced.md" 2>&1 >/dev/null)"
 [[ -z "$WARN_OUT3" ]] && pass "fenced example provenance is not mistaken for the real prior self-review" || fail "fenced example provenance is not mistaken for the real prior self-review"
 
@@ -975,8 +978,8 @@ if OUT=$(cd "$NOFALLBACK" && "$RUN_INIT" 1700000500 --slug no-fallback 2>"$NF_ER
 else
   pass "run-init fails with no .agent-relay/ and no git repo above cwd"
 fi
-grep -qi "no .agent-relay" "$NF_ERR" &&   pass "run-init failure prints an actionable hint" || fail "run-init failure prints an actionable hint"
-[[ ! -e "$NOFALLBACK/.agent-relay" ]] &&   pass "run-init does not create .agent-relay/ when not found" || fail "run-init does not create .agent-relay/ when not found"
+grep -qi "no .agent-relay" "$NF_ERR" && pass "run-init failure prints an actionable hint" || fail "run-init failure prints an actionable hint"
+[[ ! -e "$NOFALLBACK/.agent-relay" ]] && pass "run-init does not create .agent-relay/ when not found" || fail "run-init does not create .agent-relay/ when not found"
 rm -f "$NF_ERR"
 
 # Succeeds once .agent-relay/ is created by hand (the documented escape hatch
@@ -985,7 +988,7 @@ mkdir -p "$NOFALLBACK/.agent-relay"
 OUT=$(cd "$NOFALLBACK" && "$RUN_INIT" 1700000500 --slug no-fallback 2>/dev/null)
 [[ -d "$OUT" ]] && pass "run-init succeeds after mkdir .agent-relay" || fail "run-init succeeds after mkdir .agent-relay"
 # stdout of run-init is still only the run dir path (one line, no "atry: using" noise)
-[[ "$(echo "$OUT" | wc -l | tr -d '[:space:]')" == "1" ]] &&   pass "run-init stdout is a single line (run dir path only)" || fail "run-init stdout is a single line (run dir path only)"
+[[ "$(echo "$OUT" | wc -l | tr -d '[:space:]')" == "1" ]] && pass "run-init stdout is a single line (run dir path only)" || fail "run-init stdout is a single line (run dir path only)"
 rm -rf "$NOFALLBACK"
 
 # The installed CLI home (~/.agent-relay with bin/atry + lib/) is never a run
@@ -993,7 +996,7 @@ rm -rf "$NOFALLBACK"
 # of writing run dirs into the install tree.
 FAKEHOME="$(mktemp -d "${TMPDIR:-/tmp}/ar-tasks-fakehome.XXXXXX")"
 mkdir -p "$FAKEHOME/.agent-relay/bin" "$FAKEHOME/.agent-relay/lib" "$FAKEHOME/proj"
-printf '#!/bin/sh\n' > "$FAKEHOME/.agent-relay/bin/atry"
+printf '#!/bin/sh\n' >"$FAKEHOME/.agent-relay/bin/atry"
 chmod +x "$FAKEHOME/.agent-relay/bin/atry"
 if (cd "$FAKEHOME/proj" && "$RUN_INIT" 1700000700 --slug install-home >/dev/null 2>&1); then
   fail "run-init does not use the atry install dir as a run root"
@@ -1024,8 +1027,8 @@ GITROOT="$(cd "$GITROOT" && pwd -P)"
 # so this assertion could never fail the suite.
 OUT="$(cd "$GITROOT/sub/deeper" && "$RUN_INIT" 1700000600 --slug from-subdir 2>/dev/null || true)"
 case "$OUT" in
-  "$GITROOT/.agent-relay/"*) pass "run-init from a git subdirectory resolves to repo root" ;;
-  *) fail "run-init from a git subdirectory resolves to repo root (got $OUT)" ;;
+"$GITROOT/.agent-relay/"*) pass "run-init from a git subdirectory resolves to repo root" ;;
+*) fail "run-init from a git subdirectory resolves to repo root (got $OUT)" ;;
 esac
 
 # --- Per-run folder helper tests (resolve-run, run-history) ---
@@ -1088,7 +1091,7 @@ rm -rf "$RUN2_DIR"
 # 6. Reject legacy flat plan
 LEGACY_DIR="$T/legacy-test"
 mkdir -p "$LEGACY_DIR/.agent-relay"
-cat <<'EOF' > "$LEGACY_DIR/.agent-relay/plan-leg1.md"
+cat <<'EOF' >"$LEGACY_DIR/.agent-relay/plan-leg1.md"
 base: main
 id: leg1
 
@@ -1114,7 +1117,7 @@ echo "$HIST_SHOW" | grep -q "action=started" && pass "history show displays even
 # 9. run-history refuses legacy flat resolve (no root history.log)
 LEGACY_HIST="$T/legacy-hist"
 mkdir -p "$LEGACY_HIST/.agent-relay"
-echo 'base: x' > "$LEGACY_HIST/.agent-relay/plan-leghist01.md"
+echo 'base: x' >"$LEGACY_HIST/.agent-relay/plan-leghist01.md"
 if (
   cd "$LEGACY_HIST"
   "$RUN_HISTORY" append leghist01 implement started tool=test
@@ -1127,7 +1130,7 @@ fi
 
 # --- Rejected inputs: invalid status / deps / init cleanup ---
 BAD_STATUS_DIR="$("$RUN_INIT" 1700000100 --slug badstat --title "Bad Status" --base main)"
-cat <<'EOF' > "$BAD_STATUS_DIR/plan.md"
+cat <<'EOF' >"$BAD_STATUS_DIR/plan.md"
 base: main
 id: 1700000100
 
@@ -1141,7 +1144,7 @@ else
 fi
 [[ ! -d "$BAD_STATUS_DIR/implement-plan" ]] && pass "failed init removes plan dir (bad status)" || fail "failed init removes plan dir (bad status)"
 # Re-init after cleanup must succeed with a valid plan
-cat <<'EOF' > "$BAD_STATUS_DIR/plan.md"
+cat <<'EOF' >"$BAD_STATUS_DIR/plan.md"
 base: main
 id: 1700000100
 
@@ -1155,7 +1158,7 @@ else
 fi
 
 BAD_DEP_DIR="$("$RUN_INIT" 1700000101 --slug baddep --title "Bad Dep" --base main)"
-cat <<'EOF' > "$BAD_DEP_DIR/plan.md"
+cat <<'EOF' >"$BAD_DEP_DIR/plan.md"
 base: main
 id: 1700000101
 
@@ -1174,7 +1177,7 @@ fi
 # recorded on another host must never be reclaimed on the pid (that pid means
 # nothing here) — only on the long foreign timer.
 STALE_DIR2="$("$RUN_INIT" 1700000103 --slug mutexhost --title "Mutex Host" --base main)"
-cat <<'EOF' > "$STALE_DIR2/plan.md"
+cat <<'EOF' >"$STALE_DIR2/plan.md"
 base: main
 id: 1700000103
 
@@ -1191,9 +1194,9 @@ mk_orphan_mutex() {
   # mk_orphan_mutex <host> <age-seconds>
   rm -rf "$MHOST_MUTEX"
   mkdir -p "$MHOST_MUTEX"
-  echo "2147483647" > "$MHOST_MUTEX/owner_pid"
-  printf '%s\n' "$1" > "$MHOST_MUTEX/owner_host"
-  echo "$(( $(date +%s) - $2 ))" > "$MHOST_MUTEX/created_epoch"
+  echo "2147483647" >"$MHOST_MUTEX/owner_pid"
+  printf '%s\n' "$1" >"$MHOST_MUTEX/owner_host"
+  echo "$(($(date +%s) - $2))" >"$MHOST_MUTEX/created_epoch"
 }
 
 mk_orphan_mutex "$(uname -n)" 60
@@ -1227,7 +1230,7 @@ rm -rf "$STALE_DIR2"
 CROSS_N=20
 cross_fail=0
 CROSS_DIR="$("$RUN_INIT" 1700000102 --slug crossop --title "Cross Op" --base main)"
-cat <<'EOF' > "$CROSS_DIR/plan.md"
+cat <<'EOF' >"$CROSS_DIR/plan.md"
 base: main
 id: 1700000102
 
@@ -1258,7 +1261,10 @@ while [[ $i -le $CROSS_N ]]; do
   AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" release crossop T1 owner-x >/dev/null 2>&1 &
   pid_rel=$!
   waits=0
-  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do sleep 0.01; waits=$((waits + 1)); done
+  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do
+    sleep 0.01
+    waits=$((waits + 1))
+  done
   # steal must run in the background: it now waits for the mutex (STEAL_WAIT_MAX)
   # instead of failing on it, so a foreground call would block until the budget
   # expires because only this loop releases the barrier.
@@ -1286,7 +1292,10 @@ while [[ $i -le $CROSS_N ]]; do
   AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" steal crossop T1 stealer-x >/dev/null 2>&1 &
   pid_steal=$!
   waits=0
-  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do sleep 0.01; waits=$((waits + 1)); done
+  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do
+    sleep 0.01
+    waits=$((waits + 1))
+  done
   code_rel=0
   "$TASK_CLAIM" release crossop T1 owner-x >/dev/null 2>&1 &
   pid_rel=$!
@@ -1319,7 +1328,10 @@ while [[ $i -le $CROSS_N ]]; do
   AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" steal crossop T1 stealer >/dev/null 2>&1 &
   pid_st=$!
   waits=0
-  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do sleep 0.01; waits=$((waits + 1)); done
+  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do
+    sleep 0.01
+    waits=$((waits + 1))
+  done
   # Claim must start while steal still holds the mutex, but must not run
   # synchronously (that deadlocks: claim waits on mutex, steal waits on HOLD).
   code_claim=0
@@ -1351,7 +1363,10 @@ while [[ $i -le $CROSS_N ]]; do
   AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" update crossop T1 owner-u done >/dev/null 2>&1 &
   pid_up=$!
   waits=0
-  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do sleep 0.01; waits=$((waits + 1)); done
+  while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do
+    sleep 0.01
+    waits=$((waits + 1))
+  done
   code_steal=0
   "$TASK_CLAIM" steal crossop T1 stealer-u >/dev/null 2>&1 &
   pid_steal=$!
@@ -1405,7 +1420,7 @@ else
 fi
 _drift_target="$ROOT/skills/atry-implement/references/file-conventions.md"
 cp "$_drift_target" "$T/drift-backup.md"
-printf '\n<!-- drift -->\n' >> "$_drift_target"
+printf '\n<!-- drift -->\n' >>"$_drift_target"
 if bash "$ROOT/scripts/maint/sync-references.sh" --check >/dev/null 2>&1; then
   fail "sync --check detects reference drift"
 else
@@ -1415,7 +1430,7 @@ cp "$T/drift-backup.md" "$_drift_target"
 
 # Orphan scripts/ under a skill must fail --check
 mkdir -p "$ROOT/skills/atry-implement/scripts"
-echo '#!/bin/sh' > "$ROOT/skills/atry-implement/scripts/orphan.sh"
+echo '#!/bin/sh' >"$ROOT/skills/atry-implement/scripts/orphan.sh"
 if bash "$ROOT/scripts/maint/sync-references.sh" --check >/dev/null 2>&1; then
   fail "sync --check detects orphan skill scripts/"
 else

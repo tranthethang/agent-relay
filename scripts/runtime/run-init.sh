@@ -40,40 +40,52 @@ TOOL="unknown"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --slug)
-      [[ $# -ge 2 ]] || { echo "Error: --slug requires an argument" >&2; exit 1; }
-      SLUG="$2"
-      shift 2
-      ;;
-    --tool)
-      [[ $# -ge 2 ]] || { echo "Error: --tool requires an argument" >&2; exit 1; }
-      TOOL="$2"
-      shift 2
-      ;;
-    --title)
-      [[ $# -ge 2 ]] || { echo "Error: --title requires an argument" >&2; exit 1; }
-      TITLE="$2"
-      shift 2
-      ;;
-    --base)
-      [[ $# -ge 2 ]] || { echo "Error: --base requires an argument" >&2; exit 1; }
-      BASE="$2"
-      shift 2
-      ;;
-    -*)
-      echo "Error: unknown option '$1'" >&2
-      usage
-      ;;
-    *)
-      if [[ -z "$ID" ]]; then
-        ID="$1"
-      elif [[ "$TITLE" == "(untitled)" ]]; then
-        TITLE="$1"
-      elif [[ -z "$BASE" ]]; then
-        BASE="$1"
-      fi
-      shift
-      ;;
+  --slug)
+    [[ $# -ge 2 ]] || {
+      echo "Error: --slug requires an argument" >&2
+      exit 1
+    }
+    SLUG="$2"
+    shift 2
+    ;;
+  --tool)
+    [[ $# -ge 2 ]] || {
+      echo "Error: --tool requires an argument" >&2
+      exit 1
+    }
+    TOOL="$2"
+    shift 2
+    ;;
+  --title)
+    [[ $# -ge 2 ]] || {
+      echo "Error: --title requires an argument" >&2
+      exit 1
+    }
+    TITLE="$2"
+    shift 2
+    ;;
+  --base)
+    [[ $# -ge 2 ]] || {
+      echo "Error: --base requires an argument" >&2
+      exit 1
+    }
+    BASE="$2"
+    shift 2
+    ;;
+  -*)
+    echo "Error: unknown option '$1'" >&2
+    usage
+    ;;
+  *)
+    if [[ -z "$ID" ]]; then
+      ID="$1"
+    elif [[ "$TITLE" == "(untitled)" ]]; then
+      TITLE="$1"
+    elif [[ -z "$BASE" ]]; then
+      BASE="$1"
+    fi
+    shift
+    ;;
   esac
 done
 
@@ -88,10 +100,10 @@ fi
 
 # Validate ID (Unix timestamp in seconds, 10-11 digits)
 case "$ID" in
-  *[!0-9]*|"")
-    echo "Error: invalid RUN_ID '$ID' (must be a Unix timestamp in seconds, 10-11 digits)" >&2
-    exit 1
-    ;;
+*[!0-9]* | "")
+  echo "Error: invalid RUN_ID '$ID' (must be a Unix timestamp in seconds, 10-11 digits)" >&2
+  exit 1
+  ;;
 esac
 if [[ ${#ID} -lt 10 || ${#ID} -gt 11 ]]; then
   echo "Error: invalid RUN_ID '$ID' (must be a Unix timestamp in seconds, 10-11 digits)" >&2
@@ -141,7 +153,7 @@ mkdir -p "$RUN_DIR"
 
 CREATED_DATE="$(date +%F)"
 
-cat <<EOF > "$RUN_DIR/meta.md"
+cat <<EOF >"$RUN_DIR/meta.md"
 id: $ID
 slug: $SLUG
 created: $CREATED_DATE
@@ -152,7 +164,7 @@ base: $BASE
 EOF
 
 NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '%s stage=plan action=created tool=%s\n' "$NOW_ISO" "$TOOL" >> "$RUN_DIR/history.log"
+printf '%s stage=plan action=created tool=%s\n' "$NOW_ISO" "$TOOL" >>"$RUN_DIR/history.log"
 
 abs_run_dir="$(cd "$RUN_DIR" && pwd -P)"
 printf '%s\n' "$abs_run_dir"

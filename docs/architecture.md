@@ -37,27 +37,27 @@ call agents, pick models, or watch project `.agent-relay/` run dirs.
 
 ## Layers
 
-| Layer | Location | Job |
-| --- | --- | --- |
-| Skill text | `skills/<name>/SKILL.md` | Tell an agent what to do; **record**, rarely enforce |
-| Shared conventions | `docs/file-conventions.md` | Artifact names / id / per-run layout (copied into every bundle) |
-| Helpers | `scripts/atry` + `scripts/runtime/` → `~/.agent-relay/` | Bash the agent runs (`atry resolve`, `atry claim`, `atry review`, …) |
-| Maintainer scripts | `scripts/maint/` | Sync / release only (not installed for agents) |
-| Installer | `bin/install.sh`, `uninstall.sh`, `verify.sh` | Copy / remove / check files under `$HOME` (+ atry home) |
-| Shared install logic | `lib/bootstrap.sh` | Download, checksum verify, `validate_targets_conf` (inlined into bin via `sync-bootstrap.sh`) |
-| Manifest | `targets.conf` | Per-tool install roots; still `source`d after allowlist validation |
-| Tests | `tests/*.sh` | Offline smoke of install + task helpers; not “did the agent obey the skill?” |
+| Layer                | Location                                                | Job                                                                                           |
+| -------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Skill text           | `skills/<name>/SKILL.md`                                | Tell an agent what to do; **record**, rarely enforce                                          |
+| Shared conventions   | `docs/file-conventions.md`                              | Artifact names / id / per-run layout (copied into every bundle)                               |
+| Helpers              | `scripts/atry` + `scripts/runtime/` → `~/.agent-relay/` | Bash the agent runs (`atry resolve`, `atry claim`, `atry review`, …)                          |
+| Maintainer scripts   | `scripts/maint/`                                        | Sync / release only (not installed for agents)                                                |
+| Installer            | `bin/install.sh`, `uninstall.sh`, `verify.sh`           | Copy / remove / check files under `$HOME` (+ atry home)                                       |
+| Shared install logic | `lib/bootstrap.sh`                                      | Download, checksum verify, `validate_targets_conf` (inlined into bin via `sync-bootstrap.sh`) |
+| Manifest             | `targets.conf`                                          | Per-tool install roots; still `source`d after allowlist validation                            |
+| Tests                | `tests/*.sh`                                            | Offline smoke of install + task helpers; not “did the agent obey the skill?”                  |
 
 ## Stage flow (expected usage)
 
 0. **brainstorm** (optional) → read-only investigation and discussion; writes
-   nothing, no run directory  
-1. **plan** → create run directory via `atry run-init`, write `plan.md`  
-2. **implement** → code + `implement-plan.md` / `implement-report.md` (or parallel dirs)  
+   nothing, no run directory
+1. **plan** → create run directory via `atry run-init`, write `plan.md`
+2. **implement** → code + `implement-plan.md` / `implement-report.md` (or parallel dirs)
 3. **self-review** → upsert dated Self-Review section; broad-vision analysis;
-   escalate tradeoffs per `reviewer-conduct.md`  
+   escalate tradeoffs per `reviewer-conduct.md`
 4. **cross-review** → upsert Cross-Review with inverted-question framing
-   (skill asks for a different tool; nothing enforces it)  
+   (skill asks for a different tool; nothing enforces it)
 5. **distill** → summarize reusable patterns/lessons into `distillation.md`;
    optionally push the full distillation note to an external knowledge bank
    (e.g., Obsidian vault) via `atry bank push`
@@ -78,9 +78,9 @@ CI runs both with `--check`.
 
 ## Explicit non-goals
 
-- No message bus, orchestrator, or agent runtime  
-- No cryptographic proof of which tool/model wrote a provenance line  
-- No protection of overlapping source-file edits in parallel mode (only task **status** / report files)  
+- No message bus, orchestrator, or agent runtime
+- No cryptographic proof of which tool/model wrote a provenance line
+- No protection of overlapping source-file edits in parallel mode (only task **status** / report files)
 - No automatic prompt enrichment from the knowledge bank (bank is an external, write-only sink in this MVP)
 
 For trust detail see [security.md](security.md). For install mechanics see

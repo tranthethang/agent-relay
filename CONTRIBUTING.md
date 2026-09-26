@@ -40,7 +40,26 @@ CI runs `scripts/maint/sync-references.sh --check` so
 `skills/*/references/file-conventions.md` cannot drift from
 `docs/file-conventions.md`, and skill bundles must not contain `scripts/`.
 
-There is no Markdown formatter and no Python toolchain in this repo.
+## Formatting
+
+Install on your machine (not vendored in the repo):
+
+```bash
+brew install shfmt dprint   # or equivalent
+```
+
+Config in-repo: [`dprint.json`](dprint.json) (markdown + yaml + `shfmt` via
+exec) and [`.editorconfig`](.editorconfig). Markdown uses
+`textWrap: "maintain"` so existing hard-wraps stay put.
+
+```bash
+make fmt         # dprint fmt, then sync-bootstrap + sync-references
+make fmt-check   # dprint check + both sync --check
+```
+
+After editing `docs/file-conventions.md` or `lib/bootstrap.sh`, always run
+the matching sync script (or `make fmt`) before pushing — CI fails on drift.
+There is no Python toolchain in this repo.
 
 ## Reporting install or smoke failures
 

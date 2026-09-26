@@ -22,8 +22,14 @@ FIXTURES_DIR="$SCRIPT_DIR/fixtures"
 PASS=0
 FAIL=0
 
-pass() { echo "PASS: $*"; PASS=$((PASS + 1)); }
-fail() { echo "FAIL: $*" >&2; FAIL=$((FAIL + 1)); }
+pass() {
+  echo "PASS: $*"
+  PASS=$((PASS + 1))
+}
+fail() {
+  echo "FAIL: $*" >&2
+  FAIL=$((FAIL + 1))
+}
 
 if [[ ! -f "$FIXTURES_DIR/agent-relay-v0.1.0.tar.gz" || ! -f "$FIXTURES_DIR/SHA256SUMS" ]]; then
   echo "Error: missing test fixtures in $FIXTURES_DIR" >&2
@@ -42,7 +48,7 @@ trap cleanup EXIT INT TERM
 MOCK_BIN="$T/mock-bin"
 mkdir -p "$MOCK_BIN"
 
-cat <<EOF > "$MOCK_BIN/curl"
+cat <<EOF >"$MOCK_BIN/curl"
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -185,7 +191,7 @@ fi
 rm -rf "$HOME/.cursor"
 
 # 10. Release-baked script with DEFAULT_REF succeeds without flags
-sed 's/^DEFAULT_REF=""/DEFAULT_REF="v0.1.0"/' "$RUN_DIR/install.sh" > "$RUN_DIR/install_baked.sh"
+sed 's/^DEFAULT_REF=""/DEFAULT_REF="v0.1.0"/' "$RUN_DIR/install.sh" >"$RUN_DIR/install_baked.sh"
 chmod +x "$RUN_DIR/install_baked.sh"
 "$RUN_DIR/install_baked.sh" >/dev/null
 if [[ -f "$HOME/.cursor/skills/atry-implement/SKILL.md" ]]; then
@@ -239,9 +245,9 @@ fi
 # Working tree has three skills; the fixture has only atry-implement.
 rm -rf "$HOME/.cursor" "$HOME/.gemini" "$HOME/.kiro"
 "$ROOT_DIR/bin/install.sh" --ref v0.1.0 --only cursor >/dev/null
-if [[ -f "$HOME/.cursor/skills/atry-implement/SKILL.md" \
-  && ! -e "$HOME/.cursor/skills/atry-self-review" \
-  && ! -e "$HOME/.gemini/config/skills/atry-implement" ]]; then
+if [[ -f "$HOME/.cursor/skills/atry-implement/SKILL.md" &&
+  ! -e "$HOME/.cursor/skills/atry-self-review" &&
+  ! -e "$HOME/.gemini/config/skills/atry-implement" ]]; then
   pass "clone --ref installs archive and forwards --only"
 else
   fail "clone --ref installs archive and forwards --only"

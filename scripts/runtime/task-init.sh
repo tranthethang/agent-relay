@@ -30,21 +30,21 @@ validate_ident() {
     exit 1
   fi
   case "$value" in
-    *[!A-Za-z0-9._-]*)
-      echo "Error: $kind '$value' must match ^[A-Za-z0-9._-]+$" >&2
-      [[ -n "${PLAN_DIR:-}" ]] && rm -rf "$PLAN_DIR"
-      exit 1
-      ;;
+  *[!A-Za-z0-9._-]*)
+    echo "Error: $kind '$value' must match ^[A-Za-z0-9._-]+$" >&2
+    [[ -n "${PLAN_DIR:-}" ]] && rm -rf "$PLAN_DIR"
+    exit 1
+    ;;
   esac
 }
 
 validate_task_status() {
   local s="$1"
   case "$s" in
-    pending|in-progress|done|skipped) return 0 ;;
+  pending | in-progress | done | skipped) return 0 ;;
   esac
   case "$s" in
-    skipped\ *) return 0 ;;
+  skipped\ *) return 0 ;;
   esac
   return 1
 }
@@ -66,11 +66,11 @@ validate_deps_string() {
       return 1
     fi
     case "$dep" in
-      *[!A-Za-z0-9._-]*)
-        [[ "$_noglob_was" -eq 0 ]] && set +f
-        echo "Error: dependency id '$dep' must match ^[A-Za-z0-9._-]+$" >&2
-        return 1
-        ;;
+    *[!A-Za-z0-9._-]*)
+      [[ "$_noglob_was" -eq 0 ]] && set +f
+      echo "Error: dependency id '$dep' must match ^[A-Za-z0-9._-]+$" >&2
+      return 1
+      ;;
     esac
   done
   [[ "$_noglob_was" -eq 0 ]] && set +f
@@ -131,11 +131,11 @@ check_dep_cycles() {
   # Build indegree file and edges file in a temp dir
   local tmp
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/ar-cycle.XXXXXX")"
-  : > "$tmp/edges"
-  : > "$tmp/nodes"
+  : >"$tmp/edges"
+  : >"$tmp/nodes"
   for tid in $tids; do
-    echo "$tid" >> "$tmp/nodes"
-    echo "0" > "$tmp/indegree.$tid"
+    echo "$tid" >>"$tmp/nodes"
+    echo "0" >"$tmp/indegree.$tid"
   done
 
   for tid in $tids; do
@@ -152,10 +152,10 @@ check_dep_cycles() {
         rm -rf "$tmp"
         return 1
       fi
-      echo "$dep $tid" >> "$tmp/edges"
+      echo "$dep $tid" >>"$tmp/edges"
       local n
       n="$(cat "$tmp/indegree.$tid")"
-      echo $((n + 1)) > "$tmp/indegree.$tid"
+      echo $((n + 1)) >"$tmp/indegree.$tid"
     done
     [[ "$_noglob_was" -eq 0 ]] && set +f
   done
@@ -185,16 +185,16 @@ check_dep_cycles() {
         local n
         n="$(cat "$tmp/indegree.$to")"
         n=$((n - 1))
-        echo "$n" > "$tmp/indegree.$to"
+        echo "$n" >"$tmp/indegree.$to"
         if [[ "$n" -eq 0 ]]; then
           queue="$queue $to"
         fi
       fi
-    done < "$tmp/edges"
+    done <"$tmp/edges"
   done
 
   local total
-  total="$(wc -l < "$tmp/nodes" | tr -d ' ')"
+  total="$(wc -l <"$tmp/nodes" | tr -d ' ')"
   if [[ "$visited" -lt "$total" ]]; then
     echo "Error: dependency cycle detected among tasks:" >&2
     for tid in $tids; do
@@ -214,17 +214,17 @@ check_dep_cycles() {
 ID=""
 for arg in "$@"; do
   case "$arg" in
-    -h|--help)
+  -h | --help)
+    usage
+    ;;
+  *)
+    if [[ -z "$ID" ]]; then
+      ID="$arg"
+    else
+      echo "Error: unexpected argument '$arg'" >&2
       usage
-      ;;
-    *)
-      if [[ -z "$ID" ]]; then
-        ID="$arg"
-      else
-        echo "Error: unexpected argument '$arg'" >&2
-        usage
-      fi
-      ;;
+    fi
+    ;;
   esac
 done
 
@@ -273,9 +273,9 @@ else
   mkdir -p "$PLAN_DIR"
 fi
 
-: > "$PLAN_DIR/_meta.md"
+: >"$PLAN_DIR/_meta.md"
 ORDER_TMP="$PLAN_DIR/.order.tmp"
-: > "$ORDER_TMP"
+: >"$ORDER_TMP"
 
 found_count=0
 task_seq=0
@@ -286,7 +286,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     has_tasks_section=1
     break
   fi
-done < "$PLAN_FILE"
+done <"$PLAN_FILE"
 
 if [[ "$has_tasks_section" -eq 0 ]]; then
   echo "Error: plan '$PLAN_FILE' has no '## Tasks' heading. Refusing to guess task lists from other sections." >&2
@@ -328,8 +328,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       refuse_init
     fi
     validate_ident "task-id" "$tid"
-    echo "$tid" >> "$ORDER_TMP"
-    printf 'status: pending\ndesc: %s\ndeps: %s\n' "$desc" "$deps" > "$PLAN_DIR/$tid.status"
+    echo "$tid" >>"$ORDER_TMP"
+    printf 'status: pending\ndesc: %s\ndeps: %s\n' "$desc" "$deps" >"$PLAN_DIR/$tid.status"
     found_count=$((found_count + 1))
   elif [[ "$line" =~ ^-[[:space:]]*\[([^]]*)\][[:space:]]*([^:]+):[[:space:]]*(.*)$ ]]; then
     s="${BASH_REMATCH[1]}"
@@ -356,11 +356,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       echo "Error: invalid initial status '$s' for task '$tid' (allowed: pending, in-progress, done, skipped)" >&2
       refuse_init
     fi
-    echo "$tid" >> "$ORDER_TMP"
-    printf 'status: %s\ndesc: %s\ndeps: %s\n' "$s" "$desc" "$deps" > "$PLAN_DIR/$tid.status"
+    echo "$tid" >>"$ORDER_TMP"
+    printf 'status: %s\ndesc: %s\ndeps: %s\n' "$s" "$desc" "$deps" >"$PLAN_DIR/$tid.status"
     found_count=$((found_count + 1))
   fi
-done < "$PLAN_FILE"
+done <"$PLAN_FILE"
 
 # found_count must match real .status files
 real_count=0
@@ -385,7 +385,7 @@ if ! check_dep_cycles "$PLAN_DIR"; then
 fi
 
 mkdir -p "$REPORT_DIR"
-: > "$REPORT_DIR/_meta.md"
+: >"$REPORT_DIR/_meta.md"
 
 "$CLAIM_SH" rollup "$TARGET"
 "$CLAIM_SH" report-rollup "$TARGET"

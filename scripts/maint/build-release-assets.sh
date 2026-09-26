@@ -19,7 +19,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 VERSION_ARG="${1:-}"
 if [[ -z "$VERSION_ARG" ]]; then
   if [[ -f "$ROOT_DIR/VERSION" ]]; then
-    VERSION_ARG="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
+    VERSION_ARG="$(tr -d '[:space:]' <"$ROOT_DIR/VERSION")"
   else
     echo "Error: VERSION file not found and no version passed as argument." >&2
     exit 1
@@ -82,7 +82,7 @@ echo "Created $TARBALL_PATH"
 # 2. Build release install.sh, uninstall.sh, verify.sh with DEFAULT_REF baked in
 for script in install.sh uninstall.sh verify.sh; do
   dest="$DIST_DIR/$script"
-  sed "s/^DEFAULT_REF=\"\"/DEFAULT_REF=\"$TAG\"/" "$ROOT_DIR/bin/$script" > "$dest"
+  sed "s/^DEFAULT_REF=\"\"/DEFAULT_REF=\"$TAG\"/" "$ROOT_DIR/bin/$script" >"$dest"
   chmod +x "$dest"
   echo "Created $dest (DEFAULT_REF=$TAG)"
 done
@@ -91,9 +91,9 @@ done
 (
   cd "$DIST_DIR"
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$TARBALL_NAME" install.sh uninstall.sh verify.sh > SHA256SUMS
+    shasum -a 256 "$TARBALL_NAME" install.sh uninstall.sh verify.sh >SHA256SUMS
   elif command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$TARBALL_NAME" install.sh uninstall.sh verify.sh > SHA256SUMS
+    sha256sum "$TARBALL_NAME" install.sh uninstall.sh verify.sh >SHA256SUMS
   else
     echo "Error: neither shasum nor sha256sum found." >&2
     exit 1

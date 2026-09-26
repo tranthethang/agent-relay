@@ -1,0 +1,27 @@
+{
+  "markdown": {
+    "textWrap": "maintain"
+  },
+  "yaml": {},
+  "exec": {
+    "cwd": "${configDir}",
+    "cacheKey": "shfmt-i2-bash",
+    "commands": [
+      {
+        "command": "shfmt -i 2 -ln bash",
+        "exts": ["sh"],
+        "fileNames": ["atry"]
+      }
+    ]
+  },
+  "excludes": [
+    "**/.agent-relay/**",
+    "**/.tmp-test/**",
+    "**/node_modules/**"
+  ],
+  "plugins": [
+    "npm:@dprint/markdown@0.24.0",
+    "npm:dprint-plugin-yaml@0.6.0",
+    "npm:@dprint/exec@0.7.3/plugin.json@704701df449dd7e942a71144773778ac529d68c2e4657bfc236d393b898b9a67"
+  ]
+}

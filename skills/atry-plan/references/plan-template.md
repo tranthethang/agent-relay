@@ -16,6 +16,7 @@ id: <id>
 ## Decisions
 
 <!-- optional; delete if none -->
+
 - <choice already made that implement must not reopen>
 
 ## Flow
