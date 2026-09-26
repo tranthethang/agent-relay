@@ -1,0 +1,24 @@
+# https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{sh,bash}]
+indent_style = space
+indent_size = 2
+
+# scripts/atry has no extension; shfmt also gets -i 2 via dprint exec / make fmt
+[scripts/atry]
+indent_style = space
+indent_size = 2
+
+[*.{md,yml,yaml,json}]
+indent_style = space
+indent_size = 2
+
+[Makefile]
+indent_style = tab

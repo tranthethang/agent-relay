@@ -27,11 +27,11 @@ preflight").
 
 ### Commands used in this stage
 
-| Command | Meaning of a non-zero exit |
-| --- | --- |
-| `atry version` | atry is missing or broken on PATH -- stop, see Preflight above |
+| Command                                                       | Meaning of a non-zero exit                                        |
+| ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `atry version`                                                | atry is missing or broken on PATH -- stop, see Preflight above    |
 | `atry run-init <id> --slug <slug> [--title ...] [--base ...]` | invalid id/slug, or no `.agent-relay/` / git repo found above cwd |
-| `atry task-init "$RUN_DIR"` (optional validation) | the plan doesn't parse (bad checkbox status or dependency id) |
+| `atry task-init "$RUN_DIR"` (optional validation)             | the plan doesn't parse (bad checkbox status or dependency id)     |
 
 ## Run discovery
 

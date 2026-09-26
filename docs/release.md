@@ -5,23 +5,23 @@ unless explicitly asked.
 
 ## Version source of truth
 
-| File | Role |
-| --- | --- |
-| [`VERSION`](../VERSION) | Single-line `X.Y.Z` (no `v` prefix) |
+| File                              | Role                                    |
+| --------------------------------- | --------------------------------------- |
+| [`VERSION`](../VERSION)           | Single-line `X.Y.Z` (no `v` prefix)     |
 | [`CHANGELOG.md`](../CHANGELOG.md) | Keep-a-Changelog entry for that version |
-| Git tag | Must be `v` + contents of `VERSION` |
+| Git tag                           | Must be `v` + contents of `VERSION`     |
 
 The release workflow refuses to build if the tag and `VERSION` disagree.
 
 ## Maintainer checklist
 
-1. Finish the change set; `make test` and both `sync-*.sh --check` green.  
+1. Finish the change set; `make test` and both `sync-*.sh --check` green.
 2. Move notes from `[Unreleased]` into `## [X.Y.Z] — YYYY-MM-DD` in
    `CHANGELOG.md` (honest: Added / Fixed / Changed / Removed only for what
-   shipped).  
-3. Set `VERSION` to `X.Y.Z`.  
+   shipped).
+3. Set `VERSION` to `X.Y.Z`.
 4. Commit on the branch you intend to tag (usually after merge to the default
-   branch).  
+   branch).
 5. Create and push the annotated or lightweight tag:
 
    ```bash
@@ -30,7 +30,7 @@ The release workflow refuses to build if the tag and `VERSION` disagree.
    ```
 
 6. Workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml)
-   runs on `push` of `v*` tags (or `workflow_dispatch` with a tag input).  
+   runs on `push` of `v*` tags (or `workflow_dispatch` with a tag input).
 7. Confirm the GitHub Release has assets; spot-check install from the tag if
    the change touched installer/bootstrap.
 
@@ -38,11 +38,11 @@ The release workflow refuses to build if the tag and `VERSION` disagree.
 
 `scripts/maint/build-release-assets.sh [vX.Y.Z]`:
 
-1. Runs `sync-bootstrap.sh` so bin scripts match `lib/bootstrap.sh`  
-2. Stages a tree and packs `dist/agent-relay-vX.Y.Z.tar.gz`  
+1. Runs `sync-bootstrap.sh` so bin scripts match `lib/bootstrap.sh`
+2. Stages a tree and packs `dist/agent-relay-vX.Y.Z.tar.gz`
 3. Writes `dist/install.sh`, `uninstall.sh`, `verify.sh` with `DEFAULT_REF`
-   baked to that tag  
-4. Writes `dist/SHA256SUMS` over the tarball + those three scripts  
+   baked to that tag
+4. Writes `dist/SHA256SUMS` over the tarball + those three scripts
 
 Published by `gh release create` together with `--generate-notes`. Generated
 notes are a GitHub convenience; the **authoritative** human summary remains

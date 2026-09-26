@@ -41,7 +41,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/find-agent-relay-dir.sh"
 
 START_DIR="${1:-$PWD}"
-[[ -d "$START_DIR" ]] || { echo "Error: not a directory: $START_DIR" >&2; exit 1; }
+[[ -d "$START_DIR" ]] || {
+  echo "Error: not a directory: $START_DIR" >&2
+  exit 1
+}
 
 if ! AGENT_RELAY_DIR="$(find_agent_relay_dir "$START_DIR")"; then
   echo "bank-check: skipped -- no .agent-relay/ directory or git repository found above $START_DIR" >&2
@@ -63,7 +66,7 @@ write_status() {
     printf 'reachable: %s\n' "$reachable"
     printf 'checked_at: %s\n' "$(now_iso)"
     printf 'detail: %s\n' "$detail"
-  } > "$BANK_STATUS"
+  } >"$BANK_STATUS"
 }
 
 if [[ ! -f "$BANK_CONF" ]]; then
@@ -97,30 +100,32 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     trimmed="${trimmed#?}"
   done
   case "$trimmed" in
-    ''|'#'*) continue ;;
+  '' | '#'*) continue ;;
   esac
   if [[ "$line" =~ ^BANK_[A-Z_]+=.*$ ]]; then
     key="${line%%=*}"
     val="${line#*=}"
     # Strip one layer of matching quotes if present.
     if [[ "$val" == \"*\" && ${#val} -ge 2 ]]; then
-      val="${val#\"}"; val="${val%\"}"
+      val="${val#\"}"
+      val="${val%\"}"
     elif [[ "$val" == \'*\' && ${#val} -ge 2 ]]; then
-      val="${val#\'}"; val="${val%\'}"
+      val="${val#\'}"
+      val="${val%\'}"
     fi
     case "$val" in
-      *'$('*|*'`'*|*';'*|*'&&'*|*'||'*|*'|'*|*'>'*|*'<'*|*$'\n'*)
-        echo "Error: bank.conf line $lineno rejected (unsafe characters in value): $line" >&2
-        malformed=1
-        malformed_reason="line $lineno rejected (unsafe characters in value)"
-        break
-        ;;
+    *'$('* | *'`'* | *';'* | *'&&'* | *'||'* | *'|'* | *'>'* | *'<'* | *$'\n'*)
+      echo "Error: bank.conf line $lineno rejected (unsafe characters in value): $line" >&2
+      malformed=1
+      malformed_reason="line $lineno rejected (unsafe characters in value)"
+      break
+      ;;
     esac
     case "$key" in
-      BANK_TYPE) BANK_TYPE="$val" ;;
-      BANK_PATH) BANK_PATH="$val" ;;
-      BANK_ENDPOINT) BANK_ENDPOINT="$val" ;;
-      *) ;;
+    BANK_TYPE) BANK_TYPE="$val" ;;
+    BANK_PATH) BANK_PATH="$val" ;;
+    BANK_ENDPOINT) BANK_ENDPOINT="$val" ;;
+    *) ;;
     esac
   else
     echo "Error: bank.conf line $lineno is not BANK_KEY=value: $line" >&2
@@ -128,7 +133,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     malformed_reason="line $lineno is not BANK_KEY=value"
     break
   fi
-done < "$BANK_CONF"
+done <"$BANK_CONF"
 
 if [[ "$malformed" -eq 1 ]]; then
   # Root-cause fix: a malformed bank.conf must not leave a stale prior status
@@ -149,28 +154,28 @@ if [[ -z "$BANK_TYPE" ]]; then
 fi
 
 case "$BANK_TYPE" in
-  obsidian-vault)
-    if [[ -z "$BANK_PATH" ]]; then
-      write_status "true" "$BANK_TYPE" "" "$BANK_ENDPOINT" "false" "BANK_PATH not set for obsidian-vault"
-    elif [[ ! -d "$BANK_PATH" ]]; then
-      write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path does not exist: $BANK_PATH"
-    # Caveat: [[ -w "$BANK_PATH" ]] tests writability via file permissions, but
-    # when running as root (e.g., in some CI or container setups), it may report
-    # true even for read-only filesystems or restricted mounts. This is a known
-    # limitation of the reachability probe.
-    elif [[ ! -w "$BANK_PATH" ]]; then
-      write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path exists but is not writable: $BANK_PATH"
-    else
-      write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "true" "vault directory exists and is writable"
-    fi
-    ;;
-  lightrag-http|agentmemory-cli)
-    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
-      "backend '$BANK_TYPE' is declared but has no driver in this MVP (only obsidian-vault is implemented); see docs/bank.md"
-    ;;
-  *)
-    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "unknown BANK_TYPE '$BANK_TYPE'"
-    ;;
+obsidian-vault)
+  if [[ -z "$BANK_PATH" ]]; then
+    write_status "true" "$BANK_TYPE" "" "$BANK_ENDPOINT" "false" "BANK_PATH not set for obsidian-vault"
+  elif [[ ! -d "$BANK_PATH" ]]; then
+    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path does not exist: $BANK_PATH"
+  # Caveat: [[ -w "$BANK_PATH" ]] tests writability via file permissions, but
+  # when running as root (e.g., in some CI or container setups), it may report
+  # true even for read-only filesystems or restricted mounts. This is a known
+  # limitation of the reachability probe.
+  elif [[ ! -w "$BANK_PATH" ]]; then
+    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path exists but is not writable: $BANK_PATH"
+  else
+    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "true" "vault directory exists and is writable"
+  fi
+  ;;
+lightrag-http | agentmemory-cli)
+  write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
+    "backend '$BANK_TYPE' is declared but has no driver in this MVP (only obsidian-vault is implemented); see docs/bank.md"
+  ;;
+*)
+  write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "unknown BANK_TYPE '$BANK_TYPE'"
+  ;;
 esac
 
 echo "bank-check: wrote $BANK_STATUS"

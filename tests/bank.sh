@@ -14,7 +14,10 @@ BANK_PUSH=bank_push
 
 FAIL=0
 pass() { echo "PASS: $1"; }
-fail() { echo "FAIL: $1"; FAIL=1; }
+fail() {
+  echo "FAIL: $1"
+  FAIL=1
+}
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/ar-bank.XXXXXX")"
 cleanup() { rm -rf "$T"; }
@@ -45,7 +48,7 @@ set -e
 [[ ! -e "$NOWHERE/.agent-relay" ]] && pass "bank-check does not create .agent-relay/ when not found" || fail "bank-check does not create .agent-relay/ when not found"
 
 set +e
-"$BANK_PUSH" "$NOWHERE" some-run "Some Title" - <<< "body" >/dev/null 2>/dev/null
+"$BANK_PUSH" "$NOWHERE" some-run "Some Title" - <<<"body" >/dev/null 2>/dev/null
 rc=$?
 set -e
 [[ "$rc" -eq 2 ]] && pass "bank-push exits 2 with no .agent-relay/ or git repo" || fail "bank-push exits 2 with no .agent-relay/ or git repo (got $rc)"
@@ -61,7 +64,7 @@ STATUS="$REPO/.agent-relay/bank-status.md"
 
 # --- valid obsidian-vault, reachable ---
 mkdir -p "$REPO/.agent-relay"
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_TYPE=obsidian-vault
 BANK_PATH=$VAULT
 EOF
@@ -70,7 +73,7 @@ EOF
 [[ "$(field "$STATUS" bank_type)" == "obsidian-vault" ]] && pass "bank_type recorded" || fail "bank_type recorded"
 
 # --- obsidian-vault, path does not exist ---
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_TYPE=obsidian-vault
 BANK_PATH=$T/does-not-exist
 EOF
@@ -78,7 +81,7 @@ EOF
 [[ "$(field "$STATUS" reachable)" == "false" ]] && pass "reachable: false for missing vault path" || fail "reachable: false for missing vault path"
 
 # --- reserved backend types: recorded, not implemented, never "reachable" ---
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_TYPE=lightrag-http
 BANK_ENDPOINT=http://127.0.0.1:9999
 EOF
@@ -89,7 +92,7 @@ EOF
 [[ -z "$(field "$STATUS" bank_path)" ]] && pass "lightrag-http bank_path is empty" || fail "lightrag-http bank_path is empty"
 
 # --- malformed bank.conf: refuse, do not guess ---
-cat > "$REPO/.agent-relay/bank.conf" <<'EOF'
+cat >"$REPO/.agent-relay/bank.conf" <<'EOF'
 BANK_TYPE=obsidian-vault
 BANK_PATH=$(rm -rf /)
 EOF
@@ -103,13 +106,13 @@ fi
 # "reachable: true" from a prior good check. Go from a genuinely reachable
 # config straight to a malformed one and confirm the status flips to false
 # rather than being left untouched. ---
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_TYPE=obsidian-vault
 BANK_PATH=$VAULT
 EOF
 "$BANK_CHECK" "$REPO" >/dev/null
 [[ "$(field "$STATUS" reachable)" == "true" ]] && pass "precondition: reachable true before breaking bank.conf" || fail "precondition: reachable true before breaking bank.conf"
-cat > "$REPO/.agent-relay/bank.conf" <<'EOF'
+cat >"$REPO/.agent-relay/bank.conf" <<'EOF'
 BANK_TYPE=obsidian-vault
 BANK_PATH=$(rm -rf /)
 EOF
@@ -120,9 +123,9 @@ set -e
 [[ "$MALFORMED_RC" -eq 1 ]] && pass "bank-check still exits 1 on malformed bank.conf" || fail "bank-check still exits 1 on malformed bank.conf (got $MALFORMED_RC)"
 [[ "$(field "$STATUS" reachable)" == "false" ]] && pass "malformed bank.conf flips stale reachable:true to false" || fail "malformed bank.conf flips stale reachable:true to false"
 [[ "$(field "$STATUS" configured)" == "true" ]] && pass "malformed bank.conf still records configured:true" || fail "malformed bank.conf still records configured:true"
-echo "$(field "$STATUS" detail)" | grep -q "malformed" && pass "malformed bank.conf detail explains why" || fail "malformed bank.conf detail explains why" 
+echo "$(field "$STATUS" detail)" | grep -q "malformed" && pass "malformed bank.conf detail explains why" || fail "malformed bank.conf detail explains why"
 
-cat > "$REPO/.agent-relay/bank.conf" <<'EOF'
+cat >"$REPO/.agent-relay/bank.conf" <<'EOF'
 this is not a key=value line
 EOF
 if "$BANK_CHECK" "$REPO" >/dev/null 2>&1; then
@@ -134,7 +137,7 @@ fi
 # --- comment / blank-line handling: a key line must never be silently
 # swallowed as a comment just because it contains a '#'. Indented keys are a
 # hard refusal; only blank lines and whole-line comments are skipped. ---
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 # leading comment
    # indented comment
 
@@ -145,7 +148,7 @@ EOF
 [[ "$(field "$STATUS" reachable)" == "true" ]] && pass "blank lines and whole-line comments are skipped" || fail "blank lines and whole-line comments are skipped"
 [[ "$(field "$STATUS" bank_path)" == "$VAULT" ]] && pass "bank_path survives comment/blank lines" || fail "bank_path survives comment/blank lines"
 
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_TYPE=obsidian-vault
   BANK_PATH=$VAULT  # inline note
 EOF
@@ -157,7 +160,7 @@ set -e
 [[ "$(field "$STATUS" reachable)" == "false" ]] && pass "refused indented key line records reachable: false" || fail "refused indented key line records reachable: false"
 
 # --- bank-push.sh: pushes when reachable ---
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_TYPE=obsidian-vault
 BANK_PATH=$VAULT
 EOF
@@ -172,7 +175,7 @@ PUSHED_FILE="$VAULT/agent-relay/$(date +%Y%m%d)-1758096000-demo-test-lesson.md"
 grep -q "a distilled lesson" "$PUSHED_FILE" 2>/dev/null && pass "bank-push note contains the body" || fail "bank-push note contains the body"
 
 # --- bank-push.sh: refuses (exit 2) when not reachable ---
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_TYPE=obsidian-vault
 BANK_PATH=$T/does-not-exist
 EOF
@@ -184,7 +187,7 @@ set -e
 [[ "$PUSH_RC" -eq 2 ]] && pass "bank-push exits 2 when not reachable" || fail "bank-push exits 2 when not reachable (got $PUSH_RC)"
 
 # --- bank.conf: BANK_TYPE present but empty value ---
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_TYPE=
 BANK_PATH=$VAULT
 EOF
@@ -194,7 +197,7 @@ EOF
 [[ -z "$(field "$STATUS" bank_type)" ]] && pass "bank_type is empty for empty BANK_TYPE" || fail "bank_type is empty for empty BANK_TYPE"
 
 # --- bank.conf: only BANK_PATH and no BANK_TYPE ---
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_PATH=$VAULT
 EOF
 "$BANK_CHECK" "$REPO" >/dev/null
@@ -203,7 +206,7 @@ EOF
 echo "$(field "$STATUS" detail)" | grep -q "no BANK_TYPE" && pass "detail mentions no BANK_TYPE" || fail "detail mentions no BANK_TYPE"
 
 # --- bank-push.sh: re-pushing overwrites existing note for same run/title ---
-cat > "$REPO/.agent-relay/bank.conf" <<EOF
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
 BANK_TYPE=obsidian-vault
 BANK_PATH=$VAULT
 EOF

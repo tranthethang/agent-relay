@@ -50,3 +50,23 @@ jobs:
         # Severity floor: -S error (see CONTRIBUTING.md). Tighten toward
         # -S warning once existing warnings are cleared.
         run: shellcheck -S error bin/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh lib/*.sh tests/*.sh
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install shfmt
+        run: |
+          curl -sSLfo /tmp/shfmt "https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_linux_amd64"
+          sudo install -m 755 /tmp/shfmt /usr/local/bin/shfmt
+          shfmt --version
+
+      - name: Install dprint
+        run: |
+          curl -fsSL https://dprint.dev/install.sh | sh -s -- 0.57.4
+          echo "$HOME/.dprint/bin" >> "$GITHUB_PATH"
+
+      - name: Check formatting
+        run: make fmt-check

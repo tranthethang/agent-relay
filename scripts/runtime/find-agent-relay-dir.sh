@@ -44,6 +44,9 @@ find_agent_relay_dir() {
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   START_DIR="${1:-$PWD}"
-  [[ -d "$START_DIR" ]] || { echo "Error: not a directory: $START_DIR" >&2; exit 1; }
+  [[ -d "$START_DIR" ]] || {
+    echo "Error: not a directory: $START_DIR" >&2
+    exit 1
+  }
   find_agent_relay_dir "$START_DIR"
 fi

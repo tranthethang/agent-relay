@@ -14,16 +14,16 @@ point here (architecture, task-claim, skill authoring, …):
 `skills/*/references/` — run `bash scripts/maint/sync-references.sh` from the repo
 root after changing this file.
 
-| Purpose | Path | Written by |
-| --- | --- | --- |
-| Plan | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md` | You, or `atry-plan`. |
-| Task list | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-plan.md` (or `implement-plan/` in parallel mode) | `atry-implement` |
-| Implement notes | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement` |
-| Review report | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-report.md` | `atry-self-review` creates or overwrites. `atry-cross-review` appends. |
-| Review walkthrough | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md` | Same as the review report. |
-| Metadata | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md` | `atry run-init` creates; stages update `stage:` and `status:`. |
-| History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log` | `atry history` / stages append events. |
-| Distillation (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distillation.md` | `atry-distill`, run after cross-review (or self-review if cross-review was skipped). |
+| Purpose                 | Path                                                                                                   | Written by                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Plan                    | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md`                                                       | You, or `atry-plan`.                                                                 |
+| Task list               | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-plan.md` (or `implement-plan/` in parallel mode)     | `atry-implement`                                                                     |
+| Implement notes         | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement`                                                                     |
+| Review report           | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-report.md`                                              | `atry-self-review` creates or overwrites. `atry-cross-review` appends.               |
+| Review walkthrough      | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md`                                         | Same as the review report.                                                           |
+| Metadata                | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md`                                                       | `atry run-init` creates; stages update `stage:` and `status:`.                       |
+| History (optional)      | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log`                                                   | `atry history` / stages append events.                                               |
+| Distillation (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distillation.md`                                               | `atry-distill`, run after cross-review (or self-review if cross-review was skipped). |
 
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
 characters matching `^[a-z]+(-[a-z]+)*$`.
@@ -73,6 +73,7 @@ guess via file mtime):
 3. Else ask the user. Do not guess.
 
 Directory matching rules:
+
 - Run directory format: `^([0-9]{8})-([0-9]{10,11})-([a-z]+(-[a-z]+)*)$`.
 - Lookup by ID: A unique directory under `.agent-relay/` matching `*-${RUN_ID}-*` or by slug.
 - Lookup by full path or dirname: Matches directly.
@@ -92,6 +93,7 @@ base: <git-ref>
 ```
 
 Field definitions:
+
 - `id`: The Unix timestamp run identifier (`date +%s`).
 - `slug`: Short slug (lowercase letters and hyphens, 3–48 characters).
 - `created`: Date the run was initialized (`YYYY-MM-DD`).
@@ -108,6 +110,7 @@ major actions. Each line is formatted as:
 `<TIMESTAMP> stage=<stage> action=<action> [key=value ...]`
 
 Example:
+
 ```text
 2026-09-16T03:05:00Z stage=plan action=created tool=cursor
 2026-09-16T03:15:22Z stage=implement action=started tool=cursor
@@ -154,8 +157,6 @@ byte-identical by `sync-references.sh`). When a genuine tradeoff cannot be
 resolved interactively, record it as an optional `### Open decisions`
 subsection **inside** that day's Self-Review or Cross-Review body — not a new
 top-level `##` kind.
-
-
 
 ## Parallel task implementation (optional)
 
@@ -262,22 +263,21 @@ Prefer reading `implement-report/` (or `report-list`) over the generated
 
 The claim protocol serializes **task status**, not file contents:
 
-| Scenario | Safe? |
-|---|---|
-| Different tasks, **disjoint** file sets, same worktree | Yes (protocol + skill scoping) |
-| Different tasks, overlapping files, same worktree | No — git/content races; claim does not protect |
-| One agent per git worktree/branch, then merge | Yes (recommended when files overlap) |
-| Multiple features (different `<RUN_ID>`) | Yes, completely isolated in separate `{YMD}-{RUN_ID}-{RUN_SLUG}/` dirs |
+| Scenario                                               | Safe?                                                                  |
+| ------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Different tasks, **disjoint** file sets, same worktree | Yes (protocol + skill scoping)                                         |
+| Different tasks, overlapping files, same worktree      | No — git/content races; claim does not protect                         |
+| One agent per git worktree/branch, then merge          | Yes (recommended when files overlap)                                   |
+| Multiple features (different `<RUN_ID>`)               | Yes, completely isolated in separate `{YMD}-{RUN_ID}-{RUN_SLUG}/` dirs |
 
 ### Concurrency
 
-| Scenario | Safe? |
-|---|---|
-| Multiple runs (different `<RUN_ID>`) in parallel | Yes |
+| Scenario                                                          | Safe?                                                  |
+| ----------------------------------------------------------------- | ------------------------------------------------------ |
+| Multiple runs (different `<RUN_ID>`) in parallel                  | Yes                                                    |
 | Multiple sub-agents, same `<RUN_ID>`, different tasks, via `atry` | Yes (for status/report; see isolation above for files) |
-| Multiple sub-agents, same `<RUN_ID>`, same task | No — second claim fails loudly |
-| Hand-editing `implement-plan.md` while parallel mode is active | No — it's generated, gets overwritten |
-
+| Multiple sub-agents, same `<RUN_ID>`, same task                   | No — second claim fails loudly                         |
+| Hand-editing `implement-plan.md` while parallel mode is active    | No — it's generated, gets overwritten                  |
 
 ## Review notes worth flagging explicitly
 
@@ -318,4 +318,3 @@ reads/writes these files.
   `bin/install.sh` prints that reminder.
 - Id generation: `RUN_ID` is generated offline via `date +%s` (Unix epoch
   seconds). No npm or network required.
-

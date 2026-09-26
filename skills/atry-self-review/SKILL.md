@@ -28,13 +28,13 @@ preflight").
 
 ### Commands used in this stage
 
-| Command | Meaning of a non-zero exit |
-| --- | --- |
-| `atry version` | atry is missing or broken on PATH -- stop, see Preflight above |
-| `atry resolve [RUN_ID or path]` | ambiguous or not found -- ask the user for the `RUN_ID` or path |
-| `atry history append <run-dir> self-review started\|completed tool=<tool>` | run dir invalid |
-| `atry review upsert <file> Self-Review <date> <body-file>` | bad arguments, or `<file>` is not laid out as expected |
-| `atry check "$RUN_DIR"` (when `implement-plan/` exists) | `MISMATCH` -- a rollup was hand-edited outside the claim protocol |
+| Command                                                                    | Meaning of a non-zero exit                                        |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `atry version`                                                             | atry is missing or broken on PATH -- stop, see Preflight above    |
+| `atry resolve [RUN_ID or path]`                                            | ambiguous or not found -- ask the user for the `RUN_ID` or path   |
+| `atry history append <run-dir> self-review started\|completed tool=<tool>` | run dir invalid                                                   |
+| `atry review upsert <file> Self-Review <date> <body-file>`                 | bad arguments, or `<file>` is not laid out as expected            |
+| `atry check "$RUN_DIR"` (when `implement-plan/` exists)                    | `MISMATCH` -- a rollup was hand-edited outside the claim protocol |
 
 ## Run discovery
 
@@ -76,7 +76,7 @@ runtime proof.
 
 ## Model choice
 
-Self-review is often the *only* independent check a change gets -- Cross-Review
+Self-review is often the _only_ independent check a change gets -- Cross-Review
 is invoked separately and may never run for a given change. If you cannot
 confirm that a cross-review will follow, prefer the strongest model available
 to you for this stage rather than defaulting to whatever ran implement. A

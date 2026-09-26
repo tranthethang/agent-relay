@@ -37,8 +37,8 @@ if [[ -d "$FILE" ]]; then
 elif [[ ! -f "$FILE" && -x "$RESOLVE_RUN" ]]; then
   want_name="$(basename "$FILE")"
   case "$want_name" in
-    review-report.md|review-walkthrough.md) ;;
-    *) want_name="review-report.md" ;;
+  review-report.md | review-walkthrough.md) ;;
+  *) want_name="review-report.md" ;;
   esac
   resolved="$("$RESOLVE_RUN" "$FILE" 2>/dev/null || true)"
   if [[ -n "$resolved" && -d "$resolved" && "$(basename "$resolved")" != ".agent-relay" ]]; then
@@ -51,19 +51,19 @@ DATE="$4"
 BODY_SRC="$5"
 
 case "$KIND" in
-  Self-Review|Cross-Review) ;;
-  *)
-    echo "Error: kind must be Self-Review or Cross-Review" >&2
-    exit 1
-    ;;
+Self-Review | Cross-Review) ;;
+*)
+  echo "Error: kind must be Self-Review or Cross-Review" >&2
+  exit 1
+  ;;
 esac
 
 case "$DATE" in
-  [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
-  *)
-    echo "Error: date must be YYYY-MM-DD" >&2
-    exit 1
-    ;;
+[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+*)
+  echo "Error: date must be YYYY-MM-DD" >&2
+  exit 1
+  ;;
 esac
 
 HEADING="## ${KIND} — ${DATE}"
@@ -73,10 +73,13 @@ cleanup() { rm -f "$BODY_TMP" "${OUT_TMP:-}"; }
 trap cleanup EXIT
 
 if [[ "$BODY_SRC" == "-" ]]; then
-  cat > "$BODY_TMP"
+  cat >"$BODY_TMP"
 else
-  [[ -f "$BODY_SRC" ]] || { echo "Error: body file '$BODY_SRC' not found" >&2; exit 1; }
-  cat "$BODY_SRC" > "$BODY_TMP"
+  [[ -f "$BODY_SRC" ]] || {
+    echo "Error: body file '$BODY_SRC' not found" >&2
+    exit 1
+  }
+  cat "$BODY_SRC" >"$BODY_TMP"
 fi
 
 # Non-blocking heads-up: a Cross-Review whose own provenance tool/model
@@ -160,7 +163,7 @@ fi
 # Ensure file exists
 if [[ ! -f "$FILE" ]]; then
   mkdir -p "$(dirname "$FILE")"
-  : > "$FILE"
+  : >"$FILE"
 fi
 
 # The output temp file must live beside the target, not in $TMPDIR: only a
@@ -282,7 +285,7 @@ awk -v heading="$HEADING" -v bodyfile="$BODY_TMP" '
       emit_body()
     }
   }
-' "$FILE" "$FILE" > "$OUT_TMP"
+' "$FILE" "$FILE" >"$OUT_TMP"
 
 mv -f "$OUT_TMP" "$FILE"
 trap - EXIT
