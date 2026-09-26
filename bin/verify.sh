@@ -435,6 +435,43 @@ else
   FAILED=1
 fi
 
+# atry actually runnable from PATH, and the installed version -- not just
+# that files exist under ~/.agent-relay or ~/.local/bin. Passes when
+# `command -v atry` resolves to any `atry` whose `atry version` output
+# matches `~/.agent-relay/bin/atry version` (so a user who put
+# ~/.agent-relay/bin on PATH directly, instead of the ~/.local/bin shim,
+# is still OK).
+checked=$((checked + 1))
+if command -v atry >/dev/null 2>&1; then
+  PATH_ATRY="$(command -v atry)"
+  if PATH_VERSION_OUT="$("$PATH_ATRY" version 2>&1)"; then
+    if [[ -x "$HOME/.agent-relay/bin/atry" ]]; then
+      HOME_VERSION_OUT="$("$HOME/.agent-relay/bin/atry" version 2>&1 || true)"
+      if [[ "$PATH_VERSION_OUT" == "$HOME_VERSION_OUT" ]]; then
+        echo "[OK] atry on PATH ($PATH_ATRY) matches the installed version"
+      else
+        echo "[WARN] atry on PATH ($PATH_ATRY) reports a different version than \$HOME/.agent-relay/bin/atry"
+        echo "       PATH:      $PATH_VERSION_OUT"
+        echo "       installed: $HOME_VERSION_OUT"
+      fi
+    else
+      echo "[WARN] atry on PATH ($PATH_ATRY) found, but \$HOME/.agent-relay/bin/atry is missing to compare against"
+    fi
+  else
+    echo "[FAIL] atry on PATH ($PATH_ATRY) is not runnable (\`atry version\` failed)"
+    echo "       Fix: reinstall (./bin/install.sh, or the release install.sh), then re-run this verifier."
+    echo "       If \$HOME/.local/bin is not the first atry on PATH, put it first, e.g. in ~/.zprofile (macOS zsh) or ~/.bash_profile:"
+    echo "         export PATH=\"\$HOME/.local/bin:\$PATH\""
+    FAILED=1
+  fi
+else
+  echo "[FAIL] atry is not on PATH"
+  echo "       Fix: add \$HOME/.local/bin to PATH, e.g. in ~/.zprofile (macOS zsh) or ~/.bash_profile:"
+  echo "         export PATH=\"\$HOME/.local/bin:\$PATH\""
+  FAILED=1
+fi
+echo "Note: an agent's shell may load a different profile than the terminal that ran this verifier -- if atry works here but not for the agent, check which profile file the agent's shell reads."
+
 for tool in "${TOOLS[@]}"; do
   tool_selected "$tool" || continue
   dir_var="${tool}_DIR"

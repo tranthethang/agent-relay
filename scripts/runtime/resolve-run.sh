@@ -20,9 +20,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/runtime/find-agent-relay-dir.sh
 source "$SCRIPT_DIR/find-agent-relay-dir.sh"
 
-# Walk up from cwd looking for .agent-relay/ (stop at / or git root).
+# Walk up from cwd looking for .agent-relay/ (stop at / or git root). Errors
+# with an actionable hint (never guesses a location) when neither is found.
 find_base_dir() {
-  find_agent_relay_dir "$PWD"
+  local dir
+  if ! dir="$(find_agent_relay_dir "$PWD")"; then
+    echo "Error: no .agent-relay/ directory or git repository found above $PWD" >&2
+    echo "Hint: run from the repo root, or 'git init', or 'mkdir .agent-relay' here." >&2
+    exit 1
+  fi
+  printf '%s\n' "$dir"
 }
 
 is_run_dirname() {
@@ -54,6 +61,7 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then
       parent_name="$(basename "$(dirname "$check_dir")")"
 
       if is_run_dirname "$base_name" && [[ "$parent_name" == ".agent-relay" ]]; then
+        echo "atry: using $(dirname "$check_dir")" >&2
         printf '%s\n' "$check_dir"
         exit 0
       fi
@@ -66,6 +74,7 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then
 
     # If it's a directory matching run dir name format directly
     if is_run_dirname "$(basename "$abs_target")"; then
+      echo "atry: using $(dirname "$abs_target")" >&2
       printf '%s\n' "$abs_target"
       exit 0
     fi
@@ -88,6 +97,7 @@ if [[ $# -ge 1 && -n "${1:-}" ]]; then
     echo "Error: .agent-relay directory not found" >&2
     exit 1
   fi
+  echo "atry: using $BASE_DIR" >&2
 
   # Search for matching run directory
   shopt -s nullglob
@@ -132,6 +142,7 @@ while true; do
   parent_name="$(basename "$(dirname "$check_dir")")"
 
   if is_run_dirname "$base_name" && [[ "$parent_name" == ".agent-relay" ]]; then
+    echo "atry: using $(cd "$(dirname "$check_dir")" && pwd -P)" >&2
     cd "$check_dir" && pwd -P
     exit 0
   fi
@@ -148,6 +159,7 @@ if [[ ! -d "$BASE_DIR" ]]; then
   echo "Error: .agent-relay directory not found" >&2
   exit 1
 fi
+echo "atry: using $BASE_DIR" >&2
 
 shopt -s nullglob
 raw_dirs=("$BASE_DIR"/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*)

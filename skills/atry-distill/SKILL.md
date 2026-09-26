@@ -16,6 +16,27 @@ run. You are not re-reviewing the diff and not judging whether the run was
 "good" — only what is worth remembering from it. Do not invent lessons that
 are not actually supported by the run's own files.
 
+## Preflight
+
+Run `atry version` before anything else in this stage. If it fails, stop —
+do not search the filesystem for helpers and do not fall back to running
+`scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
+Tell the user to run `verify.sh` and fix what it reports (most often
+`$HOME/.local/bin` missing from `PATH`). Run `atry` from the repo root, and
+confirm each `atry resolve` / `atry run-init` call below prints `atry: using
+<path>` on stderr. Full rule: `references/file-conventions.md` ("atry
+preflight").
+
+### Commands used in this stage
+
+| Command | Meaning of a non-zero exit |
+| --- | --- |
+| `atry version` | atry is missing or broken on PATH -- stop, see Preflight above |
+| `atry resolve [RUN_ID or path]` | ambiguous or not found -- ask the user for the `RUN_ID` or path |
+| `atry history append <run-dir> distill started\|completed tool=<tool>` | run dir invalid |
+| `atry bank check "$RUN_DIR"` | `1`: `bank.conf` is malformed; `2`: no `.agent-relay/` / git repo found above `$RUN_DIR` -- either way, treat as "no usable bank" and skip the push |
+| `atry bank push "$RUN_DIR" <run-id> <title> <file>` | `2`: bank not configured/reachable (or no `.agent-relay/` found) -- expected, not an error |
+
 ## Run discovery
 
 Resolve the run directory before reading or writing artifacts:
@@ -91,9 +112,10 @@ runtime proof, same as every other stage.
    repo root.)
 
    Check its exit code, do not just read the file it may or may not have
-   written. Exit `1` means the config was refused or no `.agent-relay/` could
-   be found; treat that as "no usable bank" and skip the push entirely rather
-   than reading `bank-status.md`.
+   written. Exit `1` means `bank.conf` was malformed; exit `2` means no
+   `.agent-relay/` or git repo could be found above `$RUN_DIR`. Either way,
+   treat it as "no usable bank" and skip the push entirely rather than
+   reading `bank-status.md`.
 
 1. If `atry bank check` exited `0` **and** the resulting
    `.agent-relay/bank-status.md` shows `reachable: true`,

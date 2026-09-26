@@ -144,6 +144,11 @@ else
 fi
 
 # 6. Remote verify succeeds
+# (verify now also checks that `atry` is runnable from PATH; remote mode
+# here re-execs the downloaded v0.1.0 fixture's own verify.sh, but export
+# the installed shim's directory anyway so this harness matches how a real
+# shell would call it.)
+export PATH="$HOME/.local/bin:$PATH"
 if "$RUN_DIR/verify.sh" --ref v0.1.0 >/dev/null 2>&1; then
   pass "remote verify succeeds"
 else

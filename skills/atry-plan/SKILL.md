@@ -14,6 +14,25 @@ You are writing a plan that later stages (`atry-implement`, reviews) will
 consume. Do not implement. Do not call other tools' agents. Produce one plan
 file that `atry task-init` can parse without guessing.
 
+## Preflight
+
+Run `atry version` before anything else in this stage. If it fails, stop —
+do not search the filesystem for helpers and do not fall back to running
+`scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
+Tell the user to run `verify.sh` and fix what it reports (most often
+`$HOME/.local/bin` missing from `PATH`). Run `atry` from the repo root, and
+confirm each `atry resolve` / `atry run-init` call below prints `atry: using
+<path>` on stderr. Full rule: `references/file-conventions.md` ("atry
+preflight").
+
+### Commands used in this stage
+
+| Command | Meaning of a non-zero exit |
+| --- | --- |
+| `atry version` | atry is missing or broken on PATH -- stop, see Preflight above |
+| `atry run-init <id> --slug <slug> [--title ...] [--base ...]` | invalid id/slug, or no `.agent-relay/` / git repo found above cwd |
+| `atry task-init "$RUN_DIR"` (optional validation) | the plan doesn't parse (bad checkbox status or dependency id) |
+
 ## Run discovery
 
 Follow `references/file-conventions.md`. For a **new** plan you always create a

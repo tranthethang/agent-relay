@@ -12,6 +12,8 @@ cause over disabling sync/CI checks.
 | `verify` fails after partial uninstall | Expected — skill removed for one tool | Re-install or narrow `--only` / `--skill` |
 | `--ref` installs unexpected tree | Forgot that `--ref` always fetches, even inside a clone | Pass the tag/sha you intend; or run without `--ref` to use the working tree |
 | Checksum mismatch on release install | Truncated download or wrong `SHA256SUMS` | Re-download; confirm `REF` matches the sums file |
+| `Error: cannot find atry helpers` when running the `~/.local/bin/atry` shim | Old shim bug: `resolve_lib()` didn't follow the shim's own symlink to `~/.agent-relay/bin/atry`, so it looked for helpers next to `~/.local/bin/` instead | Reinstall (`./bin/install.sh`) to pick up the fixed `scripts/atry`; `./bin/verify.sh` also now checks the shim is actually runnable, not just present |
+| `atry` works in a terminal but not for the agent | The agent's shell doesn't load the same profile as your interactive terminal (e.g. a non-login or non-interactive shell skips `~/.zprofile` / `~/.bashrc`) | Put the `PATH` line in the profile file that shell actually reads (check the tool's docs for which shell/profile it uses), or configure the tool to invoke a login shell |
 
 ## Sync / CI
 
@@ -36,6 +38,7 @@ cause over disabling sync/CI checks.
 | Second `claim` fails, prints owner | Lock held | Wait; or `steal` if takeover is intentional |
 | `claim` prints steal hint for old lock | Stale lock, no auto-steal | Run the printed `steal` command if appropriate |
 | Deps blocked | Upstream not `done` | Finish deps, or `--allow-skipped-deps` only when skipping is intended |
+| `Error: no .agent-relay/ directory or git repository found above <dir>` | Ran `atry resolve` / `atry run-init` from outside any git repo and no `.agent-relay/` exists yet — this errors now instead of silently creating one under the current directory | Run from inside the target repo (or a subdirectory of it), or `git init`, or `mkdir .agent-relay` at the project root as a one-time escape hatch for a non-git project |
 | Nested unexpected `.agent-relay/` | Ran helpers from wrong cwd without walk-up finding the real root | Run from the target repo; helpers walk up to `.agent-relay/` / git root |
 
 ## Reviews
@@ -59,6 +62,7 @@ cause over disabling sync/CI checks.
 | `atry bank push` exits 2 (`skipped`) | Bank not configured or reachable per `bank-status.md` | Run `atry bank check` first to probe reachability; verify path/endpoint in `.agent-relay/bank.conf` |
 | `atry bank push` exits 1 | Missing arguments or `bank-status.md` missing | Run `atry bank check` before pushing, and supply all four required arguments |
 | `atry bank check` exits 1 | Malformed `.agent-relay/bank.conf` | Check `bank.conf`: lines must strictly match `BANK_KEY=value` with no shell metacharacters |
+| `atry bank check` / `atry bank push` exits 2 with "no .agent-relay/ ... found" | No `.agent-relay/` and no git repo above the given start directory | Treat as "not configured" (same as no `bank.conf`) — this is not a crash; run from inside the target repo if a bank was expected |
 
 ## Still stuck
 

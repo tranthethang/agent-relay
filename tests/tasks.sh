@@ -33,6 +33,11 @@ cleanup() { rm -rf "$T"; }
 trap cleanup EXIT
 
 cd "$T"
+# find-agent-relay-dir.sh no longer falls back to $PWD/.agent-relay when
+# neither an existing .agent-relay/ nor a git root is found above cwd (see
+# scripts/runtime/find-agent-relay-dir.sh) -- create it once up front so the
+# rest of this suite resolves the same way it always has.
+mkdir -p "$T/.agent-relay"
 
 # 1. Happy path: run-init -> task-init -> claim -> update -> release -> list
 HAPPY_DIR="$("$RUN_INIT" 1700000000 --slug happy --title "Happy Plan" --base main)"
@@ -959,6 +964,70 @@ printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=a
 WARN_OUT3="$("$REVIEW_SH" upsert "$WARN_FILE3" Cross-Review "$TODAY" "$T/warn-cross-fenced.md" 2>&1 >/dev/null)"
 [[ -z "$WARN_OUT3" ]] && pass "fenced example provenance is not mistaken for the real prior self-review" || fail "fenced example provenance is not mistaken for the real prior self-review"
 
+# --- find-agent-relay-dir.sh: no fallback to $PWD/.agent-relay (T3) ---
+# Deliberately OUTSIDE $T (which has its own .agent-relay/ for the rest of
+# this suite) so nothing above it can be found by accident.
+
+NOFALLBACK="$(mktemp -d "${TMPDIR:-/tmp}/ar-tasks-nofallback.XXXXXX")"
+NF_ERR="$NOFALLBACK.err"
+if OUT=$(cd "$NOFALLBACK" && "$RUN_INIT" 1700000500 --slug no-fallback 2>"$NF_ERR"); then
+  fail "run-init fails with no .agent-relay/ and no git repo above cwd"
+else
+  pass "run-init fails with no .agent-relay/ and no git repo above cwd"
+fi
+grep -qi "no .agent-relay" "$NF_ERR" &&   pass "run-init failure prints an actionable hint" || fail "run-init failure prints an actionable hint"
+[[ ! -e "$NOFALLBACK/.agent-relay" ]] &&   pass "run-init does not create .agent-relay/ when not found" || fail "run-init does not create .agent-relay/ when not found"
+rm -f "$NF_ERR"
+
+# Succeeds once .agent-relay/ is created by hand (the documented escape hatch
+# for a non-git project).
+mkdir -p "$NOFALLBACK/.agent-relay"
+OUT=$(cd "$NOFALLBACK" && "$RUN_INIT" 1700000500 --slug no-fallback 2>/dev/null)
+[[ -d "$OUT" ]] && pass "run-init succeeds after mkdir .agent-relay" || fail "run-init succeeds after mkdir .agent-relay"
+# stdout of run-init is still only the run dir path (one line, no "atry: using" noise)
+[[ "$(echo "$OUT" | wc -l | tr -d '[:space:]')" == "1" ]] &&   pass "run-init stdout is a single line (run dir path only)" || fail "run-init stdout is a single line (run dir path only)"
+rm -rf "$NOFALLBACK"
+
+# The installed CLI home (~/.agent-relay with bin/atry + lib/) is never a run
+# root: from a non-git folder under such a HOME, run-init must error instead
+# of writing run dirs into the install tree.
+FAKEHOME="$(mktemp -d "${TMPDIR:-/tmp}/ar-tasks-fakehome.XXXXXX")"
+mkdir -p "$FAKEHOME/.agent-relay/bin" "$FAKEHOME/.agent-relay/lib" "$FAKEHOME/proj"
+printf '#!/bin/sh\n' > "$FAKEHOME/.agent-relay/bin/atry"
+chmod +x "$FAKEHOME/.agent-relay/bin/atry"
+if (cd "$FAKEHOME/proj" && "$RUN_INIT" 1700000700 --slug install-home >/dev/null 2>&1); then
+  fail "run-init does not use the atry install dir as a run root"
+else
+  pass "run-init does not use the atry install dir as a run root"
+fi
+shopt -s nullglob
+fake_runs=("$FAKEHOME/.agent-relay"/[0-9]*)
+shopt -u nullglob
+[[ ${#fake_runs[@]} -eq 0 ]] && pass "no run dir written into the atry install dir" || fail "no run dir written into the atry install dir"
+if bash "$ROOT/scripts/runtime/find-agent-relay-dir.sh" "$FAKEHOME/proj" >/dev/null 2>&1; then
+  fail "find-agent-relay-dir skips the atry install dir"
+else
+  pass "find-agent-relay-dir skips the atry install dir"
+fi
+rm -rf "$FAKEHOME"
+
+# Walking up from a git subdirectory resolves to the repo root's .agent-relay/,
+# not a fallback under the subdirectory itself.
+GITROOT="$T/git-fallback-root"
+mkdir -p "$GITROOT/sub/deeper"
+git -C "$GITROOT" init -q
+# Canonicalize before comparing: run-init walks via pwd -P, and on macOS
+# /tmp and /var resolve under /private/... — a non-canonical GITROOT prefix
+# would false-fail a correct resolution.
+GITROOT="$(cd "$GITROOT" && pwd -P)"
+# No ( ... ) subshell here: fail() sets FAIL=1, which a subshell would drop,
+# so this assertion could never fail the suite.
+OUT="$(cd "$GITROOT/sub/deeper" && "$RUN_INIT" 1700000600 --slug from-subdir 2>/dev/null || true)"
+case "$OUT" in
+  "$GITROOT/.agent-relay/"*) pass "run-init from a git subdirectory resolves to repo root" ;;
+  *) fail "run-init from a git subdirectory resolves to repo root (got $OUT)" ;;
+esac
+
 # --- Per-run folder helper tests (resolve-run, run-history) ---
 
 # 1. Resolve by id and slug
@@ -984,6 +1053,18 @@ RESOLVED_PATH="$("$RESOLVE_RUN" "$HAPPY_DIR")"
 # 3. Resolve by file path inside run dir
 RESOLVED_FILE="$("$RESOLVE_RUN" "$HAPPY_DIR/plan.md")"
 [[ "$RESOLVED_FILE" == "$HAPPY_DIR" ]] && pass "resolve-run by file path matches" || fail "resolve-run by file path matches"
+
+# 3b. Every successful resolve names the .agent-relay/ it used on stderr (the
+# skills' Preflight tells agents to check for this line), including the
+# explicit-path branch, while stdout stays just the run dir path.
+for ref in 1700000000 "$HAPPY_DIR" "$HAPPY_DIR/plan.md"; do
+  RES_ERR="$("$RESOLVE_RUN" "$ref" 2>&1 >/dev/null)"
+  RES_OUT="$("$RESOLVE_RUN" "$ref" 2>/dev/null)"
+  [[ "$RES_ERR" == "atry: using $(dirname "$HAPPY_DIR")" ]] && pass "resolve-run '$ref' prints atry: using on stderr" || fail "resolve-run '$ref' prints atry: using on stderr (got '$RES_ERR')"
+  [[ "$RES_OUT" == "$HAPPY_DIR" ]] && pass "resolve-run '$ref' stdout is the run dir only" || fail "resolve-run '$ref' stdout is the run dir only"
+done
+RES_ERR="$(cd "$HAPPY_DIR" && "$RESOLVE_RUN" 2>&1 >/dev/null)"
+[[ "$RES_ERR" == "atry: using $(dirname "$HAPPY_DIR")" ]] && pass "resolve-run from inside a run dir prints atry: using" || fail "resolve-run from inside a run dir prints atry: using (got '$RES_ERR')"
 
 # 4. Resolve with no args from run dir
 (

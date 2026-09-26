@@ -34,6 +34,22 @@ else
   pass "bank-check.sh does not use declare -A (bash 3.2 compatible)"
 fi
 
+# --- no .agent-relay/ and no git repo above start-dir: skipped, exit 2 ---
+NOWHERE="$T/nowhere"
+mkdir -p "$NOWHERE"
+set +e
+"$BANK_CHECK" "$NOWHERE" >/dev/null 2>/dev/null
+rc=$?
+set -e
+[[ "$rc" -eq 2 ]] && pass "bank-check exits 2 with no .agent-relay/ or git repo" || fail "bank-check exits 2 with no .agent-relay/ or git repo (got $rc)"
+[[ ! -e "$NOWHERE/.agent-relay" ]] && pass "bank-check does not create .agent-relay/ when not found" || fail "bank-check does not create .agent-relay/ when not found"
+
+set +e
+"$BANK_PUSH" "$NOWHERE" some-run "Some Title" - <<< "body" >/dev/null 2>/dev/null
+rc=$?
+set -e
+[[ "$rc" -eq 2 ]] && pass "bank-push exits 2 with no .agent-relay/ or git repo" || fail "bank-push exits 2 with no .agent-relay/ or git repo (got $rc)"
+
 # --- no bank.conf: "not configured" is a normal outcome, exit 0 ---
 if "$BANK_CHECK" "$REPO" >/dev/null; then
   pass "bank-check exits 0 with no bank.conf"

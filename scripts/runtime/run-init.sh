@@ -16,9 +16,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/runtime/find-agent-relay-dir.sh
 source "$SCRIPT_DIR/find-agent-relay-dir.sh"
 
-# Walk up from cwd looking for .agent-relay/ (stop at / or git root).
+# Walk up from cwd looking for .agent-relay/ (stop at / or git root). Errors
+# with an actionable hint (never guesses a location) when neither is found.
 find_base_dir() {
-  find_agent_relay_dir "$PWD"
+  local dir
+  if ! dir="$(find_agent_relay_dir "$PWD")"; then
+    echo "Error: no .agent-relay/ directory or git repository found above $PWD" >&2
+    echo "Hint: run from the repo root, or 'git init', or 'mkdir .agent-relay' here." >&2
+    exit 1
+  fi
+  printf '%s\n' "$dir"
 }
 
 if [[ $# -lt 1 ]]; then
@@ -108,6 +115,7 @@ fi
 
 BASE_DIR="$(find_base_dir)"
 mkdir -p "$BASE_DIR"
+echo "atry: using $BASE_DIR" >&2
 
 YMD="$(date +%Y%m%d)"
 MAX_RETRIES=5

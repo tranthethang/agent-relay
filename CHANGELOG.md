@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `~/.local/bin/atry` (the installed PATH shim) failed with `Error: cannot
+  find atry helpers` because `resolve_lib()` in `scripts/atry` did not follow
+  the shim's own file symlink to `~/.agent-relay/bin/atry`; it now resolves
+  the real script location hop by hop (absolute and relative symlink
+  targets), matching direct invocation.
+- `find_agent_relay_dir` no longer treats the installed CLI home
+  (`~/.agent-relay`, which holds `bin/atry` and `lib/`) as a run root.
+  Running `atry` from a non-git folder under `$HOME` used to walk up to it
+  and write run dirs into the install tree; it now keeps walking and errors
+  with the usual hint when nothing else is found.
+
+### Changed
+
+- **Breaking (no migrate):** `find_agent_relay_dir` no longer falls back to
+  `$PWD/.agent-relay` when neither an existing `.agent-relay/` nor a git repo
+  is found walking up from cwd — it now errors with an actionable hint (run
+  from the repo root, `git init`, or `mkdir .agent-relay`) instead of
+  guessing a location. `atry run-init` / `atry resolve` print `atry: using
+  <path>` on stderr once they resolve a run root. `atry bank check` / `atry
+  bank push` treat "not found" the same as "not configured" and exit `2`
+  instead of crashing.
+- `bin/verify.sh` now also checks that `atry` is actually runnable from PATH
+  and reports the same version as `~/.agent-relay/bin/atry` — `[FAIL]` with a
+  profile fix hint when missing or not runnable, `[WARN]` on a version
+  mismatch — not just that the expected files exist.
+- Every stage skill (`atry-plan`, `atry-implement`, `atry-self-review`,
+  `atry-cross-review`, `atry-distill`) now documents a Preflight step
+  (`atry version`, stop and run `verify.sh` on failure — never search the
+  filesystem for helpers) and a "Commands used in this stage" table. See
+  `docs/file-conventions.md` ("atry preflight") for the single source of the
+  rule.
+
 ## [4.0.0] — 2026-09-26
 
 ### Changed

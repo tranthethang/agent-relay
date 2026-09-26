@@ -14,6 +14,32 @@ equivalents) in the run directory.
 You are implementing a plan that was created by a separate planning step. Do not
 re-plan from scratch — decompose and execute the plan that already exists.
 
+## Preflight
+
+Run `atry version` before anything else in this stage. If it fails, stop —
+do not search the filesystem for helpers and do not fall back to running
+`scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
+Tell the user to run `verify.sh` and fix what it reports (most often
+`$HOME/.local/bin` missing from `PATH`). Run `atry` from the repo root, and
+confirm each `atry resolve` / `atry run-init` call below prints `atry: using
+<path>` on stderr. Full rule: `references/file-conventions.md` ("atry
+preflight").
+
+### Commands used in this stage
+
+| Command | Meaning of a non-zero exit |
+| --- | --- |
+| `atry version` | atry is missing or broken on PATH -- stop, see Preflight above |
+| `atry resolve [RUN_ID or path]` | ambiguous or not found -- ask the user for the `RUN_ID` or path |
+| `atry history append <run-dir> implement started\|completed tool=<tool>` | run dir invalid |
+| `atry task-init "$RUN_DIR"` (parallel mode setup) | the plan doesn't parse (bad checkbox status or dependency id) |
+| `atry list "$RUN_DIR"` (parallel mode) | informational only -- no special non-zero meaning |
+| `atry claim "$RUN_DIR" <task-id> <session-tag>` (parallel mode) | already locked, or a dep isn't `done` -- pick a different task |
+| `atry update "$RUN_DIR" <task-id> <session-tag> done\|skipped <reason>` (parallel mode) | the caller's session doesn't own the lock |
+| `atry release "$RUN_DIR" <task-id> <session-tag>` (parallel mode) | the caller's session doesn't own the lock (use `--force` to override) |
+| `atry report-write "$RUN_DIR" <task-id> <session-tag> -` (parallel mode) | the lock isn't held -- use `--force` (logs `report-write-force`) |
+| `atry check "$RUN_DIR"` (parallel mode) | `MISMATCH` -- a rollup was hand-edited outside the claim protocol |
+
 ## Run discovery
 
 Resolve the run directory before reading or writing artifacts:
@@ -126,8 +152,7 @@ The default behavior above (sequential, "one at a time" on a single shared
 are explicitly invoked in parallel mode across multiple sub-agents (separate
 sessions).
 
-Require the `atry` CLI on PATH (installed to `~/.agent-relay/bin/atry`, with a
-shim at `~/.local/bin/atry`). Flattened verbs:
+Flattened verbs (see Preflight above for the `atry` on-PATH requirement):
 
 ```bash
 atry task-init "$RUN_DIR"
