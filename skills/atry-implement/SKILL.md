@@ -1,9 +1,15 @@
 ---
 name: atry-implement
-description: Implement an existing agent-relay plan task-by-task, following project rules, and write implement-plan.md + implement-report.md in the run directory. Use when the user asks to implement, build, or code according to an agent-relay plan.
+description: Use when the user asks to implement, build, or code according to an existing agent-relay plan.md -- turning an approved plan into actual file changes.
 ---
 
 # Implement
+
+## Overview
+
+Implements an existing plan task-by-task, following project rules, and writes
+`implement-plan.md` + `implement-report.md` (or their parallel-mode directory
+equivalents) in the run directory.
 
 You are implementing a plan that was created by a separate planning step. Do not
 re-plan from scratch — decompose and execute the plan that already exists.

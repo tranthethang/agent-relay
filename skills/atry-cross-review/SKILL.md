@@ -1,9 +1,15 @@
 ---
 name: atry-cross-review
-description: Second-opinion cross-review of an agent-relay change using artifacts in the run directory and prior Self-Review sections; append dated Cross-Review sections. Use when the user asks for a cross-check or second-opinion review in a different tool/model.
+description: Use when the user asks for a second opinion, cross-check, or independent review of an agent-relay change that already has a Self-Review -- ideally from a different tool or model than whoever implemented and self-reviewed it.
 ---
 
 # Cross-Review
+
+## Overview
+
+Gives a second-opinion review of the change using artifacts in the run
+directory and the prior Self-Review sections, and appends dated Cross-Review
+sections.
 
 You are the *second* reviewer, running in a different tool than whoever
 implemented and self-reviewed this change. Your job is not to repeat the

@@ -1,9 +1,14 @@
 ---
 name: atry-plan
-description: Create a new run directory under .agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/ with plan.md and meta.md. Use when the user asks to plan work for agent-relay before implement.
+description: Use when the user asks to plan work in this repo before implementing -- starting a new agent-relay run, or writing/updating a plan.md that has not yet been broken into steps.
 ---
 
 # Plan
+
+## Overview
+
+Creates a new run directory under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` with
+`plan.md` and `meta.md`, ready for `atry-implement` to consume.
 
 You are writing a plan that later stages (`atry-implement`, reviews) will
 consume. Do not implement. Do not call other tools' agents. Produce one plan
@@ -43,6 +48,18 @@ id="$(grep -E '^id:' "$RUN_DIR/meta.md" | head -1 | sed 's/^id:[[:space:]]*//')"
 This creates `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`, writes `meta.md`, and starts `history.log`.
 Use the `id` read back from `meta.md` (not the pre-init `date +%s` value) when writing `plan.md`.
 
+## Prior lessons (optional)
+
+Before writing `## Goal`, check whether this repo already has distilled
+lessons from earlier runs: look for the most recent
+`.agent-relay/*/distillation.md` (sort by the `{YMD}-{RUN_ID}` prefix in the
+directory name; newest first). If one exists and its lessons are relevant to
+this plan's goal, skim it and let it inform `## Constraints` or `## Non-goals`
+-- do not copy it wholesale, and do not block on it if none exists or none
+apply. This is the only point where a prior run's `distillation.md` feeds
+back into a later stage; nothing in this repo reads the knowledge bank back
+automatically.
+
 ## Provenance
 
 ```html
@@ -75,9 +92,17 @@ id: <RUN_ID>
 
 <what this plan must not expand into>
 
+## Decisions
+
+<optional: choices already made that implement must not reopen>
+
+## Flow
+
+<optional: one mermaid diagram, only when the change alters a runtime flow>
+
 ## Constraints
 
-<bash version, no network in tests, etc.>
+<only what is specific to this run>
 
 ## Tasks
 
@@ -98,6 +123,21 @@ Rules for `## Tasks`:
   them aligned by using a single flat list).
 - Use `(deps: )` or `(deps: T1 T2)` at the end of the line.
 - Do not put numbered lists under Goal/Constraints that look like tasks.
+
+Rules for the other sections:
+
+- `## Decisions`: list choices already settled (in discussion, or by you
+  with the user's agreement). If a task would otherwise say "pick one" or
+  "decide X", decide it here or ask the user -- do not defer the choice to
+  implement, which is told not to reinterpret the plan. Omit the section
+  if there is nothing to record.
+- `## Flow`: include one mermaid diagram only when the change alters a
+  runtime flow, a state machine, or calls between components -- the kind
+  of thing that is hard to follow in prose. Do not draw task order; `deps:`
+  already says that. Omit the section otherwise.
+- `## Constraints`: only what is specific to this run. Repo-wide rules
+  already in `AGENTS.md` (or tool rules / `CLAUDE.md`) are read by
+  `atry-implement` anyway; do not copy them here.
 
 ## Done check
 

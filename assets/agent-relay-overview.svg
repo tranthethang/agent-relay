@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="800" viewBox="0 0 1600 800" role="img" aria-labelledby="t d">
+<title id="t">agent-relay</title>
+<desc id="d">A person invokes agent-relay skills one stage at a time (brainstorm, plan, implement, self-review, cross-review, distill) in Cursor, Claude, Codex, Antigravity or Kiro. Each stage writes plain markdown files into .agent-relay in the target repo. A small bash CLI, atry, helps. Nothing runs or enforces the stages.</desc>
+<style>
+  .bg{fill:#ffffff} .ink{fill:#1f2328} .muted{fill:#59636e} .faint{fill:#818b98}
+  .line{stroke:#d1d9e0} .box{fill:#ffffff;stroke:#8c959f} .opt{fill:#ffffff;stroke:#afb8c1;stroke-dasharray:6 5}
+  .panel{fill:#f6f8fa;stroke:#d1d9e0} .accent{fill:#0969da} .arrow{stroke:#8c959f;fill:none} .ahead{fill:#8c959f}
+  .chip{fill:#eff2f5;stroke:#d1d9e0}
+  text{font-family:-apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Helvetica, Arial, sans-serif} .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, &quot;DejaVu Sans Mono&quot;, monospace}
+  @media (prefers-color-scheme: dark) {
+    .bg{fill:#0d1117} .ink{fill:#e6edf3} .muted{fill:#9198a1} .faint{fill:#7d8590}
+    .line{stroke:#30363d} .box{fill:#0d1117;stroke:#6e7681} .opt{fill:#0d1117;stroke:#484f58;stroke-dasharray:6 5}
+    .panel{fill:#151b23;stroke:#30363d} .accent{fill:#4493f8} .arrow{stroke:#6e7681} .ahead{fill:#6e7681}
+    .chip{fill:#1c232c;stroke:#30363d}
+  }
+</style>
+<rect class="bg" width="1600" height="800" rx="16"/>
+<text class="ink" x="60" y="82" font-size="44" font-weight="700">agent-relay</text>
+<text class="muted" x="60" y="122" font-size="22">Markdown skills that take a coding agent through plan, implement and review, and leave the record in your repo.</text>
+<text class="muted" x="60" y="186" font-size="17">You open any of these tools and invoke one stage at a time:</text>
+<rect class="chip" x="540" y="166" width="78" height="30" rx="15" stroke-width="1"/>
+<text class="ink" x="579" y="186" font-size="15" text-anchor="middle">Cursor</text>
+<rect class="chip" x="627.8" y="166" width="78" height="30" rx="15" stroke-width="1"/>
+<text class="ink" x="667" y="186" font-size="15" text-anchor="middle">Claude</text>
+<rect class="chip" x="715.5999999999999" y="166" width="70" height="30" rx="15" stroke-width="1"/>
+<text class="ink" x="750" y="186" font-size="15" text-anchor="middle">Codex</text>
+<rect class="chip" x="795.0999999999999" y="166" width="119" height="30" rx="15" stroke-width="1"/>
+<text class="ink" x="855" y="186" font-size="15" text-anchor="middle">Antigravity</text>
+<rect class="chip" x="924.3999999999999" y="166" width="61" height="30" rx="15" stroke-width="1"/>
+<text class="ink" x="955" y="186" font-size="15" text-anchor="middle">Kiro</text>
+<rect class="opt" x="60" y="222" width="210" height="132" rx="10" stroke-width="1.5"/>
+<text class="faint" x="78" y="252" font-size="14" font-weight="600">0 · optional</text>
+<text class="ink mono" x="78" y="282" font-size="20" font-weight="600">brainstorm</text>
+<text class="muted" x="78" y="310" font-size="15">investigate and</text>
+<text class="muted" x="78" y="331" font-size="15">discuss, read-only</text>
+<line class="arrow" x1="276" y1="288.0" x2="306" y2="288.0" stroke-width="1.5"/>
+<path class="ahead" d="M312 288.0 L304 283.0 L304 293.0 Z"/>
+<rect class="box" x="314" y="222" width="210" height="132" rx="10" stroke-width="1.5"/>
+<text class="accent" x="332" y="252" font-size="14" font-weight="600">1</text>
+<text class="ink mono" x="332" y="282" font-size="20" font-weight="600">plan</text>
+<text class="muted" x="332" y="310" font-size="15">goal, non-goals,</text>
+<text class="muted" x="332" y="331" font-size="15">tasks with deps</text>
+<line class="arrow" x1="530" y1="288.0" x2="560" y2="288.0" stroke-width="1.5"/>
+<path class="ahead" d="M566 288.0 L558 283.0 L558 293.0 Z"/>
+<rect class="box" x="568" y="222" width="210" height="132" rx="10" stroke-width="1.5"/>
+<text class="accent" x="586" y="252" font-size="14" font-weight="600">2</text>
+<text class="ink mono" x="586" y="282" font-size="20" font-weight="600">implement</text>
+<text class="muted" x="586" y="310" font-size="15">code the plan,</text>
+<text class="muted" x="586" y="331" font-size="15">task by task</text>
+<line class="arrow" x1="784" y1="288.0" x2="814" y2="288.0" stroke-width="1.5"/>
+<path class="ahead" d="M820 288.0 L812 283.0 L812 293.0 Z"/>
+<rect class="box" x="822" y="222" width="210" height="132" rx="10" stroke-width="1.5"/>
+<text class="accent" x="840" y="252" font-size="14" font-weight="600">3</text>
+<text class="ink mono" x="840" y="282" font-size="20" font-weight="600">self-review</text>
+<text class="muted" x="840" y="310" font-size="15">check the diff,</text>
+<text class="muted" x="840" y="331" font-size="15">not the report</text>
+<line class="arrow" x1="1038" y1="288.0" x2="1068" y2="288.0" stroke-width="1.5"/>
+<path class="ahead" d="M1074 288.0 L1066 283.0 L1066 293.0 Z"/>
+<rect class="box" x="1076" y="222" width="210" height="132" rx="10" stroke-width="1.5"/>
+<text class="accent" x="1094" y="252" font-size="14" font-weight="600">4</text>
+<text class="ink mono" x="1094" y="282" font-size="20" font-weight="600">cross-review</text>
+<text class="muted" x="1094" y="310" font-size="15">second opinion,</text>
+<text class="muted" x="1094" y="331" font-size="15">ideally another tool</text>
+<line class="arrow" x1="1292" y1="288.0" x2="1322" y2="288.0" stroke-width="1.5"/>
+<path class="ahead" d="M1328 288.0 L1320 283.0 L1320 293.0 Z"/>
+<rect class="opt" x="1330" y="222" width="210" height="132" rx="10" stroke-width="1.5"/>
+<text class="faint" x="1348" y="252" font-size="14" font-weight="600">5 · optional</text>
+<text class="ink mono" x="1348" y="282" font-size="20" font-weight="600">distill</text>
+<text class="muted" x="1348" y="310" font-size="15">keep lessons</text>
+<text class="muted" x="1348" y="331" font-size="15">worth reusing</text>
+<rect class="panel" x="44" y="404" width="1512" height="214" rx="12" stroke-width="1"/>
+<text class="ink mono" x="60" y="438" font-size="16"><tspan class="muted">your-repo/</tspan>.agent-relay/{date}-{id}-{slug}/</text>
+<line class="line" x1="165.0" y1="356" x2="165.0" y2="402" stroke-width="1" stroke-dasharray="3 4"/>
+<text class="faint mono" x="78" y="488" font-size="15" font-style="italic">(writes nothing)</text>
+<line class="line" x1="419.0" y1="356" x2="419.0" y2="402" stroke-width="1" stroke-dasharray="3 4"/>
+<text class="ink mono" x="332" y="488" font-size="15">plan.md</text>
+<text class="ink mono" x="332" y="514" font-size="15">meta.md</text>
+<text class="ink mono" x="332" y="540" font-size="15">history.log</text>
+<line class="line" x1="673.0" y1="356" x2="673.0" y2="402" stroke-width="1" stroke-dasharray="3 4"/>
+<text class="ink mono" x="586" y="488" font-size="15">implement-plan.md</text>
+<text class="ink mono" x="586" y="514" font-size="15">implement-report.md</text>
+<line class="line" x1="927.0" y1="356" x2="927.0" y2="402" stroke-width="1" stroke-dasharray="3 4"/>
+<text class="ink mono" x="840" y="488" font-size="15">review-report.md</text>
+<text class="ink mono" x="840" y="514" font-size="15">review-walkthrough.md</text>
+<text class="faint mono" x="840" y="540" font-size="15">adds § Self-Review</text>
+<line class="line" x1="1181.0" y1="356" x2="1181.0" y2="402" stroke-width="1" stroke-dasharray="3 4"/>
+<text class="faint mono" x="1094" y="488" font-size="15" font-style="italic">(same two files)</text>
+<text class="faint mono" x="1094" y="514" font-size="15">adds § Cross-Review</text>
+<line class="line" x1="1435.0" y1="356" x2="1435.0" y2="402" stroke-width="1" stroke-dasharray="3 4"/>
+<text class="ink mono" x="1348" y="488" font-size="15">distillation.md</text>
+<text class="muted" x="60" y="596" font-size="15">Plain markdown files. Commit them with the branch, or add the folder to .gitignore.</text>
+<text class="ink mono" x="60" y="668" font-size="18" font-weight="700">atry</text>
+<text class="muted" x="122" y="668" font-size="17">a small bash CLI the skills call: run ids, dated review sections, task locks when several agents share a run</text>
+<line class="line" x1="60" y1="704" x2="1540" y2="704" stroke-width="1"/>
+<text class="muted" x="60" y="746" font-size="16">Not an orchestrator: nothing runs the stages for you, and nothing enforces them. An agent can skip a step.</text>
+<text class="muted" x="60" y="772" font-size="16">Provenance lines record which tool and model a stage says it used. They are records, not proof.</text>
+</svg>

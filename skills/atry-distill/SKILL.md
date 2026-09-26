@@ -1,9 +1,15 @@
 ---
 name: atry-distill
-description: Distill lessons from a completed agent-relay run (plan → implement → self-review → cross-review) into distillation.md, and optionally push the full distillation note to a configured external knowledge bank. Use after atry-cross-review (or atry-self-review if cross-review was skipped) to record reusable lessons for future runs.
+description: Use after cross-review finishes on a completed agent-relay run (or after self-review, if cross-review was skipped) -- not while a run is still in progress.
 ---
 
 # Distill
+
+## Overview
+
+Distills lessons from a completed run (plan -> implement -> self-review ->
+cross-review) into `distillation.md`, and optionally pushes the full note to
+a configured external knowledge bank.
 
 You are summarizing what a *finished* run taught, for whoever starts the next
 run. You are not re-reviewing the diff and not judging whether the run was

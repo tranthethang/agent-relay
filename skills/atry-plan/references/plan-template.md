@@ -13,9 +13,19 @@ id: <id>
 
 <what this plan must not expand into>
 
+## Decisions
+
+<!-- optional; delete if none -->
+- <choice already made that implement must not reopen>
+
+## Flow
+
+<!-- optional; delete unless this change alters a runtime flow, state machine,
+     or cross-component calls. One mermaid diagram. Never task order. -->
+
 ## Constraints
 
-- <constraint>
+- <constraint specific to this run>
 
 ## Tasks
 

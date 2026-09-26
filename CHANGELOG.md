@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `atry-brainstorm` skill (optional stage 0): read-only investigate-and-discuss
+  mode. Writes no files and creates no run directory; the rule ends only when
+  the user names the next skill or explicitly lifts it. Running tests/builds
+  counts as a write and needs the user's OK first.
+
+### Changed
+
+- Skill frontmatter `description:` fields rewritten to state only the trigger
+  condition ("Use when ..."), matching the sync gate's existing
+  name/description smoke check. The former "what it does" sentences moved
+  into a new `## Overview` section under each skill's H1.
+- `reviewer-conduct.md` (shared by `atry-self-review` / `atry-cross-review`)
+  gains a "Common rationalizations" table pairing agent excuses observed in
+  this project with the rule that overrides each one.
+- `atry-plan` gains an optional "Prior lessons" step: check the most recent
+  `.agent-relay/*/distillation.md` in the repo before writing a new plan's
+  `## Goal`, so a completed run's lessons can inform the next plan instead of
+  sitting unread in the knowledge bank.
+- `atry-plan`: `plan.md` gains two optional sections before `## Tasks`:
+  `## Decisions` (settled choices implement must not reopen; no "pick one"
+  deferred to implement) and `## Flow` (one mermaid diagram, only for
+  runtime-flow / state-machine / cross-component changes, never task order).
+  `## Constraints` now asks for run-specific items only, not rules already
+  in `AGENTS.md`. `task-init` parsing is unchanged (it reads `## Tasks` only).
+- `docs/skills-authoring.md` documents the trigger-only description rule
+  (authoring rule 8) for future skills.
+
 ## [4.0.0] — 2026-09-25
 
 ### Changed

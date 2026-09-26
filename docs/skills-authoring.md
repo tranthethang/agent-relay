@@ -21,7 +21,7 @@ Front matter (checked loosely by smoke after install):
 ```yaml
 ---
 name: atry-example
-description: One or two sentences; tools use this for discovery.
+description: Use when <concrete trigger condition>, not a summary of the workflow.
 ---
 ```
 
@@ -53,6 +53,13 @@ description: One or two sentences; tools use this for discovery.
 7. **Call `atry`, not long absolute paths.** Skills should document short
    `atry …` commands so agents do not expand helper paths under each tool’s
    skill directory.
+8. **`description:` states only the trigger, never the workflow.** Write it as
+   "Use when …", naming the concrete conditions an agent should match against
+   -- not a summary of what the skill does. Agents can take the description as
+   a shortcut and skip the body; a description that already explains the
+   workflow invites that skip. Put the "what it does" sentence(s) in a short
+   `## Overview` right under the H1 instead, where they only get read once the
+   skill is actually loaded.
 
 ## Sync workflow
 
