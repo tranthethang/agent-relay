@@ -7,15 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- `atry-brainstorm` skill (optional stage 0): read-only investigate-and-discuss
-  mode. Writes no files and creates no run directory; the rule ends only when
-  the user names the next skill or explicitly lifts it. Running tests/builds
-  counts as a write and needs the user's OK first.
+## [4.0.0] — 2026-09-26
 
 ### Changed
 
+- **Breaking (no migrate):** runtime helpers are the `atry` CLI under
+  `~/.agent-relay/` (PATH shim `~/.local/bin/atry`). Skill bundles ship
+  `SKILL.md` + `references/` only — no bundled `scripts/`.
+- Flattened CLI verbs: `atry claim|list|steal|update|…`, plus `resolve`,
+  `run-init`, `history`, `task-init`, `review`, `bank check|push`.
+- Repo layout: `scripts/runtime/` (installed), `scripts/maint/` (sync/release),
+  `scripts/atry` (dispatcher).
+- Installer installs CLI home; reinstall drops legacy `scripts/` inside skill
+  dirs. Symlink-based skill SoT was evaluated and rejected (Antigravity /
+  Claude do not follow escaped skill symlinks).
 - Skill frontmatter `description:` fields rewritten to state only the trigger
   condition ("Use when ..."), matching the sync gate's existing
   name/description smoke check. The former "what it does" sentences moved
@@ -35,21 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in `AGENTS.md`. `task-init` parsing is unchanged (it reads `## Tasks` only).
 - `docs/skills-authoring.md` documents the trigger-only description rule
   (authoring rule 8) for future skills.
-
-## [4.0.0] — 2026-09-25
-
-### Changed
-
-- **Breaking (no migrate):** runtime helpers are the `atry` CLI under
-  `~/.agent-relay/` (PATH shim `~/.local/bin/atry`). Skill bundles ship
-  `SKILL.md` + `references/` only — no bundled `scripts/`.
-- Flattened CLI verbs: `atry claim|list|steal|update|…`, plus `resolve`,
-  `run-init`, `history`, `task-init`, `review`, `bank check|push`.
-- Repo layout: `scripts/runtime/` (installed), `scripts/maint/` (sync/release),
-  `scripts/atry` (dispatcher).
-- Installer installs CLI home; reinstall drops legacy `scripts/` inside skill
-  dirs. Symlink-based skill SoT was evaluated and rejected (Antigravity /
-  Claude do not follow escaped skill symlinks).
+- README gains an "At a glance" section (mermaid stage diagram + per-stage
+  file table) right after the title, so the six stages and what each one
+  writes are visible without reading the rest of the file.
 
 ### Added
 
@@ -76,6 +69,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cross-review` and `done`.
 - Stage 5 and bank documentation in `docs/architecture.md`,
   `docs/skills-authoring.md`, and `docs/troubleshooting.md`.
+- `atry-brainstorm` skill (optional stage 0): read-only investigate-and-discuss
+  mode. Writes no files and creates no run directory; the rule ends only when
+  the user names the next skill or explicitly lifts it. Running tests/builds
+  counts as a write and needs the user's OK first.
 
 ## [3.1.1] — 2026-09-17
 
