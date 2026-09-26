@@ -15,6 +15,27 @@ You are the *second* reviewer, running in a different tool than whoever
 implemented and self-reviewed this change. Your job is not to repeat the
 previous review — it's to catch what a same-family model/tool is likely to miss.
 
+## Preflight
+
+Run `atry version` before anything else in this stage. If it fails, stop —
+do not search the filesystem for helpers and do not fall back to running
+`scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
+Tell the user to run `verify.sh` and fix what it reports (most often
+`$HOME/.local/bin` missing from `PATH`). Run `atry` from the repo root, and
+confirm each `atry resolve` / `atry run-init` call below prints `atry: using
+<path>` on stderr. Full rule: `references/file-conventions.md` ("atry
+preflight").
+
+### Commands used in this stage
+
+| Command | Meaning of a non-zero exit |
+| --- | --- |
+| `atry version` | atry is missing or broken on PATH -- stop, see Preflight above |
+| `atry resolve [RUN_ID or path]` | ambiguous or not found -- ask the user for the `RUN_ID` or path |
+| `atry history append <run-dir> cross-review started\|completed tool=<tool>` | run dir invalid |
+| `atry review upsert <file> Cross-Review <date> <body-file>` | bad arguments, or `<file>` is not laid out as expected |
+| `atry check "$RUN_DIR"` (when `implement-plan/` exists) | `MISMATCH` -- a rollup was hand-edited outside the claim protocol |
+
 ## Run discovery
 
 Resolve the run directory before reading or writing artifacts:

@@ -31,8 +31,20 @@ EOF
 }
 
 resolve_lib() {
-  local self root
-  self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+  local self root src target
+  # Follow file symlinks hop by hop (no `readlink -f`, not on macOS/bash 3.2)
+  # so a symlinked shim (e.g. ~/.local/bin/atry -> ~/.agent-relay/bin/atry)
+  # resolves to where its helpers actually live, not to the shim's own
+  # directory.
+  src="${BASH_SOURCE[0]}"
+  while [[ -L "$src" ]]; do
+    target="$(readlink "$src")"
+    case "$target" in
+      /*) src="$target" ;;
+      *)  src="$(cd -P "$(dirname "$src")" && pwd)/$target" ;;
+    esac
+  done
+  self="$(cd -P "$(dirname "$src")" && pwd)"
   if [[ -d "$self/runtime" && -f "$self/runtime/task-claim.sh" ]]; then
     ATRY_LIB="$self/runtime"
     ATRY_ROOT="$(cd "$self/.." && pwd -P)"

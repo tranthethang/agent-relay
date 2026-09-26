@@ -32,6 +32,36 @@ Empty outlines for each artifact live in that skill's
 `references/*-template.md` (installed with the bundle). Runtime files live
 inside their respective run directory.
 
+## atry preflight
+
+Every stage skill (`atry-plan`, `atry-implement`, `atry-self-review`,
+`atry-cross-review`, `atry-distill`) starts the same way, before touching any
+run artifact:
+
+1. Run `atry version` once, from the repo root (`git rev-parse
+   --show-toplevel`, or the project root for a non-git project). If it fails
+   (not found, or exits non-zero), **stop**. Tell the user to run
+   `bin/verify.sh` (or the installed `verify.sh`) and fix what it reports —
+   most often `$HOME/.local/bin` missing from `PATH`, or a stale/broken
+   install. Do not try anything else first.
+2. Never search the filesystem for helpers, and never fall back to running
+   `scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh`
+   directly. `atry` on `PATH` is the only supported entrypoint for an
+   installed skill. Do not substitute a guessed path when `atry` is missing —
+   that is exactly the failure `verify.sh`'s PATH check exists to catch.
+3. Continue only after `atry version` succeeds. Every subsequent `atry
+   resolve` / `atry run-init` call in the stage prints `atry: using
+   <path-to-.agent-relay>` on stderr once it finds a run root — that line is
+   the confirmation the stage is reading and writing the right
+   `.agent-relay/`, not a fallback the CLI invented. If no `.agent-relay/` or
+   git repository is found walking up from the current directory, `atry`
+   errors with a hint (run from the repo root, `git init`, or `mkdir
+   .agent-relay`) instead of guessing a location — it does not create one
+   under the current directory automatically.
+
+This section is the single source for the preflight rule; each skill's
+`SKILL.md` links here rather than repeating the rationale.
+
 ## Run resolution
 
 Each run directory under `.agent-relay/` is self-contained. Skills and helpers
@@ -265,7 +295,7 @@ tend to recur silently across runs otherwise:
   plan.
 - **Directory/rollup drift.** If `implement-plan/` or
   `implement-report/` exists for the run under review, run
-  `scripts/atry check <run-dir-or-id>` before writing the review. A
+  `atry check <run-dir-or-id>` before writing the review. A
   `MISMATCH` means the rollup `.md` was hand-edited outside the claim
   protocol and the per-task `.status`/report files are stale — call this out
   in the review rather than treating the rollup `.md` as ground truth.

@@ -170,10 +170,21 @@ as a **bundle** (`SKILL.md` + `references/`). Runtime is the `atry` CLI under
 git clone https://github.com/tranthethang/agent-relay.git
 cd agent-relay
 ./bin/install.sh
-./bin/verify.sh
-# ensure ~/.local/bin is on PATH, then:
+./bin/verify.sh   # also confirms `atry` is actually runnable from PATH, not just installed
 atry version
 ```
+
+`verify.sh` prints `[FAIL] atry is not on PATH` (and a fix line) if
+`~/.local/bin` isn't on your `PATH` yet. On macOS with zsh, that usually means
+adding it to `~/.zprofile` (login shells; a plain `~/.zshrc` edit will not
+reach an agent that starts a login shell):
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile
+```
+
+Bash users: the same line in `~/.bash_profile` (or `~/.bashrc`, depending on
+how your shell is invoked).
 
 ### Release install
 
@@ -201,8 +212,9 @@ Reinstall to refresh skill bundles and install `atry`:
 ./bin/install.sh
 ```
 
-Ensure `~/.local/bin` is on your PATH. Details:
-[`docs/installer.md`](docs/installer.md).
+Ensure `~/.local/bin` is on your PATH (see the zsh/bash profile note above --
+`./bin/verify.sh` now checks this for you and fails with a fix line if it's
+missing). Details: [`docs/installer.md`](docs/installer.md).
 
 ## Honest limits
 

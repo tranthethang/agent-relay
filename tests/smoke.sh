@@ -68,7 +68,28 @@ check_frontmatter "$HOME/.claude/skills" "claude"
 check_frontmatter "$HOME/.codex/skills" "codex"
 check_frontmatter "$HOME/.kiro/skills" "kiro"
 
+# verify now also checks that `atry` is actually runnable from PATH (not just
+# that files exist), so export the installed shim's directory before calling
+# it -- same as an agent's shell would need to.
+export PATH="$HOME/.local/bin:$PATH"
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
+
+# Without any atry on PATH, verify must fail and name the fix. Use a minimal
+# PATH rather than stripping only $HOME/.local/bin: the inherited PATH may
+# still contain a real ~/.local/bin (or a clone's scripts/) with another atry,
+# which would turn this into a version-mismatch WARN instead of the intended
+# "not on PATH" FAIL.
+NO_SHIM_PATH="/usr/bin:/bin"
+set +e
+NOSHIM_OUT="$(PATH="$NO_SHIM_PATH" "$VERIFY" 2>&1)"
+noshim_status=$?
+set -e
+if [[ $noshim_status -ne 0 ]] && echo "$NOSHIM_OUT" | grep -q "atry is not on PATH"; then
+  pass "verify fails with PATH hint when shim dir is missing from PATH"
+else
+  fail "verify fails with PATH hint when shim dir is missing from PATH"
+fi
+echo "$NOSHIM_OUT" | grep -q 'export PATH="$HOME/.local/bin:$PATH"' &&   pass "verify PATH-missing message includes the profile fix line" ||   fail "verify PATH-missing message includes the profile fix line"
 
 # Skill bundles include references/ only; runtime is ~/.agent-relay atry CLI
 [[ -f "$HOME/.cursor/skills/atry-implement/references/file-conventions.md" ]] && \
@@ -83,6 +104,21 @@ if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verif
   pass "atry PATH shim" || fail "atry PATH shim"
 out="$("$HOME/.agent-relay/bin/atry" version 2>/dev/null | head -1 || true)"
 [[ -n "$out" ]] && pass "atry version" || fail "atry version"
+
+# Shim itself must be runnable (resolve_lib() must follow the symlink, not just
+# cd -P the shim's own directory) — this is the exact bug the symlink fix
+# guards against: calling ~/.agent-relay/bin/atry directly always worked, the
+# shim at ~/.local/bin/atry did not.
+shim_out="$("$HOME/.local/bin/atry" version 2>&1 || true)"
+echo "$shim_out" | grep -q '^lib=' && pass "atry PATH shim runnable" || fail "atry PATH shim runnable"
+
+# A relative symlink chain to the shim must also resolve (covers both an
+# absolute-target symlink and a relative-target symlink hop).
+RELDIR="$T/atry-relsymlink"
+mkdir -p "$RELDIR"
+ln -sfn "../.local/bin/atry" "$RELDIR/atry"
+rel_out="$("$RELDIR/atry" version 2>&1 || true)"
+echo "$rel_out" | grep -q '^lib=' && pass "atry relative-symlink chain" || fail "atry relative-symlink chain"
 [[ -f "$HOME/.cursor/skills/atry-plan/SKILL.md" ]] && pass "atry-plan installed" || fail "atry-plan installed"
 [[ -f "$HOME/.cursor/skills/atry-brainstorm/SKILL.md" ]] && pass "atry-brainstorm installed" || fail "atry-brainstorm installed"
 

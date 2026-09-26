@@ -23,7 +23,8 @@ Usage:
 
 Exit 0: pushed.
 Exit 1: bad arguments, or .agent-relay/bank-status.md is missing/unreadable.
-Exit 2: bank not configured, not reachable, or backend has no driver here
+Exit 2: bank not configured, not reachable, backend has no driver here, or no
+        .agent-relay/ directory or git repository was found above <start-dir>
         (run bank-check.sh first; this is a soft "not pushed", not a bug).
 EOF
   exit 1
@@ -41,7 +42,10 @@ case "$RUN_REF" in
   *[!A-Za-z0-9._-]*|"") echo "Error: invalid run-id-or-slug '$RUN_REF'" >&2; exit 1 ;;
 esac
 
-AGENT_RELAY_DIR="$(find_agent_relay_dir "$START_DIR")"
+if ! AGENT_RELAY_DIR="$(find_agent_relay_dir "$START_DIR")"; then
+  echo "bank-push: skipped -- no .agent-relay/ directory or git repository found above $START_DIR" >&2
+  exit 2
+fi
 BANK_STATUS="$AGENT_RELAY_DIR/bank-status.md"
 
 [[ -f "$BANK_STATUS" ]] || { echo "bank-push: no $BANK_STATUS (run bank-check.sh first)" >&2; exit 1; }

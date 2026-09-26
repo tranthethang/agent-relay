@@ -102,6 +102,23 @@ You should **not** need to edit `install.sh` unless you introduce a new
 `FORMAT` (none is planned).
 
 
+## Allowing atry in your tool
+
+Every stage skill's first move is `atry version` (see `docs/file-conventions.md`,
+"atry preflight"), and later steps run `atry resolve`, `atry run-init`, `atry
+history`, `atry review`, and (in parallel mode) the `atry claim`/`update`/
+`release`/... verbs. If your tool asks you to allow, trust, or allowlist
+commands before an agent can run them, allow commands starting with `atry`
+(a prefix allowlist such as `Bash(atry:*)`, if your tool supports that shape)
+rather than allowing arbitrary shell. Skill text always calls the literal
+`atry ...` command (never `$ATRY` variables, an absolute path, or a `cd ... &&
+atry ...` chain) specifically so a prefix allowlist like this covers every
+call the skills make.
+
+Exact allowlist/config syntax differs per tool and changes over time; check
+your tool's own documentation for how it expresses "allow this command
+prefix" today rather than assuming the shape above matches exactly.
+
 ## Release-mode install
 
 Users may download `install.sh` + `SHA256SUMS` from a GitHub Release and run

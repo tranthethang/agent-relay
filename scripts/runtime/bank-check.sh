@@ -25,8 +25,9 @@ to the nearest .git, same as resolve-run.sh. Reads .agent-relay/bank.conf if
 present, probes the declared backend, and writes .agent-relay/bank-status.md.
 
 Exit 0: status written (bank.conf absent counts as "not configured", exit 0).
-Exit 1: .agent-relay/bank.conf exists but is malformed, or no .agent-relay/
-        directory could be found or created.
+Exit 1: .agent-relay/bank.conf exists but is malformed.
+Exit 2: no .agent-relay/ directory or git repository found above <start-dir>
+        (treated as "not configured", not a crash).
 EOF
   exit 1
 }
@@ -42,7 +43,10 @@ source "$SCRIPT_DIR/find-agent-relay-dir.sh"
 START_DIR="${1:-$PWD}"
 [[ -d "$START_DIR" ]] || { echo "Error: not a directory: $START_DIR" >&2; exit 1; }
 
-AGENT_RELAY_DIR="$(find_agent_relay_dir "$START_DIR")"
+if ! AGENT_RELAY_DIR="$(find_agent_relay_dir "$START_DIR")"; then
+  echo "bank-check: skipped -- no .agent-relay/ directory or git repository found above $START_DIR" >&2
+  exit 2
+fi
 mkdir -p "$AGENT_RELAY_DIR"
 BANK_CONF="$AGENT_RELAY_DIR/bank.conf"
 BANK_STATUS="$AGENT_RELAY_DIR/bank-status.md"
