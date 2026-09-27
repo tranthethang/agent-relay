@@ -9,7 +9,7 @@
 # a basic writability probe, does not verify data quality, and does not talk
 # to any network endpoint unless BANK_TYPE requires it (only obsidian-vault
 # is implemented in this MVP; other declared types are recorded as
-# "not implemented").
+# "not implemented"). Never creates BANK_PATH or any subdirectory under it.
 #
 # Bash 3.2+ compatible, POSIX tools only. bank.conf is parsed line-by-line and
 # never sourced/eval'd.
@@ -56,21 +56,97 @@ BANK_STATUS="$AGENT_RELAY_DIR/bank-status.md"
 
 now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
+# push_warnings: belongs to the last `atry bank push`; a check keeps it as-is
+# and only rewrites check_warnings:.
+PREV_PUSH_WARNINGS=""
+if [[ -f "$BANK_STATUS" ]]; then
+  PREV_PUSH_WARNINGS="$(sed -n 's/^push_warnings: //p' "$BANK_STATUS" | head -1)"
+fi
+
+# Strip one trailing slash from a path (leave "/" alone).
+normalize_bank_path() {
+  local p="$1"
+  if [[ "$p" == */ && "$p" != "/" ]]; then
+    p="${p%/}"
+  fi
+  printf '%s' "$p"
+}
+
+# True when value matches the run-slug regex and length 3–48.
+valid_project_slug() {
+  local s="$1"
+  local len=${#s}
+  if [[ "$len" -lt 3 || "$len" -gt 48 ]]; then
+    return 1
+  fi
+  [[ "$s" =~ ^[a-z]+(-[a-z]+)*$ ]]
+}
+
+# Extract flat frontmatter `project:` from the first --- … --- block.
+note_project_field() {
+  local f="$1"
+  awk '
+    /^---[[:space:]]*$/ {
+      c++
+      if (c >= 2) exit
+      next
+    }
+    c == 1 && /^project:[[:space:]]*/ {
+      sub(/^project:[[:space:]]*/, "")
+      sub(/[[:space:]]+$/, "")
+      print
+      exit
+    }
+  ' "$f" 2>/dev/null || true
+}
+
+# Advisory: notes in BANK_PATH whose frontmatter project differs from expected.
+# Prints warning tokens (space-separated) to stdout; also echoes to stderr.
+collect_foreign_project_warnings() {
+  local bank_path="$1"
+  local expected="$2"
+  local warnings="" note proj base
+  [[ -n "$expected" && -d "$bank_path" ]] || {
+    printf '%s' ""
+    return 0
+  }
+  for note in "$bank_path"/*.md; do
+    [[ -f "$note" ]] || continue
+    proj="$(note_project_field "$note")"
+    [[ -n "$proj" ]] || continue
+    if [[ "$proj" != "$expected" ]]; then
+      base="$(basename "$note")"
+      echo "bank-check: warning: foreign project '$proj' in $base (expected '$expected')" >&2
+      if [[ -z "$warnings" ]]; then
+        warnings="foreign-project:$base"
+      else
+        warnings="$warnings foreign-project:$base"
+      fi
+    fi
+  done
+  printf '%s' "$warnings"
+}
+
 write_status() {
-  local configured="$1" bank_type="$2" bank_path="$3" bank_endpoint="$4" reachable="$5" detail="$6"
+  local configured="$1" bank_type="$2" bank_path="$3" bank_endpoint="$4"
+  local reachable="$5" detail="$6" project_name="$7" project_source="$8" warnings="$9"
   {
     printf 'configured: %s\n' "$configured"
     printf 'bank_type: %s\n' "$bank_type"
     printf 'bank_path: %s\n' "$bank_path"
     printf 'bank_endpoint: %s\n' "$bank_endpoint"
+    printf 'project_name: %s\n' "$project_name"
+    printf 'project_source: %s\n' "$project_source"
     printf 'reachable: %s\n' "$reachable"
     printf 'checked_at: %s\n' "$(now_iso)"
     printf 'detail: %s\n' "$detail"
+    printf 'check_warnings: %s\n' "$warnings"
+    printf 'push_warnings: %s\n' "$PREV_PUSH_WARNINGS"
   } >"$BANK_STATUS"
 }
 
 if [[ ! -f "$BANK_CONF" ]]; then
-  write_status "false" "none" "" "" "false" "no bank.conf found at $BANK_CONF"
+  write_status "false" "none" "" "" "false" "no bank.conf found at $BANK_CONF" "" "none" ""
   echo "bank-check: not configured (no bank.conf) -> $BANK_STATUS"
   exit 0
 fi
@@ -83,6 +159,7 @@ fi
 BANK_TYPE=""
 BANK_PATH=""
 BANK_ENDPOINT=""
+BANK_PROJECT_NAME=""
 lineno=0
 malformed=0
 malformed_reason=""
@@ -125,6 +202,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     BANK_TYPE) BANK_TYPE="$val" ;;
     BANK_PATH) BANK_PATH="$val" ;;
     BANK_ENDPOINT) BANK_ENDPOINT="$val" ;;
+    BANK_PROJECT_NAME) BANK_PROJECT_NAME="$val" ;;
     *) ;;
     esac
   else
@@ -141,14 +219,38 @@ if [[ "$malformed" -eq 1 ]]; then
   # Refusing to parse (exit 1, for any caller/script that checks the exit
   # code) is orthogonal to recording the truth (bank-status.md must always
   # reflect the most recent check, successful or not).
-  write_status "true" "" "" "" "false" "bank.conf malformed ($malformed_reason) -- fix bank.conf and re-run bank-check.sh"
+  write_status "true" "" "" "" "false" "bank.conf malformed ($malformed_reason) -- fix bank.conf and re-run bank-check.sh" "" "none" ""
   echo "Refusing to parse bank.conf further. Fix the offending line above." >&2
   echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
   exit 1
 fi
 
+# Normalize BANK_PATH (strip one trailing slash) before any probe or status write.
+if [[ -n "$BANK_PATH" ]]; then
+  BANK_PATH="$(normalize_bank_path "$BANK_PATH")"
+fi
+
+# Optional BANK_PROJECT_NAME: empty/unset is fine; non-empty must be a slug.
+PROJECT_NAME=""
+PROJECT_SOURCE="none"
+if [[ -n "$BANK_PROJECT_NAME" ]]; then
+  if ! valid_project_slug "$BANK_PROJECT_NAME"; then
+    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
+      "bank.conf malformed (BANK_PROJECT_NAME '$BANK_PROJECT_NAME' is not a valid slug ^[a-z]+(-[a-z]+)*\$, length 3-48) -- fix bank.conf and re-run bank-check.sh" \
+      "" "none" ""
+    echo "Error: BANK_PROJECT_NAME '$BANK_PROJECT_NAME' is not a valid project slug (^[a-z]+(-[a-z]+)*\$, length 3-48)" >&2
+    echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
+    exit 1
+  fi
+  PROJECT_NAME="$BANK_PROJECT_NAME"
+  PROJECT_SOURCE="config"
+fi
+
+WARNINGS=""
+
 if [[ -z "$BANK_TYPE" ]]; then
-  write_status "true" "" "$BANK_PATH" "$BANK_ENDPOINT" "false" "bank.conf has no BANK_TYPE"
+  write_status "true" "" "$BANK_PATH" "$BANK_ENDPOINT" "false" "bank.conf has no BANK_TYPE" \
+    "$PROJECT_NAME" "$PROJECT_SOURCE" ""
   echo "bank-check: bank.conf present but BANK_TYPE is missing -> $BANK_STATUS"
   exit 0
 fi
@@ -156,25 +258,32 @@ fi
 case "$BANK_TYPE" in
 obsidian-vault)
   if [[ -z "$BANK_PATH" ]]; then
-    write_status "true" "$BANK_TYPE" "" "$BANK_ENDPOINT" "false" "BANK_PATH not set for obsidian-vault"
+    write_status "true" "$BANK_TYPE" "" "$BANK_ENDPOINT" "false" "BANK_PATH not set for obsidian-vault" \
+      "$PROJECT_NAME" "$PROJECT_SOURCE" ""
   elif [[ ! -d "$BANK_PATH" ]]; then
-    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path does not exist: $BANK_PATH"
+    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path does not exist: $BANK_PATH" \
+      "$PROJECT_NAME" "$PROJECT_SOURCE" ""
   # Caveat: [[ -w "$BANK_PATH" ]] tests writability via file permissions, but
   # when running as root (e.g., in some CI or container setups), it may report
   # true even for read-only filesystems or restricted mounts. This is a known
   # limitation of the reachability probe.
   elif [[ ! -w "$BANK_PATH" ]]; then
-    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path exists but is not writable: $BANK_PATH"
+    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path exists but is not writable: $BANK_PATH" \
+      "$PROJECT_NAME" "$PROJECT_SOURCE" ""
   else
-    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "true" "vault directory exists and is writable"
+    WARNINGS="$(collect_foreign_project_warnings "$BANK_PATH" "$PROJECT_NAME")"
+    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "true" "vault directory exists and is writable" \
+      "$PROJECT_NAME" "$PROJECT_SOURCE" "$WARNINGS"
   fi
   ;;
-lightrag-http | agentmemory-cli)
+lightrag-http)
   write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
-    "backend '$BANK_TYPE' is declared but has no driver in this MVP (only obsidian-vault is implemented); see docs/bank.md"
+    "backend '$BANK_TYPE' is declared but has no driver in this MVP (only obsidian-vault is implemented); see docs/bank.md" \
+    "$PROJECT_NAME" "$PROJECT_SOURCE" ""
   ;;
 *)
-  write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "unknown BANK_TYPE '$BANK_TYPE'"
+  write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "unknown BANK_TYPE '$BANK_TYPE'" \
+    "$PROJECT_NAME" "$PROJECT_SOURCE" ""
   ;;
 esac
 

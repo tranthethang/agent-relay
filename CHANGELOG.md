@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Knowledge-bank note schema and copy-and-fill templates under
+  `skills/atry-distill/references/` (`note-schema.md`, `note-*-template.md`):
+  six typed notes (`run`, `decision`, `convention`, `pitfall`, `open-item`,
+  `process`) with YAML frontmatter for flat Obsidian folders.
+- `atry bank set-status <start-dir> <filename> <status> [--by <filename>]` —
+  edits only lifecycle fields on a note already in `BANK_PATH`, storing `--by`
+  as a quoted wikilink and keeping the file's permissions.
+- Optional `BANK_PROJECT_NAME` in `bank.conf` (slug validated by
+  `atry bank check`); `bank-status.md` gains `project_name:`,
+  `project_source:`, `check_warnings:` (written only by `atry bank check`), and
+  `push_warnings:` (written only by `atry bank push`), so neither command
+  erases the other's advisory warnings.
+
+### Changed
+
+- **Breaking (no migrate):** `atry bank push` is now
+  `atry bank push <start-dir> <notes-dir>`. It validates every note, copies
+  flat into `BANK_PATH` (no `agent-relay/` subfolder, no injected title), and
+  never creates directories. The old
+  `<start-dir> <run-id-or-slug> <title> <body>` interface is removed.
+  Notes whose frontmatter does not open with `---` on line 1 are refused.
+- `atry bank check` strips a trailing `/` from `BANK_PATH`, drops the reserved
+  `agentmemory-cli` type (`lightrag-http` remains), and emits advisory
+  foreign-`project` warnings. `atry bank push` emits orphan + foreign-project
+  warnings the same way.
+- Docs: `docs/bank.md`, README bank section, and Bases/Dataview examples.
+
 ### Fixed
 
 - `~/.local/bin/atry` (the installed PATH shim) failed with `Error: cannot

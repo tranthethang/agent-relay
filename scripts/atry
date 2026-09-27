@@ -17,7 +17,8 @@ Usage:
   atry [--session <tag>] [--allow-skipped-deps] claim|steal|update|release|list|rollup|check|report-write|report-list|report-rollup ...
   atry review upsert <file> <"Self-Review"|"Cross-Review"> <YYYY-MM-DD> <body-file|->
   atry bank check [<start-dir>]
-  atry bank push <start-dir> <run-id-or-slug> <title> <body-file-or-->
+  atry bank push <start-dir> <notes-dir>
+  atry bank set-status <start-dir> <filename> <status> [--by <filename>]
 
 Task helpers map 1:1 to scripts/runtime/task-claim.sh subcommands, flattened:
   atry list <id>
@@ -172,8 +173,9 @@ bank)
   case "$sub" in
   check) run_helper bank-check.sh "$@" ;;
   push) run_helper bank-push.sh "$@" ;;
+  set-status) run_helper bank-set-status.sh "$@" ;;
   *)
-    echo "Error: unknown bank subcommand '$sub' (check|push)" >&2
+    echo "Error: unknown bank subcommand '$sub' (check|push|set-status)" >&2
     exit 1
     ;;
   esac

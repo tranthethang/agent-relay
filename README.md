@@ -74,7 +74,8 @@ Maintainer docs (architecture, installer, tests, release, …):
 | 2     | [`skills/atry-implement/`](skills/atry-implement/)       | Implement that plan; write `implement-plan` / `implement-report`                                                                    |
 | 3     | [`skills/atry-self-review/`](skills/atry-self-review/)   | Review the diff; upsert a dated `Self-Review` section                                                                               |
 | 4     | [`skills/atry-cross-review/`](skills/atry-cross-review/) | Upsert a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that.                |
-| 5     | [`skills/atry-distill/`](skills/atry-distill/)           | Write `distillation.md`: lessons from the finished run; optionally push the full distillation note to a configured knowledge bank   |
+| 5     | [`skills/atry-distill/`](skills/atry-distill/)           | Write `distillation.md`: lessons from the finished run; optionally push typed notes to a configured knowledge bank                  |
+
 
 Names, run directory layout, and id resolution:
 [`docs/file-conventions.md`](docs/file-conventions.md) (also shipped as
@@ -117,11 +118,14 @@ live under `scripts/maint/`.
 
 ## Knowledge bank (optional)
 
-`atry-distill` (stage 5) can push the full distillation note to an external
-knowledge bank after a run finishes — today, a plain folder on disk such as an
-Obsidian vault. Opt in per repo with `.agent-relay/bank.conf`; nothing reads
-the bank back into the other stages yet. Format, trust boundaries, and
-how to add another backend: [`docs/bank.md`](docs/bank.md).
+`atry-distill` (stage 5) can push typed markdown notes into an external flat
+folder after a run finishes — today, a plain directory such as an Obsidian
+vault folder. Opt in per repo with `.agent-relay/bank.conf`
+(`BANK_TYPE`, `BANK_PATH`, optional `BANK_PROJECT_NAME`). Helpers:
+`atry bank check`, `atry bank push <start-dir> <notes-dir>`, and
+`atry bank set-status`. Nothing reads the bank back into the other stages
+yet. Schema, trust boundaries, and Obsidian query examples:
+[`docs/bank.md`](docs/bank.md).
 
 ## Parallel helpers
 
