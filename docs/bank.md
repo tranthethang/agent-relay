@@ -1,8 +1,8 @@
 # Knowledge bank (optional)
 
 An **opt-in** connection from one target repo to an external flat folder of
-typed markdown notes. After a run, `atry-distill` (next run will switch fully
-to atomic notes) prepares note files and `atry bank push` copies them into
+typed markdown notes. After a run, `atry-distill` writes notes under
+`$RUN_DIR/distill/` and `atry bank push` copies that directory flat into
 `BANK_PATH`. This is project-level configuration — one bank per repo, declared
 once at `.agent-relay/bank.conf` — not per-run.
 
@@ -20,8 +20,9 @@ and the `note-*-template.md` files beside it.
 - Not RAG, not embeddings, not search. It writes plain markdown notes; what
   you do with them in your bank (Bases, Dataview, embed, retrieve) is up to
   your own tooling.
-- Not enrichment of plan / implement / review in this MVP. Nothing here
-  reads the bank back into a prompt.
+- Not enrichment from the bank into plan / implement / review. `atry-plan`
+  may skim local `$RUN_DIR/distill/` notes from prior runs; nothing reads
+  `BANK_PATH` back into a prompt.
 - Not a guarantee of push success beyond a basic writability check.
   `reachable: true` means "the declared path exists and is writable" (for
   `obsidian-vault`), not "your notes app indexed the file."

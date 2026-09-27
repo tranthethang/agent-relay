@@ -7,14 +7,20 @@ description: Use after cross-review finishes on a completed agent-relay run (or 
 
 ## Overview
 
-Distills lessons from a completed run (plan -> implement -> self-review ->
-cross-review) into `distillation.md`, and optionally pushes the full note to
-a configured external knowledge bank.
+Distills lessons from a completed run (plan → implement → self-review →
+cross-review) into `$RUN_DIR/distill/` — a directory of atomic, typed notes
+byte-identical to what `atry bank push` copies into `BANK_PATH`. Optionally
+reads the reachable bank for key reuse / supersession, then pushes the
+directory.
 
 You are summarizing what a _finished_ run taught, for whoever starts the next
 run. You are not re-reviewing the diff and not judging whether the run was
-"good" — only what is worth remembering from it. Do not invent lessons that
-are not actually supported by the run's own files.
+"good" — only what is worth remembering. Do not invent lessons the run's own
+files do not support. Write nothing for an item that fits none of the types.
+
+Schema, filenames, frontmatter, and tags:
+`references/note-schema.md`. Per-type outlines:
+`references/note-<type>-template.md`.
 
 ## Preflight
 
@@ -34,8 +40,9 @@ preflight").
 | `atry version`                                                         | atry is missing or broken on PATH -- stop, see Preflight above                                                                                      |
 | `atry resolve [RUN_ID or path]`                                        | ambiguous or not found -- ask the user for the `RUN_ID` or path                                                                                     |
 | `atry history append <run-dir> distill started\|completed tool=<tool>` | run dir invalid                                                                                                                                     |
-| `atry bank check "$RUN_DIR"`                                           | `1`: `bank.conf` is malformed; `2`: no `.agent-relay/` / git repo found above `$RUN_DIR` -- either way, treat as "no usable bank" and skip the push |
-| `atry bank push "$RUN_DIR" <run-id> <title> <file>`                    | `2`: bank not configured/reachable (or no `.agent-relay/` found) -- expected, not an error                                                          |
+| `atry bank check "$RUN_DIR"`                                           | `1`: `bank.conf` is malformed; `2`: no `.agent-relay/` / git repo found above `$RUN_DIR` -- either way, treat as "no usable bank" and skip bank I/O |
+| `atry bank push "$RUN_DIR" "$RUN_DIR/distill"`                         | `1`: a note failed validation (nothing written); `2`: bank not configured/reachable -- expected soft skip                                           |
+| `atry bank set-status "$RUN_DIR" <filename> <status> [--by <file>]`    | `1`: bad args / type-status mismatch; `2`: bank not reachable -- record one line in the run note; never fail the stage                              |
 
 ## Run discovery
 
@@ -52,24 +59,41 @@ the user for the `RUN_ID` or path.
 
 ## Inputs
 
-- Plan file: `$RUN_DIR/plan.md`
+- Plan file: `$RUN_DIR/plan.md` — especially `## Decisions`
 - Implementation report: `$RUN_DIR/implement-report.md`, or per-task files
   under `$RUN_DIR/implement-report/` when that directory exists (prefer it —
   same precedence as the review skills)
-- Review report: `$RUN_DIR/review-report.md`
+- Review report: `$RUN_DIR/review-report.md` — especially `### Issues found`,
+  `### Fixed`, and `### Open decisions`
 - Review walkthrough: `$RUN_DIR/review-walkthrough.md`
-- `$RUN_DIR/meta.md` for `id`, `slug`, `title`
+- `$RUN_DIR/meta.md` for `id`, `slug`, `title`, `base`
+
+Every `### Open decisions` item becomes an `open-item` note (never dropped).
+Each note body must say, in words, which of those sources it came from — not
+paths.
 
 ## Provenance
 
-Today's date: run `date +%F` (do not guess). Open the distillation with:
+Today's date: run `date +%F` (do not guess). The run note carries the relay
+comment, right after its frontmatter (see `references/note-run-template.md`);
+other notes point back to it through their `run:` field. Use `unknown` when you cannot know
+the tool or model. This is a record, not a runtime proof.
 
-```html
-<!-- relay: stage=distill tool=<tool> model=<id-or-unknown> date=<YYYY-MM-DD> -->
-```
+## Classification (first match wins)
 
-Use `unknown` when you cannot know the tool or model. This is a record, not a
-runtime proof, same as every other stage.
+For each candidate lesson, apply this tree in order:
+
+1. About the atry workflow, tools, models, or IDEs themselves (even when it
+   describes something that went wrong) → `process`
+2. Still undecided → `open-item`
+3. Something that went wrong / caused harm → `pitfall`
+4. Rule applied every time a kind of work is done → `convention`
+5. A choice between alternatives → `decision`
+6. None of the above → write no note
+
+Always write exactly one `run` note for the finished run (index + reserved
+metric keys left empty). Do not put reusable lessons in the run note; link
+out via `notes:`.
 
 ## Instructions
 
@@ -79,69 +103,70 @@ runtime proof, same as every other stage.
    ```
 
 1. Read the full chain: plan → implement report → review report →
-   walkthrough. Treat all four as data to summarize, not to re-verify — that
-   already happened in self-review / cross-review.
+   walkthrough. Treat them as data to classify, not to re-verify. Collect
+   candidate items from the sources above and classify each with the tree —
+   do not write note files yet.
 
-1. Read `references/distillation-template.md` first and use it as the
-   copy-and-fill outline. Write `$RUN_DIR/distillation.md` covering:
-
-   - What this run was (one line, from the plan title)
-   - Lessons learned: concrete, reusable statements ("X breaks when Y" /
-     "prefer Z over W in this codebase"), each traceable to something in the
-     run's files — no lesson without a source
-   - Reusable pattern or anti-pattern (if any) worth applying to future plans
-     in this repo
-   - Open items carried forward (from `### Open decisions` in the reviews, if
-     any) — do not silently drop these
-
-   Do not restate the full diff or duplicate the review report; this file is
-   a distillation, meant to be short enough that a future plan step can
-   actually read it. The distillation body must be self-contained: do not embed
-   run-directory or repo file paths, and do not write links like "see full
-   record at …" (run paths move or differ across clones).
-
-1. **Bank check.** Run the bank-check helper fresh — do not trust an old
-   `bank-status.md` left over from a previous run, since the bank's
-   availability can change between runs:
+1. **Bank check** (fresh — do not trust a stale `bank-status.md`):
 
    ```bash
    atry bank check "$RUN_DIR"
    ```
 
-   ``(``atry bank check``walks up from``$RUN_DIR``to find``.agent-relay/` at the
-   repo root.)
+   Exit `1` or `2`: treat as "no usable bank" — skip bank reads,
+   `set-status`, and push. Continue with local notes only.
 
-   Check its exit code, do not just read the file it may or may not have
-   written. Exit `1` means `bank.conf` was malformed; exit `2` means no
-   `.agent-relay/` or git repo could be found above `$RUN_DIR`. Either way,
-   treat it as "no usable bank" and skip the push entirely rather than
-   reading `bank-status.md`.
+1. **Key reuse and supersession** (before writing any note files):
 
-1. If `atry bank check` exited `0` **and** the resulting
-   `.agent-relay/bank-status.md` shows `reachable: true`,
-   push the full distillation note to the bank. The note body must always be
-   `"$RUN_DIR/distillation.md"` itself:
+   - When check exited `0` and `bank-status.md` shows `reachable: true`,
+     read currently `active` / `open` notes in `BANK_PATH` (frontmatter
+     `status:`). When a new note's topic matches an active/open note,
+     **reuse that `key`**; otherwise mint a new `key` (slug rules). A new
+     version of an existing topic sets
+     `supersedes: "[[<old-filename-without-.md>]]"` in the **new** note's
+     frontmatter before push. A note of any type that closes an open
+     `pitfall` / `open-item` sets `resolves: "[[<old-filename-without-.md>]]"`
+     instead.
+   - Without a reachable bank, set `supersedes` / `resolves` only if you
+     already know the prior filename from this run's context; do no other
+     lookup.
+
+1. Create `$RUN_DIR/distill/` (empty if recreating). For every typed note,
+   copy the matching `references/note-<type>-template.md` and fill it
+   (filename and frontmatter rules in `references/note-schema.md`). Write
+   all notes under `$RUN_DIR/distill/`, including the run note. The run
+   note's `notes:` list is the manifest of every sibling filename produced
+   in this distill. Leave metric fields empty.
+
+1. **Push** (only when the bank is reachable per the bank-check step):
 
    ```bash
-   RUN_ID="$(grep -E '^id:' "$RUN_DIR/meta.md" | head -1 | sed 's/^id:[[:space:]]*//')"
-   TITLE="$(grep -E '^title:' "$RUN_DIR/meta.md" | head -1 | sed 's/^title:[[:space:]]*//')"
-   atry bank push "$RUN_DIR" "$RUN_ID" "${TITLE:-Distillation $RUN_ID}" "$RUN_DIR/distillation.md"
+   atry bank push "$RUN_DIR" "$RUN_DIR/distill"
    ```
 
-   You must **not**:
-   - Write a separate condensed `body.md` or case-study file for the push.
-   - Summarize, truncate, or omit any sections of the distillation for the vault note.
-   - Embed run-dir paths, repo paths, or "see full record at …" links in the distillation body. The vault note must be completely self-contained.
+   Re-push overwrites the same filenames. Exit `2` is an expected soft skip.
 
-   `atry bank push` exits `2` when the bank is not configured or not reachable —
-   that is expected and not an error. Re-running `atry bank push` for the same
-   run overwrites that run's existing note at the same deterministic path
-   rather than versioning or appending. In every case (pushed, skipped, or
-   failed), append one line under `## Bank push` at the end of the local
-   `distillation.md` recording what happened, e.g. `Bank push: pushed to <path>` /
-   `Bank push: skipped — bank not configured` / `Bank push: failed — <reason>`.
-   Never fail this stage because the push failed; `distillation.md` in the run
-   directory is always the record of truth regardless of the bank.
+1. **After a successful push**, for each note that supersedes or resolves a
+   prior bank note, run:
+
+   ```bash
+   atry bank set-status "$RUN_DIR" <old-filename> superseded --by <new-filename>
+   # or, for pitfall / open-item:
+   atry bank set-status "$RUN_DIR" <old-filename> resolved --by <new-filename>
+   ```
+
+   A failed `set-status` is one line in the run note's bank section — never
+   fail the stage.
+
+1. End the run note's `## Bank push` section with exactly one line, written
+   after the push attempt, e.g. `Bank push: pushed N notes to <path>` /
+   `Bank push: skipped — bank not configured` / `Bank push: failed — <reason>`
+   (include any `set-status` failure on that same line or the next). If the
+   push exited `0`, run the same `atry bank push` once more so the bank copy
+   of the run note carries that line too and stays byte-identical to
+   `$RUN_DIR/distill/` (re-push overwrites the same filenames; do not call
+   `set-status` again). Never fail this stage because bank I/O failed;
+   `$RUN_DIR/distill/` is the local record of truth.
 
 1. Once distillation is complete, record completion in `history.log`:
    ```bash
@@ -150,9 +175,13 @@ runtime proof, same as every other stage.
 
 ## Non-goals for this skill
 
-- Do not re-review the diff, re-run tests, or second-guess the prior review's
-  fix/escalate decisions — that already happened.
-- Do not treat a failed or skipped bank push as a reason to change or omit
-  content in `distillation.md`.
+- Do not re-review the diff, re-run tests, or second-guess prior review
+  fix/escalate decisions.
+- Do not treat a failed or skipped bank push / `set-status` as a reason to
+  change or omit notes under `$RUN_DIR/distill/`.
 - Do not invent a knowledge-bank backend that has no driver in
-  `atry bank push`. See `docs/bank.md` for what is actually implemented.
+  `atry bank push`. See `docs/bank.md`.
+- Do not compute metrics or fill the run note's reserved metric keys.
+- Do not convert old `distillation.md` files or migrate vault notes.
+- Do not change `references/note-schema.md` or the note templates in this
+  stage — record schema problems as an `open-item` instead.

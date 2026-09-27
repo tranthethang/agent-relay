@@ -58,9 +58,9 @@ call agents, pick models, or watch project `.agent-relay/` run dirs.
    escalate tradeoffs per `reviewer-conduct.md`
 4. **cross-review** → upsert Cross-Review with inverted-question framing
    (skill asks for a different tool; nothing enforces it)
-5. **distill** → summarize reusable patterns/lessons into `distillation.md`;
-   optionally push the full distillation note to an external knowledge bank
-   (e.g., Obsidian vault) via `atry bank push`
+5. **distill** → write atomic typed notes under `$RUN_DIR/distill/`;
+   optionally push that directory to an external knowledge bank
+   (e.g., Obsidian vault) via `atry bank push <start-dir> <notes-dir>`
 
 Nothing in this repo schedules that order. Skipping a stage is always possible.
 

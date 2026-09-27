@@ -5,6 +5,7 @@ key: <topic-slug>
 status: active
 supersedes:
 superseded_by:
+resolves:
 derived_from:
 run: "[[{YMD}-{RUN_ID}-{RUN_SLUG}]]"
 date: YYYY-MM-DD

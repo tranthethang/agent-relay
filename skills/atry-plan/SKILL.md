@@ -70,14 +70,17 @@ Use the `id` read back from `meta.md` (not the pre-init `date +%s` value) when w
 ## Prior lessons (optional)
 
 Before writing `## Goal`, check whether this repo already has distilled
-lessons from earlier runs: look for the most recent
-`.agent-relay/*/distillation.md` (sort by the `{YMD}-{RUN_ID}` prefix in the
-directory name; newest first). If one exists and its lessons are relevant to
-this plan's goal, skim it and let it inform `## Constraints` or `## Non-goals`
--- do not copy it wholesale, and do not block on it if none exists or none
-apply. This is the only point where a prior run's `distillation.md` feeds
-back into a later stage; nothing in this repo reads the knowledge bank back
-automatically.
+notes from earlier runs: look under `.agent-relay/*/distill/` (sort run
+directories by the `{YMD}-{RUN_ID}` prefix; newest first). Read notes whose
+frontmatter `type` is `decision`, `convention`, `pitfall`, or `open-item` and
+whose `status` is `active` or `open`. Keep only the newest version per `key`,
+and skip any note that a newer note names in its `supersedes:` or
+`resolves:` field (local copies are snapshots; their `status` is never
+updated after distill).
+If any are relevant to this plan's goal, skim them and let them inform
+`## Constraints` or `## Non-goals` — do not copy wholesale, and do not block
+if none exist or none apply. Local run-dir notes only; nothing in this repo
+reads the knowledge bank back automatically.
 
 ## Provenance
 

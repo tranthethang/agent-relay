@@ -32,7 +32,7 @@ Each stage writes plain markdown into `your-repo/.agent-relay/{YMD}-{RUN_ID}-{RU
 | 2 · implement    | `implement-plan.md`, `implement-report.md`                                 |
 | 3 · self-review  | `review-report.md`, `review-walkthrough.md` (adds a `Self-Review` section) |
 | 4 · cross-review | same two files (adds a `Cross-Review` section)                             |
-| 5 · distill      | `distillation.md`                                                          |
+| 5 · distill      | `distill/` (atomic typed notes)                                            |
 
 > Not an orchestrator: nothing runs the stages for you, and nothing enforces them — an agent can skip a step.
 > Provenance lines record which tool and model a stage _says_ it used. That's a record, not proof.
@@ -74,7 +74,7 @@ Maintainer docs (architecture, installer, tests, release, …):
 | 2     | [`skills/atry-implement/`](skills/atry-implement/)       | Implement that plan; write `implement-plan` / `implement-report`                                                                    |
 | 3     | [`skills/atry-self-review/`](skills/atry-self-review/)   | Review the diff; upsert a dated `Self-Review` section                                                                               |
 | 4     | [`skills/atry-cross-review/`](skills/atry-cross-review/) | Upsert a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that.                |
-| 5     | [`skills/atry-distill/`](skills/atry-distill/)           | Write `distillation.md`: lessons from the finished run; optionally push typed notes to a configured knowledge bank                  |
+| 5     | [`skills/atry-distill/`](skills/atry-distill/)           | Write `$RUN_DIR/distill/` atomic typed notes from the finished run; optionally push that directory to a configured knowledge bank   |
 
 
 Names, run directory layout, and id resolution:

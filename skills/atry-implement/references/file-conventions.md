@@ -23,7 +23,7 @@ root after changing this file.
 | Review walkthrough      | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md`                                         | Same as the review report.                                                           |
 | Metadata                | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md`                                                       | `atry run-init` creates; stages update `stage:` and `status:`.                       |
 | History (optional)      | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log`                                                   | `atry history` / stages append events.                                               |
-| Distillation (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distillation.md`                                               | `atry-distill`, run after cross-review (or self-review if cross-review was skipped). |
+| Distill (optional)      | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distill/`                                                       | `atry-distill`, run after cross-review (or self-review if cross-review was skipped). |
 
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
 characters matching `^[a-z]+(-[a-z]+)*$`.

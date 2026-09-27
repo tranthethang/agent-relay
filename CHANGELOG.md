@@ -24,17 +24,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking (no migrate):** `atry-distill` writes `$RUN_DIR/distill/` (atomic
+  typed notes per `note-schema.md`) instead of a single `distillation.md`.
+  `references/distillation-template.md` is removed. `atry bank push` takes
+  that directory (`atry bank push <start-dir> <notes-dir>`). After a successful
+  push, distill may call `atry bank set-status` for supersession / resolution,
+  then re-pushes once so the bank copy of the run note matches the local one.
+  `process` is classified first, and `resolves` is allowed on every note type
+  except `run`.
 - **Breaking (no migrate):** `atry bank push` is now
   `atry bank push <start-dir> <notes-dir>`. It validates every note, copies
   flat into `BANK_PATH` (no `agent-relay/` subfolder, no injected title), and
   never creates directories. The old
   `<start-dir> <run-id-or-slug> <title> <body>` interface is removed.
   Notes whose frontmatter does not open with `---` on line 1 are refused.
+- `atry-plan` "Prior lessons" reads `active` / `open` notes under prior
+  `.agent-relay/*/distill/` directories (newest version per `key`, skipping
+  notes a newer note supersedes or resolves), not `distillation.md`.
 - `atry bank check` strips a trailing `/` from `BANK_PATH`, drops the reserved
   `agentmemory-cli` type (`lightrag-http` remains), and emits advisory
   foreign-`project` warnings. `atry bank push` emits orphan + foreign-project
   warnings the same way.
-- Docs: `docs/bank.md`, README bank section, and Bases/Dataview examples.
+- Docs: `docs/bank.md`, README, architecture, overview SVG, and file
+  conventions (`distill/` row).
 
 ### Fixed
 

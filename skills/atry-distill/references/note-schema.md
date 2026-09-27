@@ -87,7 +87,7 @@ Obsidian graph links versions together.
 | `status`        | all except `run`                 | allowed values depend on `type` (see table)                           |
 | `supersedes`    | decision / convention / process  | wikilink to the prior version, e.g. `"[[{YMD}-{RUN_ID}-{SLUG}]]"`      |
 | `superseded_by` | decision / convention / process  | wikilink; set by `atry bank set-status … superseded --by <filename>`  |
-| `resolves`      | pitfall / open-item              | wikilink to the note this one closes                                  |
+| `resolves`      | all except `run`                 | wikilink to the `pitfall` / `open-item` this note closes              |
 | `resolved_by`   | pitfall / open-item              | wikilink; set by `atry bank set-status … resolved --by <filename>`    |
 | `derived_from`  | convention only                  | optional wikilink to the source decision                              |
 | `run`           | all                              | wikilink to the run note, e.g. `[[{YMD}-{RUN_ID}-{RUN_SLUG}]]`        |

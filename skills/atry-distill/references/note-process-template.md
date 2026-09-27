@@ -5,6 +5,7 @@ key: <topic-slug>
 status: active
 supersedes:
 superseded_by:
+resolves:
 run: "[[{YMD}-{RUN_ID}-{RUN_SLUG}]]"
 date: YYYY-MM-DD
 base: <git-ref>
