@@ -4,6 +4,13 @@
 # resolved_by) on an existing note already in BANK_PATH. The run-dir copy
 # is never touched. See docs/bank.md and note-schema.md.
 #
+# Agentmemory: there is no confirmed REST mechanism to update a memory's
+# lifecycle status by note `key` (agentmemory @0.9.29: POST /agentmemory/evolve
+# requires memoryId + newContent; remember creates a new memory). This helper
+# does not invent one — it only edits the vault file. When
+# BANK_AGENTMEMORY_URL is configured, a one-line note is printed; the next
+# push of a new note version (with updated status / supersedes) is the signal.
+#
 # Bash 3.2+ compatible, POSIX tools only. Touches only the first
 # --- … --- frontmatter block.
 set -euo pipefail
@@ -126,9 +133,13 @@ CONFIGURED="$(read_field configured)"
 BANK_TYPE="$(read_field bank_type)"
 BANK_PATH="$(read_field bank_path)"
 REACHABLE="$(read_field reachable)"
+AM_URL="$(read_field agentmemory_url)"
 
 if [[ "$CONFIGURED" != "true" || "$REACHABLE" != "true" ]]; then
   echo "bank-set-status: skipped — bank not configured/reachable per $BANK_STATUS" >&2
+  if [[ -n "$AM_URL" ]]; then
+    echo "bank-set-status: note: agentmemory status-by-key is not supported (no REST update-by-key in agentmemory @0.9.29); vault sink must be reachable to edit a note file" >&2
+  fi
   exit 2
 fi
 
@@ -312,3 +323,6 @@ fi
 cat "$tmp" >"$NOTE_PATH"
 rm -f "$tmp"
 echo "bank-set-status: updated $NOTE_PATH (status=$NEW_STATUS${BY_KEY:+ $BY_KEY=$BY_LINK})"
+if [[ -n "$AM_URL" ]]; then
+  echo "bank-set-status: note: not forwarding to agentmemory (no status-by-key REST in agentmemory @0.9.29; evolve needs memoryId+newContent). Push a new note version to refresh memory content." >&2
+fi

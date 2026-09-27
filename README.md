@@ -109,6 +109,7 @@ atry task-init "$RUN_DIR"
 atry list "$RUN_DIR"
 atry claim "$RUN_DIR" T1 session-a
 atry review upsert "$RUN_DIR/review-report.md" Self-Review "$(date +%F)" body.md
+atry bank init --path /abs/vault/folder   # once per repo, optional
 atry bank check "$RUN_DIR"
 ```
 
@@ -117,13 +118,53 @@ live under `scripts/maint/`.
 
 ## Knowledge bank (optional)
 
-`atry-distill` (stage 5) can push typed markdown notes into an external flat
-folder after a run finishes — today, a plain directory such as an Obsidian
-vault folder. Opt in per repo with `.agent-relay/bank.conf`
-(`BANK_TYPE`, `BANK_PATH`, optional `BANK_PROJECT_NAME`). Helpers:
-`atry bank check`, `atry bank push <start-dir> <notes-dir>`, and
-`atry bank set-status`. Nothing reads the bank back into the other stages
-yet. Schema, trust boundaries, and Obsidian query examples:
+Off by default. When a repo has `.agent-relay/bank.conf`, `atry-distill`
+(stage 5) can copy the notes it wrote for a finished run into a folder you
+choose (for example a folder inside an Obsidian vault), and optionally send
+them to an [agentmemory](https://github.com/rohitg00/agentmemory) server over
+REST. Nothing runs in the background: the helpers below only run when a skill
+or you call them.
+
+Set it up in a target repo:
+
+1. Create the destination folder yourself. atry never creates it.
+2. Write the config (it will not overwrite an existing file):
+
+   ```bash
+   atry bank init --path /absolute/path/to/vault/folder --project my-project
+   ```
+
+   Or copy [`scripts/runtime/bank.conf.example`](scripts/runtime/bank.conf.example)
+   to `.agent-relay/bank.conf` and edit it. `bank init` without options writes
+   that template with every key commented out.
+3. Check it. `atry bank init` already runs this once; run it again after any
+   edit, and read `.agent-relay/bank-status.md`:
+
+   ```bash
+   atry bank check
+   ```
+
+Config keys (one `BANK_KEY=value` per line, no inline comments):
+
+| Key                    | Needed                | What it does                                                                        |
+| ---------------------- | --------------------- | ----------------------------------------------------------------------------------- |
+| `BANK_TYPE`            | for the folder sink   | `obsidian-vault` is the only backend with a driver                                  |
+| `BANK_PATH`            | for the folder sink   | Absolute path to an existing, writable folder; notes are written flat into it       |
+| `BANK_PROJECT_NAME`    | no                    | Slug (`a-z` and `-`, 3–48 chars) added to note frontmatter/tags and agentmemory     |
+| `BANK_AGENTMEMORY_URL` | no                    | `http(s)://host[:port]` of an agentmemory server; works with or without `BANK_TYPE` |
+| `BANK_ENDPOINT`        | no (reserved)         | Not used yet                                                                        |
+
+`AGENTMEMORY_SECRET` is an environment variable, not a config key: export it
+only if your agentmemory server requires it. Do not write it into
+`bank.conf`. Pushing to agentmemory also needs `python3`.
+
+Helpers: `atry bank init`, `atry bank check`,
+`atry bank push [--vault-only] <start-dir> <notes-dir>`, `atry bank set-status`.
+Skills may query agentmemory through MCP (`memory_smart_search` /
+`memory_recall`) when your tool provides those tools; the bash helpers do not
+call MCP. Limits worth knowing: agentmemory stores a new memory on every push
+(no dedupe), and `set-status` updates only the folder copy. Full reference,
+REST contract, trust boundaries and Obsidian query examples:
 [`docs/bank.md`](docs/bank.md).
 
 ## Parallel helpers

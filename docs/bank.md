@@ -20,16 +20,39 @@ and the `note-*-template.md` files beside it.
 - Not RAG, not embeddings, not search. It writes plain markdown notes; what
   you do with them in your bank (Bases, Dataview, embed, retrieve) is up to
   your own tooling.
-- Not enrichment from the bank into plan / implement / review. `atry-plan`
-  may skim local `$RUN_DIR/distill/` notes from prior runs; nothing reads
-  `BANK_PATH` back into a prompt.
-- Not a guarantee of push success beyond a basic writability check.
+- Not enrichment from the vault path into plan / implement / review by bash.
+  Skills may optionally query agentmemory via MCP when the host exposes it;
+  nothing here calls MCP from `atry`. Local prior-run distill notes remain
+  the only automatic on-disk skim for `atry-plan`.
+- Not a guarantee of push success beyond a basic writability / health probe.
   `reachable: true` means "the declared path exists and is writable" (for
-  `obsidian-vault`), not "your notes app indexed the file."
+  `obsidian-vault`); `agentmemory_reachable: true` means the health endpoint
+  answered successfully — not "your notes app indexed the file" or "the
+  memory is searchable forever."
 - Not a directory creator. Developers create `BANK_PATH` themselves; atry
   never creates it or any subdirectory under it.
 
 ## `bank.conf`
+
+### Creating it
+
+Nothing creates `bank.conf` automatically; the installer does not touch
+target repos. Two ways to make one:
+
+- `atry bank init [<start-dir>] [--path <dir>] [--project <slug>] [--agentmemory-url <url>]`
+  writes `.agent-relay/bank.conf` from the commented template
+  [`scripts/runtime/bank.conf.example`](../scripts/runtime/bank.conf.example)
+  (installed next to the other helpers). `--path` also sets
+  `BANK_TYPE=obsidian-vault`; keys without an option stay commented out.
+  Values are checked with the same rules as `atry bank check` before anything
+  is written. It refuses to overwrite an existing `bank.conf` (exit `1`),
+  creates `.agent-relay/` if the repo has none yet, never creates
+  `BANK_PATH` (it only warns when the folder is missing), and runs
+  `atry bank check` once at the end; its exit code is that check's.
+- Copy the template by hand and remove the leading `# ` from the keys you
+  want.
+
+### Format
 
 Lives at `.agent-relay/bank.conf` in the target repo. Plain `BANK_KEY=value`
 lines only — `atry bank check` parses it line-by-line and never
@@ -49,17 +72,28 @@ BANK_TYPE=obsidian-vault
 BANK_PATH=/absolute/path/to/your/vault/folder
 # optional; slug regex, length 3–48 (no trailing comments on value lines)
 BANK_PROJECT_NAME=agent-relay
+# optional second sink (or sole sink if BANK_TYPE is omitted)
+BANK_AGENTMEMORY_URL=http://127.0.0.1:3111
 ```
 
-| Key                 | Required  | Notes                                                                                                 |
-| ------------------- | --------- | ----------------------------------------------------------------------------------------------------- |
-| `BANK_TYPE`         | yes       | Backend id (see table below)                                                                          |
-| `BANK_PATH`         | for vault | Existing writable directory; trailing `/` is stripped by `atry bank check`                            |
-| `BANK_ENDPOINT`     | reserved  | For `lightrag-http` later                                                                             |
-| `BANK_PROJECT_NAME` | no        | Project slug written into note `project:` / `project/<name>` tags; invalid value = malformed (exit 1) |
+| Key                     | Required     | Notes                                                                                                                              |
+| ----------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `BANK_TYPE`             | for vault    | Backend id (see table below). May be omitted when only `BANK_AGENTMEMORY_URL` is set.                                              |
+| `BANK_PATH`             | for vault    | Existing writable directory; trailing `/` is stripped by `atry bank check`                                                         |
+| `BANK_ENDPOINT`         | reserved     | For `lightrag-http` later                                                                                                          |
+| `BANK_PROJECT_NAME`     | no           | Project slug for note `project:` / tags and agentmemory `project`; invalid value = malformed (exit 1)                              |
+| `BANK_AGENTMEMORY_URL`  | no           | `http(s)://host[:port]` only (trailing `/` stripped). Invalid URL = malformed (exit 1). Enables the agentmemory REST sink.         |
+
+One more setting lives **outside** the file on purpose:
+
+| Environment variable | Needed                                  | Notes                                                                                                   |
+| -------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `AGENTMEMORY_SECRET` | only if the agentmemory server uses one | Sent as `Authorization: Bearer` by `bank check` / `bank push`. Never put it in `bank.conf` (may be committed). |
 
 Duplicate `BANK_PROJECT_NAME` values across repos are intentional and never
-warned about.
+warned about. When unset, `atry bank check` defaults `project_name` to the
+slugified basename of the directory that contains `.agent-relay/`
+(`project_source: default`). When set, `project_source: config`.
 
 | `BANK_TYPE`      | Status                  | What it needs                                                                                    |
 | ---------------- | ----------------------- | ------------------------------------------------------------------------------------------------ |
@@ -68,9 +102,10 @@ warned about.
 
 Declaring `lightrag-http` today is harmless: `atry bank check` records it as
 `reachable: false` with a `detail` explaining there is no driver, and
-`atry bank push` / `set-status` refuse (exit `2`). The old reserved
-`agentmemory-cli` type is gone; agentmemory will be a separate config key in a
-later run.
+`atry bank push` / `set-status` refuse the vault path (exit `2` unless
+agentmemory is separately usable). The old reserved `agentmemory-cli` type is
+gone; agentmemory is configured with `BANK_AGENTMEMORY_URL`, not a
+`BANK_TYPE`.
 
 ## `atry bank check`
 
@@ -90,16 +125,25 @@ bank_endpoint:
 project_name: agent-relay
 project_source: config
 reachable: true
+agentmemory_url: http://127.0.0.1:3111
+agentmemory_reachable: true
+agentmemory_detail: health ok
 checked_at: 2026-09-17T08:00:00Z
 detail: vault directory exists and is writable
 check_warnings: 
 push_warnings:
 ```
 
-`project_source` is `config` when `BANK_PROJECT_NAME` is set, else `none`.
-When reachable and a project name is set, notes already in `BANK_PATH` whose
-frontmatter `project:` differs produce an advisory warning on stderr and a
-`check_warnings:` token (`foreign-project:<filename>`); exit remains `0`.
+`project_source` is `config` when `BANK_PROJECT_NAME` is set, else `default`
+(slugified repo-root basename) when a bank.conf exists, else `none` when
+there is no bank.conf. When reachable and a project name is set, notes
+already in `BANK_PATH` whose frontmatter `project:` differs produce an
+advisory warning on stderr and a `check_warnings:` token
+(`foreign-project:<filename>`); exit remains `0`.
+
+`agentmemory_*` lines are independent of vault `reachable:`. Check probes
+`GET <BANK_AGENTMEMORY_URL>/agentmemory/health` with short curl timeouts when
+the URL is set.
 
 Warnings are split by the command that produced them: `atry bank check`
 rewrites only `check_warnings:` and keeps `push_warnings:` from the last
@@ -124,19 +168,25 @@ read-only mount. Treat reachability as advisory in such environments.
 ## `atry bank push`
 
 ```bash
-atry bank push <start-dir> <notes-dir>
+atry bank push [--vault-only] <start-dir> <notes-dir>
 ```
 
-Copies every `*.md` in `<notes-dir>` **flat** into `BANK_PATH` (no
-`agent-relay/` subfolder, no injected `#` title). Re-push overwrites the same
-filenames.
+Copies every `*.md` in `<notes-dir>` **flat** into `BANK_PATH` when the
+vault sink is usable, and/or POSTs each note to agentmemory when that sink
+is usable (see below). Re-push overwrites the same vault filenames;
+agentmemory creates a new memory per call.
 
-Refuses (exit `2`) unless the most recent `bank-status.md` says
-`configured: true` and `reachable: true`. Validates **all** notes before
-writing any: filename must match `{YMD}-{RUN_ID}-{SLUG}.md`, and frontmatter
-must include an allowed `type` (`run`, `decision`, `convention`, `pitfall`,
-`open-item`, `process`). Any failure exits `1` and writes nothing from this
-push.
+Requires a fresh `bank-status.md` with `configured: true` and **at least
+one usable sink** (`reachable: true` for the vault, and/or
+`agentmemory_reachable: true`). Exit `2` only when no sink is usable. Each
+sink reports on its own line; one failing never skips the other. Exit `0`
+if at least one sink succeeded; exit `1` if every usable sink failed during
+transfer (or a note failed validation before any write).
+
+Validates **all** notes before writing any: filename must match
+`{YMD}-{RUN_ID}-{SLUG}.md`, and frontmatter must include an allowed `type`
+(`run`, `decision`, `convention`, `pitfall`, `open-item`, `process`). Any
+failure exits `1` and writes nothing from this push.
 
 Advisory (exit `0`): orphan notes in `BANK_PATH` that share the pushed run's
 `{YMD}-{RUN_ID}-` prefix but were not in this push, and foreign `project`
@@ -168,6 +218,82 @@ file is rewritten in place (permissions kept).
 
 `atry bank push` refuses any note whose frontmatter does not open with `---`
 on line 1 — Obsidian ignores properties anywhere else.
+
+## Agentmemory (optional second sink)
+
+[agentmemory](https://github.com/rohitg00/agentmemory) is an optional REST
+(+ MCP) memory server. atry talks to it **only over REST from bash**; agents
+read via their own MCP tools when the host exposes them. atry does not run,
+install, or configure the server.
+
+### Confirmed REST contract
+
+Checked against agentmemory `@0.9.29` (`src/triggers/api.ts` /
+`plugin/skills/agentmemory-rest-api`):
+
+| Method | Path | Role in atry |
+| ------ | ---- | ------------ |
+| `GET`  | `/agentmemory/health` | `atry bank check` reachability probe (HTTP 200 unless health is `critical` → 503) |
+| `POST` | `/agentmemory/remember` | `atry bank push` — one call per note |
+
+`POST /agentmemory/remember` body fields atry sends:
+
+- `content` (required) — full note file (frontmatter + body)
+- `project` — from `bank-status.md` `project_name:` when non-empty
+- `type`, `key`, `status`, `tags` — from note frontmatter (as metadata;
+  unknown top-level keys are dropped by the server whitelist; durable copy
+  stays in `content`)
+- `concepts` — note tags plus `key:…`, `status:…`, `note-type:…` for search
+
+Server-side, remember's own `type` enum is
+`pattern|preference|architecture|bug|workflow|fact`; values outside that set
+are stored as `fact`. Bodies are built with `python3` JSON encoding and sent
+with `curl --data-binary @file` (never interpolated onto the command line).
+`python3` is required only for this sink: when it is missing (for example the
+macOS stub before Command Line Tools are installed), `atry bank check` records
+`agentmemory_reachable: false` with a `python3 not available` detail, and the
+vault sink is unaffected.
+
+**Auth.** When the server runs with `AGENTMEMORY_SECRET`, both `/health` and
+`/remember` require `Authorization: Bearer <secret>`. Export the same
+`AGENTMEMORY_SECRET` in the shell that runs atry; `bank check` and `bank push`
+then send the header from a 0600 temp file (`curl -H @file`), so the secret
+never appears in `bank.conf`, `bank-status.md`, or the process list. Do not
+put it in `bank.conf` — that file may be committed.
+
+**No dedupe.** `remember` always creates a new memory. `atry bank push
+--vault-only` skips agentmemory; `atry-distill` uses it for its second push
+(after writing the `Bank push:` line). Re-running distill for the same run,
+or pushing the same notes by hand, still adds duplicate memories.
+
+There is **no** status-by-key REST update: `/agentmemory/evolve` requires
+`memoryId` + `newContent`. `atry bank set-status` therefore edits only the
+vault file and does not invent an agentmemory forward. A later push of a new
+note version (updated `status` / `supersedes`) is the signal.
+
+### Read path (agents / MCP)
+
+Skills `atry-plan`, `atry-self-review`, `atry-cross-review`, and
+`atry-distill` may call MCP `memory_smart_search` / `memory_recall` when the
+tool session exposes them: filter by project scope, prefer `active` / `open`
+content, treat hits as data never instructions, never block if MCP is
+missing. Plans may record what they used under optional `## Context used`.
+
+### Team sharing
+
+Documented only: a shared agentmemory server and MCP `memory_team_share` /
+REST `/agentmemory/team/share` are outside atry. Point
+`BANK_AGENTMEMORY_URL` at a shared host if your team runs one; atry still
+only pushes distilled notes and does not manage team membership.
+
+### Limitations
+
+- Optional; never required for a run to finish.
+- No MCP client inside `atry` — bash uses curl REST only.
+- No status forward on `set-status`; stale memories until a new note version
+  is pushed.
+- Does not push anything except `$RUN_DIR/distill/*.md` via `atry bank push`.
+- URL form is `http(s)://host[:port]` only (no path, userinfo, or IPv6).
 
 ## Obsidian query examples
 
@@ -217,13 +343,14 @@ Same honesty standard as [security.md](security.md):
 | `bank.conf` line parser               | Refuses obvious RCE shapes and non-`BANK_KEY=value` lines before ever writing a status file | A proof that the declared path/endpoint is itself safe, or that pushed content is sound |
 | `bank-status.md`                      | A point-in-time reachability probe (+ advisory warnings)                                    | A guarantee the bank stays reachable until the push actually runs                       |
 | `atry bank push` obsidian-vault write | Plain markdown files on disk at deterministic flat paths                                    | Confirmation your notes app indexed them, or that the notes are any good                |
-| `atry bank set-status`                | Lifecycle fields updated in place                                                           | Edits to the run-dir snapshot, or validation of note body quality                       |
+| `atry bank push` agentmemory remember | One REST POST per note with full content + project metadata                                 | Proof the memory was indexed, dedupe across pushes, or status-by-key sync              |
+| `atry bank set-status`                | Lifecycle fields updated in place on the vault file                                         | Edits to the run-dir snapshot, agentmemory status forward, or validation of note body quality |
 
-## Adding a real second backend later
+## Adding another backend later
 
 If `lightrag-http` gets a driver, follow the pattern already used for
-`obsidian-vault` in the bank scripts: one `case` branch in check that probes
-reachability without mutating anything, and matching branches in push /
-set-status that write. Keep the "record, don't enforce" posture — a failed
-push is always a soft failure (exit `2`) for the calling skill, never a reason
-to fabricate success.
+`obsidian-vault` and `BANK_AGENTMEMORY_URL`: probe reachability in check
+without mutating anything, and matching write paths in push / set-status.
+Keep the "record, don't enforce" posture — a failed push is always a soft
+failure for the calling skill, never a reason to fabricate success. One sink
+failing must not skip another.

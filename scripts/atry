@@ -16,8 +16,9 @@ Usage:
   atry task-init <id-or-path>
   atry [--session <tag>] [--allow-skipped-deps] claim|steal|update|release|list|rollup|check|report-write|report-list|report-rollup ...
   atry review upsert <file> <"Self-Review"|"Cross-Review"> <YYYY-MM-DD> <body-file|->
+  atry bank init [<start-dir>] [--path <dir>] [--project <slug>] [--agentmemory-url <url>]
   atry bank check [<start-dir>]
-  atry bank push <start-dir> <notes-dir>
+  atry bank push [--vault-only] <start-dir> <notes-dir>
   atry bank set-status <start-dir> <filename> <status> [--by <filename>]
   atry metrics <run-dir-or-id> [--write <run-note>]
 
@@ -172,11 +173,12 @@ bank)
   sub="$1"
   shift
   case "$sub" in
+  init) run_helper bank-init.sh "$@" ;;
   check) run_helper bank-check.sh "$@" ;;
   push) run_helper bank-push.sh "$@" ;;
   set-status) run_helper bank-set-status.sh "$@" ;;
   *)
-    echo "Error: unknown bank subcommand '$sub' (check|push|set-status)" >&2
+    echo "Error: unknown bank subcommand '$sub' (init|check|push|set-status)" >&2
     exit 1
     ;;
   esac

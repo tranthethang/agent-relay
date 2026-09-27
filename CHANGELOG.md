@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `atry bank init [<start-dir>] [--path <dir>] [--project <slug>] [--agentmemory-url <url>]`
+  writes `.agent-relay/bank.conf` from the commented template
+  `scripts/runtime/bank.conf.example` (installed with the helpers), validating
+  values first. It never overwrites an existing `bank.conf`, never creates
+  `BANK_PATH`, and runs `atry bank check` once at the end.
+- Docs: README knowledge-bank section now has setup steps and a key table;
+  `docs/bank.md` documents creating `bank.conf` and lists `AGENTMEMORY_SECRET`
+  as an environment variable (never a config key).
+- Optional agentmemory bank sink via `BANK_AGENTMEMORY_URL` in `bank.conf`
+  (`http(s)://host[:port]`). `atry bank check` probes
+  `GET /agentmemory/health`; `atry bank push` POSTs each distilled note to
+  `/agentmemory/remember` (full note + project/type/key/status/tags metadata).
+  Vault and agentmemory are independent sinks (agentmemory-only configs
+  allowed). Exit `2` only when no sink is usable. Confirmed against
+  agentmemory `@0.9.29`. Docs: `docs/bank.md`.
+  Bearer auth is sent when `AGENTMEMORY_SECRET` is set in the environment
+  (header via a temp file, never argv or `bank.conf`); a missing `python3`
+  marks the agentmemory sink unreachable. `atry bank push --vault-only` skips
+  agentmemory, and distill's second push uses it so notes are not duplicated.
+- Optional MCP enrichment steps in `atry-plan`, `atry-self-review`,
+  `atry-cross-review`, and `atry-distill` (`memory_smart_search` /
+  `memory_recall`); optional `## Context used` in the plan template.
 - `atry history append … implement started` now also records `head=<commit>`
   (read-only `git rev-parse HEAD`); `atry metrics` measures change size from it
   (`diff_base`) so chained plans sharing one `base:` are sized separately.
@@ -32,6 +54,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- When `BANK_PROJECT_NAME` is unset, `atry bank check` defaults `project_name`
+  to the slugified repo-root basename (`project_source: default`) instead of
+  leaving it empty (`none` remains only when there is no `bank.conf`).
+- `bank-status.md` adds `agentmemory_url:`, `agentmemory_reachable:`, and
+  `agentmemory_detail:` beside vault `reachable:`.
+- `atry bank set-status` does **not** forward lifecycle changes to agentmemory
+  (no status-by-key REST in agentmemory `@0.9.29`); it notes the limitation on
+  stderr when an agentmemory URL is configured.
 - **Breaking (no migrate):** `atry-distill` writes `$RUN_DIR/distill/` (atomic
   typed notes per `note-schema.md`) instead of a single `distillation.md`.
   `references/distillation-template.md` is removed. `atry bank push` takes

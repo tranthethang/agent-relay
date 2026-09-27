@@ -6,10 +6,10 @@
 # supported backend types.
 #
 # This checks reachability only. It does not verify write correctness beyond
-# a basic writability probe, does not verify data quality, and does not talk
-# to any network endpoint unless BANK_TYPE requires it (only obsidian-vault
-# is implemented in this MVP; other declared types are recorded as
-# "not implemented"). Never creates BANK_PATH or any subdirectory under it.
+# a basic writability probe, does not verify data quality. Network is used
+# only when BANK_AGENTMEMORY_URL is set (GET /agentmemory/health). Obsidian
+# remain a local path probe; lightrag-http stays "not implemented". Never
+# creates BANK_PATH or any subdirectory under it.
 #
 # Bash 3.2+ compatible, POSIX tools only. bank.conf is parsed line-by-line and
 # never sourced/eval'd.
@@ -82,6 +82,84 @@ valid_project_slug() {
   [[ "$s" =~ ^[a-z]+(-[a-z]+)*$ ]]
 }
 
+# Slugify a directory basename toward ^[a-z]+(-[a-z]+)*$, length 3–48.
+# Non-letters become hyphens; digits are dropped as separators. Prints the
+# slug on success; returns 1 when the result is not a valid slug.
+slugify_project_name() {
+  local s="$1"
+  s="$(printf '%s' "$s" | tr '[:upper:]' '[:lower:]')"
+  # Keep only a-z; everything else (digits, punctuation, spaces) → hyphen.
+  # -E + '-+' (not GNU-only '\+') so BSD sed on macOS collapses runs too.
+  s="$(printf '%s' "$s" | sed -E -e 's/[^a-z]/-/g' -e 's/-+/-/g' -e 's/^-//' -e 's/-$//')"
+  if valid_project_slug "$s"; then
+    printf '%s' "$s"
+    return 0
+  fi
+  return 1
+}
+
+# BANK_AGENTMEMORY_URL: http(s)://host[:port] only (optional trailing / stripped).
+# Returns 0 and prints the normalized URL, or 1 when malformed.
+normalize_agentmemory_url() {
+  local u="$1"
+  if [[ "$u" == */ && "$u" != "/" && "$u" != http:// && "$u" != https:// ]]; then
+    u="${u%/}"
+  fi
+  if [[ "$u" =~ ^https?://[A-Za-z0-9._-]+(:[0-9]{1,5})?$ ]]; then
+    printf '%s' "$u"
+    return 0
+  fi
+  return 1
+}
+
+
+# Optional bearer auth: when AGENTMEMORY_SECRET is set in the environment (the
+# same variable the agentmemory server reads), write the header to a 0600 temp
+# file and pass it with `-H @file` so the secret never appears in argv / ps.
+# Never read from bank.conf (that file may be committed).
+am_auth_header_file() {
+  local f
+  [[ -n "${AGENTMEMORY_SECRET:-}" ]] || return 1
+  f="$(mktemp "${TMPDIR:-/tmp}/ar-am-auth.XXXXXX")"
+  chmod 600 "$f"
+  printf 'Authorization: Bearer %s\n' "$AGENTMEMORY_SECRET" >"$f"
+  printf '%s' "$f"
+}
+
+# Probe GET <url>/agentmemory/health with short timeouts. Prints detail to
+# stdout; exit 0 = reachable (HTTP success), 1 = not. Also requires a working
+# python3, which bank push needs to JSON-encode remember bodies.
+probe_agentmemory_health() {
+  local base="$1"
+  local url="${base}/agentmemory/health"
+  local out rc hdr=""
+  if ! python3 -c 'import json' >/dev/null 2>&1; then
+    printf '%s' "python3 not available (required to push to agentmemory)"
+    return 1
+  fi
+  set +e
+  if hdr="$(am_auth_header_file)"; then
+    out="$(curl -fsS --connect-timeout 2 --max-time 5 -H @"$hdr" "$url" 2>&1)"
+    rc=$?
+    rm -f "$hdr"
+  else
+    out="$(curl -fsS --connect-timeout 2 --max-time 5 "$url" 2>&1)"
+    rc=$?
+  fi
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    printf '%s' "health ok"
+    return 0
+  fi
+  if [[ -n "$out" ]]; then
+    # One-line detail for bank-status.md (no newlines).
+    printf '%s' "$(printf '%s' "$out" | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+  else
+    printf '%s' "health probe failed (curl exit $rc)"
+  fi
+  return 1
+}
+
 # Extract flat frontmatter `project:` from the first --- … --- block.
 note_project_field() {
   local f="$1"
@@ -130,6 +208,7 @@ collect_foreign_project_warnings() {
 write_status() {
   local configured="$1" bank_type="$2" bank_path="$3" bank_endpoint="$4"
   local reachable="$5" detail="$6" project_name="$7" project_source="$8" warnings="$9"
+  local am_url="${10}" am_reachable="${11}" am_detail="${12}"
   {
     printf 'configured: %s\n' "$configured"
     printf 'bank_type: %s\n' "$bank_type"
@@ -138,6 +217,9 @@ write_status() {
     printf 'project_name: %s\n' "$project_name"
     printf 'project_source: %s\n' "$project_source"
     printf 'reachable: %s\n' "$reachable"
+    printf 'agentmemory_url: %s\n' "$am_url"
+    printf 'agentmemory_reachable: %s\n' "$am_reachable"
+    printf 'agentmemory_detail: %s\n' "$am_detail"
     printf 'checked_at: %s\n' "$(now_iso)"
     printf 'detail: %s\n' "$detail"
     printf 'check_warnings: %s\n' "$warnings"
@@ -146,7 +228,8 @@ write_status() {
 }
 
 if [[ ! -f "$BANK_CONF" ]]; then
-  write_status "false" "none" "" "" "false" "no bank.conf found at $BANK_CONF" "" "none" ""
+  write_status "false" "none" "" "" "false" "no bank.conf found at $BANK_CONF" "" "none" "" \
+    "" "false" "not configured"
   echo "bank-check: not configured (no bank.conf) -> $BANK_STATUS"
   exit 0
 fi
@@ -160,6 +243,7 @@ BANK_TYPE=""
 BANK_PATH=""
 BANK_ENDPOINT=""
 BANK_PROJECT_NAME=""
+BANK_AGENTMEMORY_URL=""
 lineno=0
 malformed=0
 malformed_reason=""
@@ -203,6 +287,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     BANK_PATH) BANK_PATH="$val" ;;
     BANK_ENDPOINT) BANK_ENDPOINT="$val" ;;
     BANK_PROJECT_NAME) BANK_PROJECT_NAME="$val" ;;
+    BANK_AGENTMEMORY_URL) BANK_AGENTMEMORY_URL="$val" ;;
     *) ;;
     esac
   else
@@ -219,7 +304,8 @@ if [[ "$malformed" -eq 1 ]]; then
   # Refusing to parse (exit 1, for any caller/script that checks the exit
   # code) is orthogonal to recording the truth (bank-status.md must always
   # reflect the most recent check, successful or not).
-  write_status "true" "" "" "" "false" "bank.conf malformed ($malformed_reason) -- fix bank.conf and re-run bank-check.sh" "" "none" ""
+  write_status "true" "" "" "" "false" "bank.conf malformed ($malformed_reason) -- fix bank.conf and re-run bank-check.sh" "" "none" "" \
+    "" "false" "not checked (malformed config)"
   echo "Refusing to parse bank.conf further. Fix the offending line above." >&2
   echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
   exit 1
@@ -230,27 +316,74 @@ if [[ -n "$BANK_PATH" ]]; then
   BANK_PATH="$(normalize_bank_path "$BANK_PATH")"
 fi
 
-# Optional BANK_PROJECT_NAME: empty/unset is fine; non-empty must be a slug.
+# Optional BANK_AGENTMEMORY_URL: empty is fine; non-empty must be http(s)://host[:port].
+AM_URL=""
+AM_REACHABLE="false"
+AM_DETAIL="not configured"
+if [[ -n "$BANK_AGENTMEMORY_URL" ]]; then
+  if ! AM_URL="$(normalize_agentmemory_url "$BANK_AGENTMEMORY_URL")"; then
+    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
+      "bank.conf malformed (BANK_AGENTMEMORY_URL '$BANK_AGENTMEMORY_URL' is not http(s)://host[:port]) -- fix bank.conf and re-run bank-check.sh" \
+      "" "none" "" "" "false" "not checked (malformed URL)"
+    echo "Error: BANK_AGENTMEMORY_URL '$BANK_AGENTMEMORY_URL' is not a valid agentmemory URL (expected http(s)://host[:port])" >&2
+    echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
+    exit 1
+  fi
+fi
+
+# Optional BANK_PROJECT_NAME: when set must be a slug; when unset, default to
+# the slugified repo-root directory name (project_source: config|default).
 PROJECT_NAME=""
 PROJECT_SOURCE="none"
 if [[ -n "$BANK_PROJECT_NAME" ]]; then
   if ! valid_project_slug "$BANK_PROJECT_NAME"; then
     write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
       "bank.conf malformed (BANK_PROJECT_NAME '$BANK_PROJECT_NAME' is not a valid slug ^[a-z]+(-[a-z]+)*\$, length 3-48) -- fix bank.conf and re-run bank-check.sh" \
-      "" "none" ""
+      "" "none" "" "$AM_URL" "false" "not checked (malformed config)"
     echo "Error: BANK_PROJECT_NAME '$BANK_PROJECT_NAME' is not a valid project slug (^[a-z]+(-[a-z]+)*\$, length 3-48)" >&2
     echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
     exit 1
   fi
   PROJECT_NAME="$BANK_PROJECT_NAME"
   PROJECT_SOURCE="config"
+else
+  # Default from the directory that contains .agent-relay/ (repo root).
+  REPO_BASENAME="$(basename "$(dirname "$AGENT_RELAY_DIR")")"
+  if PROJECT_NAME="$(slugify_project_name "$REPO_BASENAME")"; then
+    PROJECT_SOURCE="default"
+  else
+    PROJECT_NAME=""
+    PROJECT_SOURCE="default"
+  fi
 fi
 
 WARNINGS=""
 
+# Probe agentmemory when a valid URL is configured (independent of BANK_TYPE).
+if [[ -n "$AM_URL" ]]; then
+  if AM_DETAIL="$(probe_agentmemory_health "$AM_URL")"; then
+    AM_REACHABLE="true"
+  else
+    AM_REACHABLE="false"
+    # AM_DETAIL already set by probe on failure.
+    :
+  fi
+fi
+
+# Agentmemory-only: BANK_TYPE may be absent when BANK_AGENTMEMORY_URL is set.
 if [[ -z "$BANK_TYPE" ]]; then
+  if [[ -n "$AM_URL" ]]; then
+    write_status "true" "" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
+      "agentmemory-only (no BANK_TYPE); vault sink not configured" \
+      "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
+      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
+    echo "bank-check: wrote $BANK_STATUS"
+    cat "$BANK_STATUS"
+    exit 0
+  fi
   write_status "true" "" "$BANK_PATH" "$BANK_ENDPOINT" "false" "bank.conf has no BANK_TYPE" \
-    "$PROJECT_NAME" "$PROJECT_SOURCE" ""
+    "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
+    "" "false" "not configured"
   echo "bank-check: bank.conf present but BANK_TYPE is missing -> $BANK_STATUS"
   exit 0
 fi
@@ -259,31 +392,37 @@ case "$BANK_TYPE" in
 obsidian-vault)
   if [[ -z "$BANK_PATH" ]]; then
     write_status "true" "$BANK_TYPE" "" "$BANK_ENDPOINT" "false" "BANK_PATH not set for obsidian-vault" \
-      "$PROJECT_NAME" "$PROJECT_SOURCE" ""
+      "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
+      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
   elif [[ ! -d "$BANK_PATH" ]]; then
     write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path does not exist: $BANK_PATH" \
-      "$PROJECT_NAME" "$PROJECT_SOURCE" ""
+      "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
+      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
   # Caveat: [[ -w "$BANK_PATH" ]] tests writability via file permissions, but
   # when running as root (e.g., in some CI or container setups), it may report
   # true even for read-only filesystems or restricted mounts. This is a known
   # limitation of the reachability probe.
   elif [[ ! -w "$BANK_PATH" ]]; then
     write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path exists but is not writable: $BANK_PATH" \
-      "$PROJECT_NAME" "$PROJECT_SOURCE" ""
+      "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
+      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
   else
     WARNINGS="$(collect_foreign_project_warnings "$BANK_PATH" "$PROJECT_NAME")"
     write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "true" "vault directory exists and is writable" \
-      "$PROJECT_NAME" "$PROJECT_SOURCE" "$WARNINGS"
+      "$PROJECT_NAME" "$PROJECT_SOURCE" "$WARNINGS" \
+      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
   fi
   ;;
 lightrag-http)
   write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
     "backend '$BANK_TYPE' is declared but has no driver in this MVP (only obsidian-vault is implemented); see docs/bank.md" \
-    "$PROJECT_NAME" "$PROJECT_SOURCE" ""
+    "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
+    "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
   ;;
 *)
   write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "unknown BANK_TYPE '$BANK_TYPE'" \
-    "$PROJECT_NAME" "$PROJECT_SOURCE" ""
+    "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
+    "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
   ;;
 esac
 

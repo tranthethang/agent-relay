@@ -1,0 +1,30 @@
+# .agent-relay/bank.conf — optional knowledge-bank config for this repo.
+#
+# Format: one BANK_KEY=value per line, key at column 0. Whole-line comments
+# only (a "# ..." after a value becomes part of the value). The file is parsed
+# line by line and never sourced. Full reference: docs/bank.md.
+#
+# Remove the leading "# " from a key line to turn it on, then run:
+#   atry bank check
+# and read .agent-relay/bank-status.md.
+
+# --- Obsidian vault (or any plain folder) --------------------------------
+# BANK_TYPE: which backend receives notes. Only "obsidian-vault" has a driver.
+# BANK_PATH: absolute path to an existing, writable folder. atry never creates
+#            it or any subfolder; notes are written flat into it.
+# BANK_TYPE=obsidian-vault
+# BANK_PATH=/absolute/path/to/your/vault/folder
+
+# --- Project name (optional) ----------------------------------------------
+# Lowercase letters and single hyphens, 3-48 characters. Goes into note
+# frontmatter/tags and scopes agentmemory. When unset, notes carry no project
+# field and atry scopes agentmemory by the repo folder name. Several repos may
+# share a name on purpose.
+# BANK_PROJECT_NAME=my-project
+
+# --- agentmemory server (optional second sink) ----------------------------
+# http(s)://host[:port], no path. Can be used without BANK_TYPE.
+# If the server runs with AGENTMEMORY_SECRET, export the same variable in the
+# shell that runs atry. Never put the secret in this file.
+# Pushing to agentmemory needs python3.
+# BANK_AGENTMEMORY_URL=http://127.0.0.1:3111
