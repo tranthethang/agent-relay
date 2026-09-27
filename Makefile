@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help test smoke tasks bank fmt fmt-check
+.PHONY: help test smoke tasks bank metrics fmt fmt-check
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -12,10 +12,14 @@ tasks: ## Run parallel tasks test suite
 bank: ## Run knowledge-bank helper test suite
 	bash ./tests/bank.sh
 
-smoke: ## Run local smoke, tasks suite, bank suite, and remote smoke
+metrics: ## Run atry metrics helper test suite
+	bash ./tests/metrics.sh
+
+smoke: ## Run local smoke, tasks, bank, metrics, and remote smoke
 	bash ./tests/smoke.sh
 	bash ./tests/tasks.sh
 	bash ./tests/bank.sh
+	bash ./tests/metrics.sh
 	bash ./tests/smoke-remote.sh
 
 test: smoke ## Run all tests

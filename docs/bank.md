@@ -51,20 +51,20 @@ BANK_PATH=/absolute/path/to/your/vault/folder
 BANK_PROJECT_NAME=agent-relay
 ```
 
-| Key                 | Required | Notes                                                                                          |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------------ |
-| `BANK_TYPE`         | yes      | Backend id (see table below)                                                                     |
-| `BANK_PATH`         | for vault | Existing writable directory; trailing `/` is stripped by `atry bank check`                      |
-| `BANK_ENDPOINT`     | reserved | For `lightrag-http` later                                                                        |
-| `BANK_PROJECT_NAME` | no       | Project slug written into note `project:` / `project/<name>` tags; invalid value = malformed (exit 1) |
+| Key                 | Required  | Notes                                                                                                 |
+| ------------------- | --------- | ----------------------------------------------------------------------------------------------------- |
+| `BANK_TYPE`         | yes       | Backend id (see table below)                                                                          |
+| `BANK_PATH`         | for vault | Existing writable directory; trailing `/` is stripped by `atry bank check`                            |
+| `BANK_ENDPOINT`     | reserved  | For `lightrag-http` later                                                                             |
+| `BANK_PROJECT_NAME` | no        | Project slug written into note `project:` / `project/<name>` tags; invalid value = malformed (exit 1) |
 
 Duplicate `BANK_PROJECT_NAME` values across repos are intentional and never
 warned about.
 
-| `BANK_TYPE`      | Status                  | What it needs                                                                                         |
-| ---------------- | ----------------------- | ----------------------------------------------------------------------------------------------------- |
-| `obsidian-vault` | Implemented             | `BANK_PATH` — an existing, writable local directory (vault root, or any folder Obsidian watches)      |
-| `lightrag-http`  | Reserved, no driver yet | Would need `BANK_ENDPOINT` and real network egress from wherever the agent runs                       |
+| `BANK_TYPE`      | Status                  | What it needs                                                                                    |
+| ---------------- | ----------------------- | ------------------------------------------------------------------------------------------------ |
+| `obsidian-vault` | Implemented             | `BANK_PATH` — an existing, writable local directory (vault root, or any folder Obsidian watches) |
+| `lightrag-http`  | Reserved, no driver yet | Would need `BANK_ENDPOINT` and real network egress from wherever the agent runs                  |
 
 Declaring `lightrag-http` today is harmless: `atry bank check` records it as
 `reachable: false` with a `detail` explaining there is no driver, and
@@ -93,7 +93,7 @@ reachable: true
 checked_at: 2026-09-17T08:00:00Z
 detail: vault directory exists and is writable
 check_warnings: 
-push_warnings: 
+push_warnings:
 ```
 
 `project_source` is `config` when `BANK_PROJECT_NAME` is set, else `none`.

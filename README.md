@@ -76,7 +76,6 @@ Maintainer docs (architecture, installer, tests, release, …):
 | 4     | [`skills/atry-cross-review/`](skills/atry-cross-review/) | Upsert a `Cross-Review` section. The skill asks you to use a different tool than self-review. Nothing enforces that.                |
 | 5     | [`skills/atry-distill/`](skills/atry-distill/)           | Write `$RUN_DIR/distill/` atomic typed notes from the finished run; optionally push that directory to a configured knowledge bank   |
 
-
 Names, run directory layout, and id resolution:
 [`docs/file-conventions.md`](docs/file-conventions.md) (also shipped as
 `references/file-conventions.md` inside every installed bundle). Empty

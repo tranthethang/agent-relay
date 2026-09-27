@@ -40,6 +40,7 @@ preflight").
 | `atry version`                                                         | atry is missing or broken on PATH -- stop, see Preflight above                                                                                      |
 | `atry resolve [RUN_ID or path]`                                        | ambiguous or not found -- ask the user for the `RUN_ID` or path                                                                                     |
 | `atry history append <run-dir> distill started\|completed tool=<tool>` | run dir invalid                                                                                                                                     |
+| `atry metrics "$RUN_DIR" [--write <run-note>]`                         | unresolvable run or unreadable `base:` -- record the failure in the run note; do not invent metric values                                           |
 | `atry bank check "$RUN_DIR"`                                           | `1`: `bank.conf` is malformed; `2`: no `.agent-relay/` / git repo found above `$RUN_DIR` -- either way, treat as "no usable bank" and skip bank I/O |
 | `atry bank push "$RUN_DIR" "$RUN_DIR/distill"`                         | `1`: a note failed validation (nothing written); `2`: bank not configured/reachable -- expected soft skip                                           |
 | `atry bank set-status "$RUN_DIR" <filename> <status> [--by <file>]`    | `1`: bad args / type-status mismatch; `2`: bank not reachable -- record one line in the run note; never fail the stage                              |
@@ -92,8 +93,8 @@ For each candidate lesson, apply this tree in order:
 6. None of the above → write no note
 
 Always write exactly one `run` note for the finished run (index + reserved
-metric keys left empty). Do not put reusable lessons in the run note; link
-out via `notes:`.
+metric keys left empty until the metrics step below). Do not put reusable
+lessons in the run note; link out via `notes:`.
 
 ## Instructions
 
@@ -136,7 +137,19 @@ out via `notes:`.
    (filename and frontmatter rules in `references/note-schema.md`). Write
    all notes under `$RUN_DIR/distill/`, including the run note. The run
    note's `notes:` list is the manifest of every sibling filename produced
-   in this distill. Leave metric fields empty.
+   in this distill. Leave metric fields empty in the template — do not
+   invent values.
+
+1. **Metrics** (deterministic helper — never hand-compute):
+
+   ```bash
+   atry metrics "$RUN_DIR" --write "$RUN_DIR/distill/{YMD}-{RUN_ID}-{RUN_SLUG}.md"
+   ```
+
+   Replace `{YMD}-{RUN_ID}-{RUN_SLUG}` with the run note's actual filename.
+   On non-zero exit, leave the reserved keys empty and note the failure in
+   one line under `## Metrics` — do not invent values. On success the helper
+   fills the reserved frontmatter keys only; the body stays unchanged.
 
 1. **Push** (only when the bank is reachable per the bank-check step):
 
@@ -181,7 +194,8 @@ out via `notes:`.
   change or omit notes under `$RUN_DIR/distill/`.
 - Do not invent a knowledge-bank backend that has no driver in
   `atry bank push`. See `docs/bank.md`.
-- Do not compute metrics or fill the run note's reserved metric keys.
+- Do not invent or hand-edit the run note's reserved metric keys — run
+  `atry metrics … --write` (see Metrics step). See `docs/metrics.md`.
 - Do not convert old `distillation.md` files or migrate vault notes.
 - Do not change `references/note-schema.md` or the note templates in this
   stage — record schema problems as an `open-item` instead.

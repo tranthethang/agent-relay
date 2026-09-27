@@ -19,6 +19,7 @@ Usage:
   atry bank check [<start-dir>]
   atry bank push <start-dir> <notes-dir>
   atry bank set-status <start-dir> <filename> <status> [--by <filename>]
+  atry metrics <run-dir-or-id> [--write <run-note>]
 
 Task helpers map 1:1 to scripts/runtime/task-claim.sh subcommands, flattened:
   atry list <id>
@@ -179,6 +180,13 @@ bank)
     exit 1
     ;;
   esac
+  ;;
+metrics)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for metrics" >&2
+    exit 1
+  }
+  run_helper run-metrics.sh "$@"
   ;;
 *)
   echo "Error: unknown command '$cmd'" >&2

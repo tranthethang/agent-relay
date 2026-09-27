@@ -329,7 +329,10 @@ set -e
 LATE_FM="$T/late-fm"
 mkdir -p "$LATE_FM"
 write_note "$LATE_FM/$RUN_NOTE" run agent-relay
-{ printf '<!-- relay: stage=distill -->\n'; cat "$LATE_FM/$RUN_NOTE"; } >"$LATE_FM/tmp" && mv "$LATE_FM/tmp" "$LATE_FM/$RUN_NOTE"
+{
+  printf '<!-- relay: stage=distill -->\n'
+  cat "$LATE_FM/$RUN_NOTE"
+} >"$LATE_FM/tmp" && mv "$LATE_FM/tmp" "$LATE_FM/$RUN_NOTE"
 BEFORE_COUNT="$(find "$VAULT" -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')"
 set +e
 bank_push "$REPO" "$LATE_FM" >/dev/null 2>&1

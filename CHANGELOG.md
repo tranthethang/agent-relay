@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `atry history append … implement started` now also records `head=<commit>`
+  (read-only `git rev-parse HEAD`); `atry metrics` measures change size from it
+  (`diff_base`) so chained plans sharing one `base:` are sized separately.
+- `atry metrics <run-dir-or-id> [--write <run-note>]` (`scripts/runtime/run-metrics.sh`):
+  deterministic run benchmark fields (stage durations, tools/models, change
+  size, task and review counts; `tokens`/`cost` always empty). Distill runs it
+  with `--write` on the run note. Docs: `docs/metrics.md`. Tests:
+  `tests/metrics.sh` / `make metrics` (also in `make smoke` and CI).
 - Knowledge-bank note schema and copy-and-fill templates under
   `skills/atry-distill/references/` (`note-schema.md`, `note-*-template.md`):
   six typed notes (`run`, `decision`, `convention`, `pitfall`, `open-item`,
