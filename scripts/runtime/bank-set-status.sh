@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # scripts/runtime/bank-set-status.sh
 # Edit only lifecycle fields (status, and optionally superseded_by /
-# resolved_by) on an existing note already in BANK_PATH. The run-dir copy
-# is never touched. See docs/bank.md and note-schema.md.
+# resolved_by) on an existing note already in BANK_PATH or BANK_ATRY_PATH.
+# Lookup: project path first, then atry path. --by must resolve on the same
+# path as the edited note (refuse cross-lane). The run-dir copy is never
+# touched. See docs/bank.md and note-schema.md.
 #
 # Agentmemory: there is no confirmed REST mechanism to update a memory's
-# lifecycle status by note `key` (agentmemory @0.9.29: POST /agentmemory/evolve
-# requires memoryId + newContent; remember creates a new memory). This helper
-# does not invent one — it only edits the vault file. When
+# lifecycle status by note `key`. This helper only edits the vault file. When
 # BANK_AGENTMEMORY_URL is configured, a one-line note is printed; the next
 # push of a new note version (with updated status / supersedes) is the signal.
 #
@@ -21,15 +21,17 @@ Usage:
   bank-set-status.sh <start-dir> <filename> <status> [--by <filename>]
 
 <start-dir>   Anywhere under the target repo (same lookup as bank-check.sh).
-<filename>    Basename of a note already in BANK_PATH (not a path).
+<filename>    Basename of a note already in BANK_PATH or BANK_ATRY_PATH
+              (project path tried first, then atry path).
 <status>      New status; allowed values depend on the note's type.
 --by <file>   Optional companion filename when setting superseded or resolved;
-              writes superseded_by or resolved_by accordingly.
+              must resolve on the same vault path as <filename>.
 
 Exit 0: frontmatter updated.
-Exit 1: bad arguments, missing/unreadable note, type/status mismatch, or
-        missing bank-status.md.
-Exit 2: bank not configured/reachable, or no .agent-relay/ / git repository.
+Exit 1: bad arguments, missing/unreadable note, type/status mismatch,
+        cross-lane --by, or missing bank-status.md.
+Exit 2: bank not configured / no reachable vault path, or no .agent-relay/ /
+        git repository.
 EOF
   exit 1
 }
@@ -133,34 +135,63 @@ CONFIGURED="$(read_field configured)"
 BANK_TYPE="$(read_field bank_type)"
 BANK_PATH="$(read_field bank_path)"
 REACHABLE="$(read_field reachable)"
+ATRY_PATH="$(read_field atry_path)"
+ATRY_REACHABLE="$(read_field atry_reachable)"
 AM_URL="$(read_field agentmemory_url)"
 
-if [[ "$CONFIGURED" != "true" || "$REACHABLE" != "true" ]]; then
-  echo "bank-set-status: skipped — bank not configured/reachable per $BANK_STATUS" >&2
+if [[ "$CONFIGURED" != "true" ]]; then
+  echo "bank-set-status: skipped — bank not configured per $BANK_STATUS" >&2
+  exit 2
+fi
+
+PROJ_OK=0
+ATRY_OK=0
+if [[ "$REACHABLE" == "true" && -n "$BANK_PATH" && -d "$BANK_PATH" && "$BANK_TYPE" == "obsidian-vault" ]]; then
+  PROJ_OK=1
+fi
+if [[ "$ATRY_REACHABLE" == "true" && -n "$ATRY_PATH" && -d "$ATRY_PATH" ]]; then
+  ATRY_OK=1
+fi
+
+if [[ "$PROJ_OK" -eq 0 && "$ATRY_OK" -eq 0 ]]; then
+  echo "bank-set-status: skipped — no reachable vault path per $BANK_STATUS" >&2
   if [[ -n "$AM_URL" ]]; then
     echo "bank-set-status: note: agentmemory status-by-key is not supported (no REST update-by-key in agentmemory @0.9.29); vault sink must be reachable to edit a note file" >&2
   fi
   exit 2
 fi
 
-case "$BANK_TYPE" in
-obsidian-vault) ;;
-*)
-  echo "bank-set-status: backend '$BANK_TYPE' has no driver in this MVP" >&2
-  exit 2
-  ;;
-esac
+NOTE_PATH=""
+NOTE_DIR=""
+if [[ "$PROJ_OK" -eq 1 && -f "$BANK_PATH/$FILENAME" ]]; then
+  NOTE_PATH="$BANK_PATH/$FILENAME"
+  NOTE_DIR="$BANK_PATH"
+elif [[ "$ATRY_OK" -eq 1 && -f "$ATRY_PATH/$FILENAME" ]]; then
+  NOTE_PATH="$ATRY_PATH/$FILENAME"
+  NOTE_DIR="$ATRY_PATH"
+fi
 
-[[ -n "$BANK_PATH" && -d "$BANK_PATH" ]] || {
-  echo "bank-set-status: BANK_PATH '$BANK_PATH' is not a directory" >&2
-  exit 2
-}
-
-NOTE_PATH="$BANK_PATH/$FILENAME"
-[[ -f "$NOTE_PATH" ]] || {
-  echo "Error: note not found in BANK_PATH: $FILENAME" >&2
+if [[ -z "$NOTE_PATH" ]]; then
+  echo "Error: note not found in BANK_PATH or BANK_ATRY_PATH: $FILENAME" >&2
   exit 1
-}
+fi
+
+if [[ -n "$BY_FILE" ]]; then
+  if [[ ! -f "$NOTE_DIR/$BY_FILE" ]]; then
+    other=""
+    if [[ "$NOTE_DIR" == "$BANK_PATH" && "$ATRY_OK" -eq 1 && -f "$ATRY_PATH/$BY_FILE" ]]; then
+      other="atry"
+    elif [[ "$NOTE_DIR" == "$ATRY_PATH" && "$PROJ_OK" -eq 1 && -f "$BANK_PATH/$BY_FILE" ]]; then
+      other="project"
+    fi
+    if [[ -n "$other" ]]; then
+      echo "Error: --by '$BY_FILE' is on the $other vault path; must resolve on the same path as $FILENAME" >&2
+    else
+      echo "Error: --by note not found on the same vault path as $FILENAME: $BY_FILE" >&2
+    fi
+    exit 1
+  fi
+fi
 
 frontmatter_field() {
   local f="$1" key="$2"

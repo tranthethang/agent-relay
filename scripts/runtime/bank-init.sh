@@ -4,8 +4,8 @@
 # script (bank.conf.example), optionally filling in values, then run
 # bank-check.sh once so the developer sees the result.
 #
-# Never overwrites an existing bank.conf. Never creates BANK_PATH. Values are
-# checked with the same rules bank-check.sh applies, before anything is
+# Never overwrites an existing bank.conf. Never creates vault paths. Values
+# are checked with the same rules bank-check.sh applies, before anything is
 # written. Bash 3.2+ compatible, POSIX tools only.
 set -euo pipefail
 
@@ -13,11 +13,14 @@ usage() {
   cat <<'EOF'
 Usage:
   bank-init.sh [<start-dir>] [--path <vault-folder>] [--project <slug>]
+               [--atry-path <vault-folder>] [--atry-name <slug>]
                [--agentmemory-url <http(s)://host[:port]>]
 
 Writes .agent-relay/bank.conf for the repo that contains <start-dir>
 (default: current directory). Without options, every key line is left
 commented out. --path also turns on BANK_TYPE=obsidian-vault.
+--atry-path / --atry-name turn on the atry lane block (when path is set,
+name is required).
 
 Exit codes are those of the bank check that runs afterwards
 (0 ok, 1 malformed config), or:
@@ -36,10 +39,12 @@ TEMPLATE="$SCRIPT_DIR/bank.conf.example"
 START_DIR=""
 OPT_PATH=""
 OPT_PROJECT=""
+OPT_ATRY_PATH=""
+OPT_ATRY_NAME=""
 OPT_AM_URL=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-  --path | --project | --agentmemory-url)
+  --path | --project | --atry-path | --atry-name | --agentmemory-url)
     [[ $# -ge 2 && -n "$2" ]] || {
       echo "Error: $1 requires a value" >&2
       exit 1
@@ -47,6 +52,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
     --path) OPT_PATH="$2" ;;
     --project) OPT_PROJECT="$2" ;;
+    --atry-path) OPT_ATRY_PATH="$2" ;;
+    --atry-name) OPT_ATRY_NAME="$2" ;;
     --agentmemory-url) OPT_AM_URL="$2" ;;
     esac
     shift 2
@@ -74,8 +81,6 @@ START_DIR="${START_DIR:-$PWD}"
   exit 1
 }
 
-# Same unsafe-character rule as bank-check.sh, so a value we write is never
-# one the parser would refuse.
 unsafe_value() {
   case "$1" in
   *'$('* | *'`'* | *';'* | *'&&'* | *'||'* | *'|'* | *'>'* | *'<'* | *$'\n'*) return 0 ;;
@@ -83,27 +88,48 @@ unsafe_value() {
   return 1
 }
 
-if [[ -n "$OPT_PATH" ]]; then
-  if unsafe_value "$OPT_PATH"; then
-    echo "Error: --path contains characters bank.conf cannot hold: $OPT_PATH" >&2
+normalize_abs_path_opt() {
+  local opt_name="$1" p="$2"
+  if unsafe_value "$p"; then
+    echo "Error: $opt_name contains characters bank.conf cannot hold: $p" >&2
     exit 1
   fi
-  case "$OPT_PATH" in
+  case "$p" in
   /*) ;;
   *)
-    echo "Error: --path must be an absolute path: $OPT_PATH" >&2
+    echo "Error: $opt_name must be an absolute path: $p" >&2
     exit 1
     ;;
   esac
-  if [[ "$OPT_PATH" == */ && "$OPT_PATH" != "/" ]]; then
-    OPT_PATH="${OPT_PATH%/}"
+  if [[ "$p" == */ && "$p" != "/" ]]; then
+    p="${p%/}"
   fi
-fi
-if [[ -n "$OPT_PROJECT" ]]; then
-  if [[ ${#OPT_PROJECT} -lt 3 || ${#OPT_PROJECT} -gt 48 || ! "$OPT_PROJECT" =~ ^[a-z]+(-[a-z]+)*$ ]]; then
-    echo "Error: --project must be lowercase letters and single hyphens, 3-48 characters: $OPT_PROJECT" >&2
+  printf '%s' "$p"
+}
+
+valid_slug_opt() {
+  local opt_name="$1" s="$2"
+  if [[ ${#s} -lt 3 || ${#s} -gt 48 || ! "$s" =~ ^[a-z]+(-[a-z]+)*$ ]]; then
+    echo "Error: $opt_name must be lowercase letters and single hyphens, 3-48 characters: $s" >&2
     exit 1
   fi
+}
+
+if [[ -n "$OPT_PATH" ]]; then
+  OPT_PATH="$(normalize_abs_path_opt --path "$OPT_PATH")"
+fi
+if [[ -n "$OPT_PROJECT" ]]; then
+  valid_slug_opt --project "$OPT_PROJECT"
+fi
+if [[ -n "$OPT_ATRY_PATH" ]]; then
+  OPT_ATRY_PATH="$(normalize_abs_path_opt --atry-path "$OPT_ATRY_PATH")"
+fi
+if [[ -n "$OPT_ATRY_NAME" ]]; then
+  valid_slug_opt --atry-name "$OPT_ATRY_NAME"
+fi
+if [[ -n "$OPT_ATRY_PATH" && -z "$OPT_ATRY_NAME" ]]; then
+  echo "Error: --atry-path requires --atry-name" >&2
+  exit 1
 fi
 if [[ -n "$OPT_AM_URL" ]]; then
   if [[ "$OPT_AM_URL" == */ ]]; then
@@ -128,15 +154,20 @@ fi
 
 mkdir -p "$AGENT_RELAY_DIR"
 
-# Uncomment / fill the template's "# BANK_KEY=..." lines for the given options.
 tmp="$(mktemp "${TMPDIR:-/tmp}/ar-bank-conf.XXXXXX")"
-OPT_PATH="$OPT_PATH" OPT_PROJECT="$OPT_PROJECT" OPT_AM_URL="$OPT_AM_URL" awk '
+OPT_PATH="$OPT_PATH" OPT_PROJECT="$OPT_PROJECT" \
+  OPT_ATRY_PATH="$OPT_ATRY_PATH" OPT_ATRY_NAME="$OPT_ATRY_NAME" \
+  OPT_AM_URL="$OPT_AM_URL" awk '
   BEGIN {
-    p = ENVIRON["OPT_PATH"]; pr = ENVIRON["OPT_PROJECT"]; am = ENVIRON["OPT_AM_URL"]
+    p = ENVIRON["OPT_PATH"]; pr = ENVIRON["OPT_PROJECT"]
+    ap = ENVIRON["OPT_ATRY_PATH"]; an = ENVIRON["OPT_ATRY_NAME"]
+    am = ENVIRON["OPT_AM_URL"]
   }
   /^# BANK_TYPE=/ && p != "" { print "BANK_TYPE=obsidian-vault"; next }
   /^# BANK_PATH=/ && p != "" { print "BANK_PATH=" p; next }
   /^# BANK_PROJECT_NAME=/ && pr != "" { print "BANK_PROJECT_NAME=" pr; next }
+  /^# BANK_ATRY_PATH=/ && ap != "" { print "BANK_ATRY_PATH=" ap; next }
+  /^# BANK_ATRY_NAME=/ && an != "" { print "BANK_ATRY_NAME=" an; next }
   /^# BANK_AGENTMEMORY_URL=/ && am != "" { print "BANK_AGENTMEMORY_URL=" am; next }
   { print }
 ' "$TEMPLATE" >"$tmp"
@@ -147,8 +178,10 @@ echo "bank-init: wrote $BANK_CONF"
 if [[ -n "$OPT_PATH" && ! -d "$OPT_PATH" ]]; then
   echo "bank-init: note: $OPT_PATH does not exist yet; create it yourself (atry never creates BANK_PATH)" >&2
 fi
+if [[ -n "$OPT_ATRY_PATH" && ! -d "$OPT_ATRY_PATH" ]]; then
+  echo "bank-init: note: $OPT_ATRY_PATH does not exist yet; create it yourself (atry never creates BANK_ATRY_PATH)" >&2
+fi
 
-# Run the check once so the result is visible right away.
 set +e
 "$SCRIPT_DIR/bank-check.sh" "$START_DIR"
 rc=$?

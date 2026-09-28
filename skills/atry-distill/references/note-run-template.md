@@ -1,7 +1,7 @@
 ---
 type: run
 project: <BANK_PROJECT_NAME-or-omit>
-run: "[[{YMD}-{RUN_ID}-{RUN_SLUG}]]"
+run_id: {YMD}-{RUN_ID}-{RUN_SLUG}
 date: YYYY-MM-DD
 base: <git-ref>
 scope: project
@@ -34,7 +34,7 @@ cost:
 
 <!-- relay: stage=distill type=run tool=<tool> model=<id-or-unknown> date=YYYY-MM-DD -->
 
-<!-- template: note-run. Filename: `{YMD}-{RUN_ID}-{RUN_SLUG}.md` (no `#` H1 in the body). Copy from the first line; frontmatter must stay on line 1. -->
+<!-- template: note-run. Filename: `{YMD}-{RUN_ID}-{RUN_SLUG}.md` (no `#` H1 in the body). Project lane only. `notes:` lists same-lane (project) siblings only — not process / atry-lane files. Copy from the first line; frontmatter must stay on line 1. -->
 
 ## Summary
 
@@ -42,13 +42,13 @@ cost:
 
 ## Notes
 
-Manifest of sibling notes pushed with this run (same list as frontmatter `notes:`):
+Manifest of **project-lane** sibling notes pushed with this run (same list as frontmatter `notes:`). Atry-lane / process notes are omitted here (they carry `run_id:` only):
 
 - [[{YMD}-{RUN_ID}-<slug>]] — <type>: <one-line topic>
 
 ## Bank push
 
-<one line: "pushed N notes to <BANK_PATH>" / "skipped — bank not configured" / "failed — <reason>">
+<one line: "pushed N notes to <BANK_PATH> [and M to <BANK_ATRY_PATH>]" / "skipped — bank not configured" / "failed — <reason>">
 
 ## Metrics
 

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # scripts/runtime/bank-push.sh
 # Push a directory of typed bank notes to every usable sink declared by the
-# last atry bank check: obsidian-vault (flat copy into BANK_PATH) and/or
-# agentmemory (POST /agentmemory/remember per note). Used by atry-distill.
+# last atry bank check: project vault (BANK_PATH), atry vault (BANK_ATRY_PATH),
+# and/or agentmemory (POST /agentmemory/remember per note). Used by atry-distill.
 # See docs/bank.md and skills/atry-distill/references/note-schema.md.
 #
-# Never creates BANK_PATH or any subdirectory. Never injects a title heading.
+# Notes are partitioned by frontmatter scope: atry → atry vault / atry_name;
+# project or module:<slug> → project vault / project_name. Equal absolute
+# vault paths still write each filename once. Never creates vault dirs.
+#
 # Validates every note before writing any; on refusal exits non-zero with
 # nothing partially trusted from this push. Advisory warnings (orphan,
 # foreign project) go to stderr and bank-status.md push_warnings: (exit 0);
@@ -21,16 +24,12 @@ usage() {
 Usage:
   bank-push.sh [--vault-only] <start-dir> <notes-dir>
 
---vault-only  Skip the agentmemory sink. agentmemory's remember always
-              creates a new memory, so a second push of the same notes (e.g.
-              distill's re-push after writing the Bank push line) must not
-              reach it again.
+--vault-only  Skip the agentmemory sink (both vault lanes still run).
+              Distill's second push after the Bank push line uses this.
 
 <start-dir>   Anywhere under the target repo (same lookup as bank-check.sh).
 <notes-dir>   Directory of ready-to-push .md notes (validated, then copied
-              flat into BANK_PATH and/or POSTed to agentmemory). Re-push
-              overwrites same vault filenames; agentmemory creates a new
-              memory per call.
+              flat into the lane vault(s) and/or POSTed to agentmemory).
 
 Exit 0: at least one usable sink succeeded (advisory warnings may print).
 Exit 1: bad arguments, missing bank-status.md, a note failed validation,
@@ -85,6 +84,9 @@ BANK_PATH="$(read_field bank_path)"
 BANK_ENDPOINT="$(read_field bank_endpoint)"
 REACHABLE="$(read_field reachable)"
 PROJECT_NAME="$(read_field project_name)"
+ATRY_PATH="$(read_field atry_path)"
+ATRY_REACHABLE="$(read_field atry_reachable)"
+ATRY_NAME="$(read_field atry_name)"
 AM_URL="$(read_field agentmemory_url)"
 AM_REACHABLE="$(read_field agentmemory_reachable)"
 : "$BANK_ENDPOINT"
@@ -94,23 +96,35 @@ if [[ "$CONFIGURED" != "true" ]]; then
   exit 2
 fi
 
-VAULT_USABLE=0
+PROJ_VAULT_USABLE=0
+ATRY_VAULT_USABLE=0
 AM_USABLE=0
 if [[ "$BANK_TYPE" == "obsidian-vault" && "$REACHABLE" == "true" ]]; then
-  VAULT_USABLE=1
+  PROJ_VAULT_USABLE=1
+fi
+# Atry vault may be usable even when BANK_TYPE is absent (name+path recorded
+# by check); require atry_reachable and a non-empty path.
+if [[ "$ATRY_REACHABLE" == "true" && -n "$ATRY_PATH" ]]; then
+  ATRY_VAULT_USABLE=1
 fi
 if [[ -n "$AM_URL" && "$AM_REACHABLE" == "true" && "$VAULT_ONLY" -eq 0 ]]; then
   AM_USABLE=1
 fi
 
-if [[ "$VAULT_USABLE" -eq 0 && "$AM_USABLE" -eq 0 ]]; then
-  echo "bank-push: skipped — no usable sink (vault reachable=$REACHABLE, agentmemory_reachable=$AM_REACHABLE) per $BANK_STATUS" >&2
+if [[ "$PROJ_VAULT_USABLE" -eq 0 && "$ATRY_VAULT_USABLE" -eq 0 && "$AM_USABLE" -eq 0 ]]; then
+  echo "bank-push: skipped — no usable sink (vault reachable=$REACHABLE, atry_reachable=$ATRY_REACHABLE, agentmemory_reachable=$AM_REACHABLE) per $BANK_STATUS" >&2
   exit 2
 fi
 
-# Filename: {YMD}-{RUN_ID}-{SLUG}.md (slug length 3–48, same as run slugs).
+SAME_VAULT_PATH=0
+if [[ -n "$BANK_PATH" && -n "$ATRY_PATH" && "$BANK_PATH" == "$ATRY_PATH" ]]; then
+  SAME_VAULT_PATH=1
+fi
+
 NOTE_NAME_RE='^[0-9]{8}-[0-9]{10,11}-[a-z]+(-[a-z]+)*\.md$'
+RUN_ID_RE='^[0-9]{8}-[0-9]{10,11}-[a-z]+(-[a-z]+)*$'
 ALLOWED_TYPES='run|decision|convention|pitfall|open-item|process'
+MODULE_SCOPE_RE='^module:[a-z]+(-[a-z]+)*$'
 
 valid_note_slug() {
   local s="$1"
@@ -142,9 +156,25 @@ frontmatter_field() {
   ' "$f" 2>/dev/null || true
 }
 
+# True when the first frontmatter block contains a key (even if value empty).
+has_frontmatter_key() {
+  local f="$1" key="$2"
+  awk -v key="$key" '
+    /^---[[:space:]]*$/ {
+      c++
+      if (c >= 2) exit
+      next
+    }
+    c == 1 {
+      prefix = key ":"
+      if (index($0, prefix) == 1) { found = 1; exit }
+    }
+    END { exit found ? 0 : 1 }
+  ' "$f"
+}
+
 has_frontmatter_block() {
   local f="$1"
-  # Obsidian only reads properties when the block opens on line 1.
   awk '
     NR == 1 && $0 !~ /^---[[:space:]]*$/ { exit }
     /^---[[:space:]]*$/ { c++; if (c >= 2) { found=1; exit } }
@@ -152,9 +182,32 @@ has_frontmatter_block() {
   ' "$f"
 }
 
+valid_scope() {
+  local scope="$1" mod
+  case "$scope" in
+  atry | project) return 0 ;;
+  esac
+  if [[ "$scope" =~ $MODULE_SCOPE_RE ]]; then
+    mod="${scope#module:}"
+    valid_note_slug "$mod"
+    return $?
+  fi
+  return 1
+}
+
+# Prints "atry" or "project" for the vault/AM lane.
+note_lane() {
+  local scope="$1"
+  if [[ "$scope" == "atry" ]]; then
+    printf 'atry'
+  else
+    printf 'project'
+  fi
+}
+
 validate_note() {
   local f="$1"
-  local base type stem slug
+  local base type stem slug scope run_id
   base="$(basename "$f")"
   if [[ ! "$base" =~ $NOTE_NAME_RE ]]; then
     echo "Error: refuse push — filename does not match {YMD}-{RUN_ID}-{SLUG}.md: $base" >&2
@@ -175,9 +228,27 @@ validate_note() {
     echo "Error: refuse push — YAML frontmatter must open with --- on line 1 and close with ---: $base" >&2
     return 1
   fi
+  if has_frontmatter_key "$f" "run"; then
+    echo "Error: refuse push — legacy run: wikilink field is not accepted (use run_id:): $base" >&2
+    return 1
+  fi
   type="$(frontmatter_field "$f" type)"
   if [[ ! "$type" =~ ^($ALLOWED_TYPES)$ ]]; then
     echo "Error: refuse push — missing or unknown type '$type' in $base (allowed: run decision convention pitfall open-item process)" >&2
+    return 1
+  fi
+  scope="$(frontmatter_field "$f" scope)"
+  if ! valid_scope "$scope"; then
+    echo "Error: refuse push — missing or invalid scope '$scope' in $base (allowed: atry | project | module:<slug>)" >&2
+    return 1
+  fi
+  if [[ "$type" == "process" && "$scope" != "atry" ]]; then
+    echo "Error: refuse push — type process requires scope: atry (got scope: $scope) in $base" >&2
+    return 1
+  fi
+  run_id="$(frontmatter_field "$f" run_id)"
+  if [[ -z "$run_id" || ! "$run_id" =~ $RUN_ID_RE ]]; then
+    echo "Error: refuse push — missing or invalid run_id '$run_id' in $base (expected run directory basename)" >&2
     return 1
   fi
   return 0
@@ -202,10 +273,6 @@ write_status_warnings() {
   rm -f "$tmp"
 }
 
-# Optional bearer auth: when AGENTMEMORY_SECRET is set in the environment (the
-# same variable the agentmemory server reads), write the header to a 0600 temp
-# file and pass it with `-H @file` so the secret never appears in argv / ps.
-# Never read from bank.conf (that file may be committed).
 am_auth_header_file() {
   local f
   [[ -n "${AGENTMEMORY_SECRET:-}" ]] || return 1
@@ -215,13 +282,6 @@ am_auth_header_file() {
   printf '%s' "$f"
 }
 
-# Build POST body for /agentmemory/remember into $3. Uses python3 for safe
-# JSON encoding of the full note (never interpolates content into argv).
-# Confirmed fields (agentmemory @0.9.29 src/triggers/api.ts api::remember):
-#   content (required), type?, concepts?, files?, ttlDays?,
-#   sourceObservationIds?, project?, agentId?
-# Extra keys (key, status, tags) are sent as metadata; the server whitelist
-# drops unknown fields, so the durable copy is always in content.
 build_remember_body() {
   local note_file="$1" project="$2" out_file="$3"
   if ! command -v python3 >/dev/null 2>&1; then
@@ -238,7 +298,6 @@ out = os.environ["OUT_FILE"]
 with open(path, "r", encoding="utf-8") as f:
     content = f.read()
 
-# Minimal frontmatter parse for type/key/status/tags.
 fm = {}
 if content.startswith("---"):
     parts = content.split("---", 2)
@@ -275,7 +334,6 @@ body = {
     "tags": tags,
     "concepts": concepts,
 }
-# Drop empty optional strings so we never send project:"" (API rejects it).
 if not body["project"]:
     del body["project"]
 if not body["type"]:
@@ -290,7 +348,6 @@ with open(out, "w", encoding="utf-8") as f:
 PY
 }
 
-# Collect note files (non-recursive). Refuse if none.
 NOTE_FILES=()
 shopt -s nullglob
 for f in "$NOTES_DIR"/*.md; do
@@ -304,12 +361,10 @@ if [[ ${#NOTE_FILES[@]} -eq 0 ]]; then
   exit 1
 fi
 
-# Validate all first — nothing written on any failure.
 for f in "${NOTE_FILES[@]}"; do
   validate_note "$f" || exit 1
 done
 
-# Shared run-prefix guard (all notes in one push share {YMD}-{RUN_ID}-).
 RUN_PREFIX=""
 first_base="$(basename "${NOTE_FILES[0]}")"
 if [[ "$first_base" =~ ^([0-9]{8}-[0-9]{10,11}-) ]]; then
@@ -333,82 +388,223 @@ append_warning() {
   fi
 }
 
-VAULT_OK=0
-AM_OK=0
+# Copy one note to dest dir; returns 0 on success.
+copy_note_to() {
+  local src="$1" dest_dir="$2"
+  local base dest
+  base="$(basename "$src")"
+  dest="$dest_dir/$base"
+  if cp "$src" "$dest"; then
+    echo "bank-push: vault: wrote $dest"
+    return 0
+  fi
+  echo "bank-push: vault: failed to write $dest" >&2
+  return 1
+}
 
-# --- Obsidian vault sink ---
-if [[ "$VAULT_USABLE" -eq 1 ]]; then
-  if [[ -z "$BANK_PATH" || ! -d "$BANK_PATH" ]]; then
-    echo "bank-push: vault: BANK_PATH '$BANK_PATH' is not a directory" >&2
-  elif [[ ! -w "$BANK_PATH" ]]; then
-    echo "bank-push: vault: BANK_PATH '$BANK_PATH' is not writable" >&2
+# Orphan scan for one vault path; pushed_names is space-separated basenames
+# that this push wrote into that path.
+scan_orphans() {
+  local vault_path="$1" pushed_names="$2" label="$3"
+  local existing ebase found p
+  [[ -n "$RUN_PREFIX" && -d "$vault_path" ]] || return 0
+  shopt -s nullglob
+  for existing in "$vault_path/${RUN_PREFIX}"*.md; do
+    [[ -f "$existing" ]] || continue
+    ebase="$(basename "$existing")"
+    found=0
+    for p in $pushed_names; do
+      if [[ "$p" == "$ebase" ]]; then
+        found=1
+        break
+      fi
+    done
+    if [[ "$found" -eq 0 ]]; then
+      echo "bank-push: warning: orphan note in $label (same run prefix, not in this push): $ebase" >&2
+      append_warning "orphan:$ebase"
+    fi
+  done
+  shopt -u nullglob
+}
+
+# Foreign-project advisory for notes that landed in a given lane.
+warn_foreign_for_notes() {
+  local expected="$1"
+  shift
+  local f base proj
+  [[ -n "$expected" ]] || return 0
+  for f in "$@"; do
+    [[ -n "$f" ]] || continue
+    base="$(basename "$f")"
+    proj="$(frontmatter_field "$f" project)"
+    if [[ -n "$proj" && "$proj" != "$expected" ]]; then
+      echo "bank-push: warning: foreign project '$proj' in $base (expected '$expected')" >&2
+      append_warning "foreign-project:$base"
+    fi
+  done
+}
+
+PROJ_NOTES=()
+ATRY_NOTES=()
+for f in "${NOTE_FILES[@]}"; do
+  scope="$(frontmatter_field "$f" scope)"
+  if [[ "$(note_lane "$scope")" == "atry" ]]; then
+    ATRY_NOTES+=("$f")
+  else
+    PROJ_NOTES+=("$f")
+  fi
+done
+
+PROJ_VAULT_OK=0
+ATRY_VAULT_OK=0
+AM_OK=0
+ANY_VAULT_OK=0
+
+# --- Vault sinks (project + atry), with same-path dedupe ---
+if [[ "$SAME_VAULT_PATH" -eq 1 && ("$PROJ_VAULT_USABLE" -eq 1 || "$ATRY_VAULT_USABLE" -eq 1) ]]; then
+  # Single filesystem root: write every note once.
+  dest_dir="$BANK_PATH"
+  if [[ -z "$dest_dir" || ! -d "$dest_dir" ]]; then
+    echo "bank-push: vault: path '$dest_dir' is not a directory" >&2
+  elif [[ ! -w "$dest_dir" ]]; then
+    echo "bank-push: vault: path '$dest_dir' is not writable" >&2
   else
     PUSHED_NAMES=""
     vault_failed=0
     for f in "${NOTE_FILES[@]}"; do
-      base="$(basename "$f")"
-      dest="$BANK_PATH/$base"
-      if cp "$f" "$dest"; then
-        echo "bank-push: vault: wrote $dest"
+      if copy_note_to "$f" "$dest_dir"; then
+        base="$(basename "$f")"
         if [[ -z "$PUSHED_NAMES" ]]; then
           PUSHED_NAMES="$base"
         else
           PUSHED_NAMES="$PUSHED_NAMES $base"
         fi
       else
-        echo "bank-push: vault: failed to write $dest" >&2
         vault_failed=1
         break
       fi
     done
-
     if [[ "$vault_failed" -eq 0 ]]; then
-      VAULT_OK=1
-      # Orphan warning: bank files with same {YMD}-{RUN_ID}- prefix not in pushed set.
-      if [[ -n "$RUN_PREFIX" ]]; then
-        shopt -s nullglob
-        for existing in "$BANK_PATH/${RUN_PREFIX}"*.md; do
-          [[ -f "$existing" ]] || continue
-          ebase="$(basename "$existing")"
-          found=0
-          for p in $PUSHED_NAMES; do
-            if [[ "$p" == "$ebase" ]]; then
-              found=1
-              break
-            fi
-          done
-          if [[ "$found" -eq 0 ]]; then
-            echo "bank-push: warning: orphan note in bank (same run prefix, not in this push): $ebase" >&2
-            append_warning "orphan:$ebase"
-          fi
-        done
-        shopt -u nullglob
+      ANY_VAULT_OK=1
+      PROJ_VAULT_OK=1
+      ATRY_VAULT_OK=1
+      scan_orphans "$dest_dir" "$PUSHED_NAMES" "vault"
+      if [[ ${#PROJ_NOTES[@]} -gt 0 ]]; then
+        warn_foreign_for_notes "$PROJECT_NAME" "${PROJ_NOTES[@]}"
       fi
-
-      if [[ -n "$PROJECT_NAME" ]]; then
-        for f in "${NOTE_FILES[@]}"; do
-          base="$(basename "$f")"
-          proj="$(frontmatter_field "$f" project)"
-          if [[ -n "$proj" && "$proj" != "$PROJECT_NAME" ]]; then
-            echo "bank-push: warning: foreign project '$proj' in $base (expected '$PROJECT_NAME')" >&2
-            append_warning "foreign-project:$base"
-          fi
-        done
+      if [[ ${#ATRY_NOTES[@]} -gt 0 ]]; then
+        warn_foreign_for_notes "$ATRY_NAME" "${ATRY_NOTES[@]}"
       fi
-      echo "bank-push: vault: ok (${#NOTE_FILES[@]} note(s))"
+      echo "bank-push: vault: ok (${#NOTE_FILES[@]} note(s) to $dest_dir; project+atry paths equal)"
     else
       echo "bank-push: vault: failed" >&2
     fi
   fi
+else
+  # Separate paths (or only one lane usable).
+  if [[ "$PROJ_VAULT_USABLE" -eq 1 ]]; then
+    if [[ ${#PROJ_NOTES[@]} -eq 0 ]]; then
+      echo "bank-push: vault(project): no project-lane notes in this push"
+      PROJ_VAULT_OK=1
+      # Atry-lane-only push with atry vault unset is an intentional
+      # local-distill skip, not "all usable sinks failed". When atry vault
+      # is usable, leave ANY_VAULT_OK to the atry copy result.
+      if [[ "$ATRY_VAULT_USABLE" -eq 0 ]]; then
+        ANY_VAULT_OK=1
+      fi
+    elif [[ -z "$BANK_PATH" || ! -d "$BANK_PATH" ]]; then
+      echo "bank-push: vault(project): BANK_PATH '$BANK_PATH' is not a directory" >&2
+    elif [[ ! -w "$BANK_PATH" ]]; then
+      echo "bank-push: vault(project): BANK_PATH '$BANK_PATH' is not writable" >&2
+    else
+      PUSHED_NAMES=""
+      vault_failed=0
+      for f in "${PROJ_NOTES[@]}"; do
+        if copy_note_to "$f" "$BANK_PATH"; then
+          base="$(basename "$f")"
+          if [[ -z "$PUSHED_NAMES" ]]; then
+            PUSHED_NAMES="$base"
+          else
+            PUSHED_NAMES="$PUSHED_NAMES $base"
+          fi
+        else
+          vault_failed=1
+          break
+        fi
+      done
+      if [[ "$vault_failed" -eq 0 ]]; then
+        PROJ_VAULT_OK=1
+        ANY_VAULT_OK=1
+        scan_orphans "$BANK_PATH" "$PUSHED_NAMES" "vault(project)"
+        warn_foreign_for_notes "$PROJECT_NAME" "${PROJ_NOTES[@]}"
+        echo "bank-push: vault(project): ok (${#PROJ_NOTES[@]} note(s))"
+      else
+        echo "bank-push: vault(project): failed" >&2
+      fi
+    fi
+  fi
+
+  if [[ "$ATRY_VAULT_USABLE" -eq 1 ]]; then
+    if [[ ${#ATRY_NOTES[@]} -eq 0 ]]; then
+      echo "bank-push: vault(atry): no atry-lane notes in this push"
+      ATRY_VAULT_OK=1
+    elif [[ -z "$ATRY_PATH" || ! -d "$ATRY_PATH" ]]; then
+      echo "bank-push: vault(atry): BANK_ATRY_PATH '$ATRY_PATH' is not a directory" >&2
+    elif [[ ! -w "$ATRY_PATH" ]]; then
+      echo "bank-push: vault(atry): BANK_ATRY_PATH '$ATRY_PATH' is not writable" >&2
+    else
+      PUSHED_NAMES=""
+      vault_failed=0
+      for f in "${ATRY_NOTES[@]}"; do
+        if copy_note_to "$f" "$ATRY_PATH"; then
+          base="$(basename "$f")"
+          if [[ -z "$PUSHED_NAMES" ]]; then
+            PUSHED_NAMES="$base"
+          else
+            PUSHED_NAMES="$PUSHED_NAMES $base"
+          fi
+        else
+          vault_failed=1
+          break
+        fi
+      done
+      if [[ "$vault_failed" -eq 0 ]]; then
+        ATRY_VAULT_OK=1
+        ANY_VAULT_OK=1
+        scan_orphans "$ATRY_PATH" "$PUSHED_NAMES" "vault(atry)"
+        warn_foreign_for_notes "$ATRY_NAME" "${ATRY_NOTES[@]}"
+        echo "bank-push: vault(atry): ok (${#ATRY_NOTES[@]} note(s))"
+      else
+        echo "bank-push: vault(atry): failed" >&2
+      fi
+    fi
+  elif [[ ${#ATRY_NOTES[@]} -gt 0 ]]; then
+    echo "bank-push: vault(atry): skipped — atry vault not reachable (atry-lane notes stay in local distill/ only)" >&2
+  fi
 fi
 
 # --- agentmemory sink ---
+# Atry-lane notes need atry_name (docs/bank.md): path/name unset → local
+# distill/ only; name-only still posts to AM when reachable.
 if [[ "$AM_USABLE" -eq 1 ]]; then
   am_failed=0
+  am_posted=0
   for f in "${NOTE_FILES[@]}"; do
     base="$(basename "$f")"
+    scope="$(frontmatter_field "$f" scope)"
+    lane="$(note_lane "$scope")"
+    am_project=""
+    if [[ "$lane" == "atry" ]]; then
+      if [[ -z "$ATRY_NAME" ]]; then
+        echo "bank-push: agentmemory: skipped $base — atry_name not set (atry-lane notes need BANK_ATRY_NAME)" >&2
+        continue
+      fi
+      am_project="$ATRY_NAME"
+    else
+      am_project="$PROJECT_NAME"
+    fi
     body="$(mktemp "${TMPDIR:-/tmp}/ar-am-body.XXXXXX")"
-    if ! build_remember_body "$f" "$PROJECT_NAME" "$body"; then
+    if ! build_remember_body "$f" "$am_project" "$body"; then
       echo "bank-push: agentmemory: failed to build body for $base" >&2
       rm -f "$body"
       am_failed=1
@@ -436,11 +632,17 @@ if [[ "$AM_USABLE" -eq 1 ]]; then
       am_failed=1
       break
     fi
-    echo "bank-push: agentmemory: remembered $base"
+    am_posted=$((am_posted + 1))
+    echo "bank-push: agentmemory: remembered $base (project=${am_project:-none})"
   done
-  if [[ "$am_failed" -eq 0 ]]; then
+  if [[ "$am_failed" -eq 0 && "$am_posted" -gt 0 ]]; then
     AM_OK=1
-    echo "bank-push: agentmemory: ok (${#NOTE_FILES[@]} note(s))"
+    echo "bank-push: agentmemory: ok ($am_posted note(s))"
+  elif [[ "$am_failed" -eq 0 ]]; then
+    # Every note was ineligible (typically atry-lane without atry_name) —
+    # intentional skip, not a transfer failure.
+    echo "bank-push: agentmemory: skipped — no notes eligible (atry-lane needs atry_name)" >&2
+    AM_OK=1
   else
     echo "bank-push: agentmemory: failed" >&2
   fi
@@ -448,7 +650,7 @@ fi
 
 write_status_warnings "$WARNINGS"
 
-if [[ "$VAULT_OK" -eq 1 || "$AM_OK" -eq 1 ]]; then
+if [[ "$ANY_VAULT_OK" -eq 1 || "$AM_OK" -eq 1 ]]; then
   exit 0
 fi
 echo "bank-push: all usable sinks failed" >&2

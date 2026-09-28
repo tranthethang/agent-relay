@@ -5,11 +5,10 @@
 # per target repo), not per-run. See docs/bank.md for the format and the
 # supported backend types.
 #
-# This checks reachability only. It does not verify write correctness beyond
-# a basic writability probe, does not verify data quality. Network is used
-# only when BANK_AGENTMEMORY_URL is set (GET /agentmemory/health). Obsidian
-# remain a local path probe; lightrag-http stays "not implemented". Never
-# creates BANK_PATH or any subdirectory under it.
+# Dual vault lanes: BANK_PATH / BANK_PROJECT_NAME (project) and optional
+# BANK_ATRY_PATH / BANK_ATRY_NAME (atry self-improve). This checks reachability
+# only. Network is used only when BANK_AGENTMEMORY_URL is set
+# (GET /agentmemory/health). Never creates vault paths or subdirectories.
 #
 # Bash 3.2+ compatible, POSIX tools only. bank.conf is parsed line-by-line and
 # never sourced/eval'd.
@@ -83,13 +82,9 @@ valid_project_slug() {
 }
 
 # Slugify a directory basename toward ^[a-z]+(-[a-z]+)*$, length 3–48.
-# Non-letters become hyphens; digits are dropped as separators. Prints the
-# slug on success; returns 1 when the result is not a valid slug.
 slugify_project_name() {
   local s="$1"
   s="$(printf '%s' "$s" | tr '[:upper:]' '[:lower:]')"
-  # Keep only a-z; everything else (digits, punctuation, spaces) → hyphen.
-  # -E + '-+' (not GNU-only '\+') so BSD sed on macOS collapses runs too.
   s="$(printf '%s' "$s" | sed -E -e 's/[^a-z]/-/g' -e 's/-+/-/g' -e 's/^-//' -e 's/-$//')"
   if valid_project_slug "$s"; then
     printf '%s' "$s"
@@ -99,7 +94,6 @@ slugify_project_name() {
 }
 
 # BANK_AGENTMEMORY_URL: http(s)://host[:port] only (optional trailing / stripped).
-# Returns 0 and prints the normalized URL, or 1 when malformed.
 normalize_agentmemory_url() {
   local u="$1"
   if [[ "$u" == */ && "$u" != "/" && "$u" != http:// && "$u" != https:// ]]; then
@@ -112,11 +106,6 @@ normalize_agentmemory_url() {
   return 1
 }
 
-
-# Optional bearer auth: when AGENTMEMORY_SECRET is set in the environment (the
-# same variable the agentmemory server reads), write the header to a 0600 temp
-# file and pass it with `-H @file` so the secret never appears in argv / ps.
-# Never read from bank.conf (that file may be committed).
 am_auth_header_file() {
   local f
   [[ -n "${AGENTMEMORY_SECRET:-}" ]] || return 1
@@ -126,9 +115,6 @@ am_auth_header_file() {
   printf '%s' "$f"
 }
 
-# Probe GET <url>/agentmemory/health with short timeouts. Prints detail to
-# stdout; exit 0 = reachable (HTTP success), 1 = not. Also requires a working
-# python3, which bank push needs to JSON-encode remember bodies.
 probe_agentmemory_health() {
   local base="$1"
   local url="${base}/agentmemory/health"
@@ -152,7 +138,6 @@ probe_agentmemory_health() {
     return 0
   fi
   if [[ -n "$out" ]]; then
-    # One-line detail for bank-status.md (no newlines).
     printf '%s' "$(printf '%s' "$out" | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
   else
     printf '%s' "health probe failed (curl exit $rc)"
@@ -160,31 +145,61 @@ probe_agentmemory_health() {
   return 1
 }
 
-# Extract flat frontmatter `project:` from the first --- … --- block.
-note_project_field() {
+# Extract flat frontmatter field from the first --- … --- block.
+note_fm_field() {
   local f="$1"
-  awk '
+  local key="$2"
+  awk -v key="$key" '
     /^---[[:space:]]*$/ {
       c++
       if (c >= 2) exit
       next
     }
-    c == 1 && /^project:[[:space:]]*/ {
-      sub(/^project:[[:space:]]*/, "")
-      sub(/[[:space:]]+$/, "")
-      print
-      exit
+    c == 1 {
+      prefix = key ":"
+      if (index($0, prefix) == 1 || $0 ~ ("^" key ":[[:space:]]")) {
+        sub("^" key ":[[:space:]]*", "")
+        sub(/[[:space:]]+$/, "")
+        print
+        exit
+      }
     }
   ' "$f" 2>/dev/null || true
 }
 
-# Advisory: notes in BANK_PATH whose frontmatter project differs from expected.
-# Prints warning tokens (space-separated) to stdout; also echoes to stderr.
+note_project_field() { note_fm_field "$1" "project"; }
+note_scope_field() { note_fm_field "$1" "scope"; }
+
+# Probe one vault path: prints detail; exit 0 = reachable, 1 = not.
+# Sets nothing global — caller interprets detail + exit.
+probe_vault_path() {
+  local path="$1"
+  if [[ -z "$path" ]]; then
+    printf '%s' "path not set"
+    return 1
+  elif [[ ! -d "$path" ]]; then
+    printf '%s' "path does not exist: $path"
+    return 1
+  elif [[ ! -w "$path" ]]; then
+    printf '%s' "path exists but is not writable: $path"
+    return 1
+  fi
+  printf '%s' "vault directory exists and is writable"
+  return 0
+}
+
+# Advisory foreign-project warnings for one path.
+# expected_a / expected_b: when both non-empty (same-path dual lane), accept
+# either name; otherwise if scope is atry use expected_atry, else expected_proj.
+# When only one expected is set, that name is required.
+# Prints warning tokens (space-separated) to stdout; echoes to stderr.
 collect_foreign_project_warnings() {
   local bank_path="$1"
-  local expected="$2"
-  local warnings="" note proj base
-  [[ -n "$expected" && -d "$bank_path" ]] || {
+  local expected_proj="$2"
+  local expected_atry="$3"
+  local same_path="$4" # "1" when project and atry paths are identical
+  local warnings="" note proj scope base expected
+  [[ -d "$bank_path" ]] || {
     printf '%s' ""
     return 0
   }
@@ -192,23 +207,62 @@ collect_foreign_project_warnings() {
     [[ -f "$note" ]] || continue
     proj="$(note_project_field "$note")"
     [[ -n "$proj" ]] || continue
-    if [[ "$proj" != "$expected" ]]; then
-      base="$(basename "$note")"
-      echo "bank-check: warning: foreign project '$proj' in $base (expected '$expected')" >&2
-      if [[ -z "$warnings" ]]; then
-        warnings="foreign-project:$base"
-      else
-        warnings="$warnings foreign-project:$base"
+    scope="$(note_scope_field "$note")"
+    expected=""
+    if [[ "$same_path" == "1" && -n "$expected_proj" && -n "$expected_atry" ]]; then
+      if [[ "$proj" == "$expected_proj" || "$proj" == "$expected_atry" ]]; then
+        continue
       fi
+      # Prefer scope to phrase the expected name in the warning.
+      if [[ "$scope" == "atry" ]]; then
+        expected="$expected_atry"
+      else
+        expected="$expected_proj"
+      fi
+    elif [[ -n "$expected_proj" && -z "$expected_atry" ]]; then
+      expected="$expected_proj"
+      [[ "$proj" == "$expected" ]] && continue
+    elif [[ -z "$expected_proj" && -n "$expected_atry" ]]; then
+      expected="$expected_atry"
+      [[ "$proj" == "$expected" ]] && continue
+    else
+      continue
+    fi
+    base="$(basename "$note")"
+    echo "bank-check: warning: foreign project '$proj' in $base (expected '$expected')" >&2
+    if [[ -z "$warnings" ]]; then
+      warnings="foreign-project:$base"
+    else
+      warnings="$warnings foreign-project:$base"
     fi
   done
   printf '%s' "$warnings"
 }
 
+# Append space-separated warning tokens (skip empties / duplicates not required).
+append_warnings() {
+  local cur="$1"
+  local add="$2"
+  if [[ -z "$add" ]]; then
+    printf '%s' "$cur"
+  elif [[ -z "$cur" ]]; then
+    printf '%s' "$add"
+  else
+    printf '%s %s' "$cur" "$add"
+  fi
+}
+
+# write_status args (positional, bash 3.2):
+# 1 configured 2 bank_type 3 bank_path 4 bank_endpoint
+# 5 reachable 6 detail 7 project_name 8 project_source 9 warnings
+# 10 am_url 11 am_reachable 12 am_detail
+# 13 atry_path 14 atry_reachable 15 atry_detail 16 atry_name 17 atry_name_source
 write_status() {
   local configured="$1" bank_type="$2" bank_path="$3" bank_endpoint="$4"
   local reachable="$5" detail="$6" project_name="$7" project_source="$8" warnings="$9"
   local am_url="${10}" am_reachable="${11}" am_detail="${12}"
+  local atry_path="${13}" atry_reachable="${14}" atry_detail="${15}"
+  local atry_name="${16}" atry_name_source="${17}"
   {
     printf 'configured: %s\n' "$configured"
     printf 'bank_type: %s\n' "$bank_type"
@@ -217,6 +271,11 @@ write_status() {
     printf 'project_name: %s\n' "$project_name"
     printf 'project_source: %s\n' "$project_source"
     printf 'reachable: %s\n' "$reachable"
+    printf 'atry_path: %s\n' "$atry_path"
+    printf 'atry_reachable: %s\n' "$atry_reachable"
+    printf 'atry_detail: %s\n' "$atry_detail"
+    printf 'atry_name: %s\n' "$atry_name"
+    printf 'atry_name_source: %s\n' "$atry_name_source"
     printf 'agentmemory_url: %s\n' "$am_url"
     printf 'agentmemory_reachable: %s\n' "$am_reachable"
     printf 'agentmemory_detail: %s\n' "$am_detail"
@@ -229,33 +288,25 @@ write_status() {
 
 if [[ ! -f "$BANK_CONF" ]]; then
   write_status "false" "none" "" "" "false" "no bank.conf found at $BANK_CONF" "" "none" "" \
-    "" "false" "not configured"
+    "" "false" "not configured" \
+    "" "false" "not configured" "" "none"
   echo "bank-check: not configured (no bank.conf) -> $BANK_STATUS"
   exit 0
 fi
 
 # --- Parse bank.conf without sourcing it ---
-# Only lines of the exact form BANK_<UPPER_WITH_UNDERSCORE>=<value> are
-# accepted. <value> may not contain shell metacharacters. Blank lines and
-# '#' comments are skipped. Anything else is a hard refusal (exit 1),
-# matching the "refuse rather than guess" posture used for targets.conf.
 BANK_TYPE=""
 BANK_PATH=""
 BANK_ENDPOINT=""
 BANK_PROJECT_NAME=""
+BANK_ATRY_PATH=""
+BANK_ATRY_NAME=""
 BANK_AGENTMEMORY_URL=""
 lineno=0
 malformed=0
 malformed_reason=""
 while IFS= read -r line || [[ -n "$line" ]]; do
   lineno=$((lineno + 1))
-  # Skip blank lines and whole-line comments. Leading whitespace is stripped
-  # first on purpose: the glob [[:space:]]*'#'* matches "one space, anything,
-  # then a '#'", so an indented key line that merely contained a '#' later on
-  # was silently swallowed as a comment and its value dropped without any
-  # error -- the opposite of this parser's "refuse rather than guess" posture.
-  # Keys themselves must still start at column 0; an indented key line is a
-  # hard refusal below, not a silent skip.
   trimmed="$line"
   while [[ "$trimmed" == [[:space:]]* ]]; do
     trimmed="${trimmed#?}"
@@ -266,7 +317,6 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   if [[ "$line" =~ ^BANK_[A-Z_]+=.*$ ]]; then
     key="${line%%=*}"
     val="${line#*=}"
-    # Strip one layer of matching quotes if present.
     if [[ "$val" == \"*\" && ${#val} -ge 2 ]]; then
       val="${val#\"}"
       val="${val%\"}"
@@ -287,6 +337,8 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     BANK_PATH) BANK_PATH="$val" ;;
     BANK_ENDPOINT) BANK_ENDPOINT="$val" ;;
     BANK_PROJECT_NAME) BANK_PROJECT_NAME="$val" ;;
+    BANK_ATRY_PATH) BANK_ATRY_PATH="$val" ;;
+    BANK_ATRY_NAME) BANK_ATRY_NAME="$val" ;;
     BANK_AGENTMEMORY_URL) BANK_AGENTMEMORY_URL="$val" ;;
     *) ;;
     esac
@@ -299,24 +351,21 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 done <"$BANK_CONF"
 
 if [[ "$malformed" -eq 1 ]]; then
-  # Root-cause fix: a malformed bank.conf must not leave a stale prior status
-  # in place (e.g. a leftover "reachable: true" from before the config broke).
-  # Refusing to parse (exit 1, for any caller/script that checks the exit
-  # code) is orthogonal to recording the truth (bank-status.md must always
-  # reflect the most recent check, successful or not).
   write_status "true" "" "" "" "false" "bank.conf malformed ($malformed_reason) -- fix bank.conf and re-run bank-check.sh" "" "none" "" \
-    "" "false" "not checked (malformed config)"
+    "" "false" "not checked (malformed config)" \
+    "" "false" "not checked (malformed config)" "" "none"
   echo "Refusing to parse bank.conf further. Fix the offending line above." >&2
   echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
   exit 1
 fi
 
-# Normalize BANK_PATH (strip one trailing slash) before any probe or status write.
 if [[ -n "$BANK_PATH" ]]; then
   BANK_PATH="$(normalize_bank_path "$BANK_PATH")"
 fi
+if [[ -n "$BANK_ATRY_PATH" ]]; then
+  BANK_ATRY_PATH="$(normalize_bank_path "$BANK_ATRY_PATH")"
+fi
 
-# Optional BANK_AGENTMEMORY_URL: empty is fine; non-empty must be http(s)://host[:port].
 AM_URL=""
 AM_REACHABLE="false"
 AM_DETAIL="not configured"
@@ -324,22 +373,22 @@ if [[ -n "$BANK_AGENTMEMORY_URL" ]]; then
   if ! AM_URL="$(normalize_agentmemory_url "$BANK_AGENTMEMORY_URL")"; then
     write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
       "bank.conf malformed (BANK_AGENTMEMORY_URL '$BANK_AGENTMEMORY_URL' is not http(s)://host[:port]) -- fix bank.conf and re-run bank-check.sh" \
-      "" "none" "" "" "false" "not checked (malformed URL)"
+      "" "none" "" "" "false" "not checked (malformed URL)" \
+      "$BANK_ATRY_PATH" "false" "not checked (malformed config)" "" "none"
     echo "Error: BANK_AGENTMEMORY_URL '$BANK_AGENTMEMORY_URL' is not a valid agentmemory URL (expected http(s)://host[:port])" >&2
     echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
     exit 1
   fi
 fi
 
-# Optional BANK_PROJECT_NAME: when set must be a slug; when unset, default to
-# the slugified repo-root directory name (project_source: config|default).
 PROJECT_NAME=""
 PROJECT_SOURCE="none"
 if [[ -n "$BANK_PROJECT_NAME" ]]; then
   if ! valid_project_slug "$BANK_PROJECT_NAME"; then
     write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
       "bank.conf malformed (BANK_PROJECT_NAME '$BANK_PROJECT_NAME' is not a valid slug ^[a-z]+(-[a-z]+)*\$, length 3-48) -- fix bank.conf and re-run bank-check.sh" \
-      "" "none" "" "$AM_URL" "false" "not checked (malformed config)"
+      "" "none" "" "$AM_URL" "false" "not checked (malformed config)" \
+      "$BANK_ATRY_PATH" "false" "not checked (malformed config)" "" "none"
     echo "Error: BANK_PROJECT_NAME '$BANK_PROJECT_NAME' is not a valid project slug (^[a-z]+(-[a-z]+)*\$, length 3-48)" >&2
     echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
     exit 1
@@ -347,7 +396,6 @@ if [[ -n "$BANK_PROJECT_NAME" ]]; then
   PROJECT_NAME="$BANK_PROJECT_NAME"
   PROJECT_SOURCE="config"
 else
-  # Default from the directory that contains .agent-relay/ (repo root).
   REPO_BASENAME="$(basename "$(dirname "$AGENT_RELAY_DIR")")"
   if PROJECT_NAME="$(slugify_project_name "$REPO_BASENAME")"; then
     PROJECT_SOURCE="default"
@@ -357,72 +405,130 @@ else
   fi
 fi
 
+ATRY_NAME=""
+ATRY_NAME_SOURCE="none"
+if [[ -n "$BANK_ATRY_NAME" ]]; then
+  if ! valid_project_slug "$BANK_ATRY_NAME"; then
+    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
+      "bank.conf malformed (BANK_ATRY_NAME '$BANK_ATRY_NAME' is not a valid slug ^[a-z]+(-[a-z]+)*\$, length 3-48) -- fix bank.conf and re-run bank-check.sh" \
+      "$PROJECT_NAME" "$PROJECT_SOURCE" "" "$AM_URL" "false" "not checked (malformed config)" \
+      "$BANK_ATRY_PATH" "false" "not checked (malformed config)" "" "none"
+    echo "Error: BANK_ATRY_NAME '$BANK_ATRY_NAME' is not a valid project slug (^[a-z]+(-[a-z]+)*\$, length 3-48)" >&2
+    echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
+    exit 1
+  fi
+  ATRY_NAME="$BANK_ATRY_NAME"
+  ATRY_NAME_SOURCE="config"
+fi
+
+# When BANK_ATRY_PATH is set, BANK_ATRY_NAME must be a valid slug (already
+# validated above if set; refuse if path set and name missing).
+if [[ -n "$BANK_ATRY_PATH" && -z "$ATRY_NAME" ]]; then
+  write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
+    "bank.conf malformed (BANK_ATRY_PATH is set but BANK_ATRY_NAME is missing or empty) -- fix bank.conf and re-run bank-check.sh" \
+    "$PROJECT_NAME" "$PROJECT_SOURCE" "" "$AM_URL" "false" "not checked (malformed config)" \
+    "$BANK_ATRY_PATH" "false" "not checked (malformed config)" "" "none"
+  echo "Error: BANK_ATRY_PATH is set but BANK_ATRY_NAME is missing (required when atry path is configured)" >&2
+  echo "bank-check: wrote $BANK_STATUS (reachable: false, malformed config)" >&2
+  exit 1
+fi
+
 WARNINGS=""
 
-# Probe agentmemory when a valid URL is configured (independent of BANK_TYPE).
 if [[ -n "$AM_URL" ]]; then
   if AM_DETAIL="$(probe_agentmemory_health "$AM_URL")"; then
     AM_REACHABLE="true"
   else
     AM_REACHABLE="false"
-    # AM_DETAIL already set by probe on failure.
-    :
   fi
+fi
+
+# Probe atry vault independently of BANK_TYPE (path may be set for atry-only
+# dogfooding alongside agentmemory-only / later vault type).
+ATRY_REACHABLE="false"
+ATRY_DETAIL="not configured"
+if [[ -n "$BANK_ATRY_PATH" ]]; then
+  if ATRY_DETAIL="$(probe_vault_path "$BANK_ATRY_PATH")"; then
+    ATRY_REACHABLE="true"
+  else
+    ATRY_REACHABLE="false"
+  fi
+elif [[ -n "$ATRY_NAME" ]]; then
+  ATRY_DETAIL="BANK_ATRY_PATH not set (name only; agentmemory may still use atry_name)"
 fi
 
 # Agentmemory-only: BANK_TYPE may be absent when BANK_AGENTMEMORY_URL is set.
 if [[ -z "$BANK_TYPE" ]]; then
   if [[ -n "$AM_URL" ]]; then
+    # Still record atry vault probe results when path was set.
+    if [[ "$ATRY_REACHABLE" == "true" && -n "$ATRY_NAME" ]]; then
+      WARNINGS="$(collect_foreign_project_warnings "$BANK_ATRY_PATH" "" "$ATRY_NAME" "0")"
+    fi
     write_status "true" "" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
       "agentmemory-only (no BANK_TYPE); vault sink not configured" \
-      "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
-      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
+      "$PROJECT_NAME" "$PROJECT_SOURCE" "$WARNINGS" \
+      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL" \
+      "$BANK_ATRY_PATH" "$ATRY_REACHABLE" "$ATRY_DETAIL" "$ATRY_NAME" "$ATRY_NAME_SOURCE"
     echo "bank-check: wrote $BANK_STATUS"
     cat "$BANK_STATUS"
     exit 0
   fi
   write_status "true" "" "$BANK_PATH" "$BANK_ENDPOINT" "false" "bank.conf has no BANK_TYPE" \
     "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
-    "" "false" "not configured"
+    "" "false" "not configured" \
+    "$BANK_ATRY_PATH" "$ATRY_REACHABLE" "$ATRY_DETAIL" "$ATRY_NAME" "$ATRY_NAME_SOURCE"
   echo "bank-check: bank.conf present but BANK_TYPE is missing -> $BANK_STATUS"
   exit 0
+fi
+
+REACHABLE="false"
+DETAIL=""
+SAME_PATH="0"
+if [[ -n "$BANK_PATH" && -n "$BANK_ATRY_PATH" && "$BANK_PATH" == "$BANK_ATRY_PATH" ]]; then
+  SAME_PATH="1"
 fi
 
 case "$BANK_TYPE" in
 obsidian-vault)
   if [[ -z "$BANK_PATH" ]]; then
-    write_status "true" "$BANK_TYPE" "" "$BANK_ENDPOINT" "false" "BANK_PATH not set for obsidian-vault" \
-      "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
-      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
-  elif [[ ! -d "$BANK_PATH" ]]; then
-    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path does not exist: $BANK_PATH" \
-      "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
-      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
-  # Caveat: [[ -w "$BANK_PATH" ]] tests writability via file permissions, but
-  # when running as root (e.g., in some CI or container setups), it may report
-  # true even for read-only filesystems or restricted mounts. This is a known
-  # limitation of the reachability probe.
-  elif [[ ! -w "$BANK_PATH" ]]; then
-    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "path exists but is not writable: $BANK_PATH" \
-      "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
-      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
+    DETAIL="BANK_PATH not set for obsidian-vault"
+    REACHABLE="false"
+  elif DETAIL="$(probe_vault_path "$BANK_PATH")"; then
+    REACHABLE="true"
   else
-    WARNINGS="$(collect_foreign_project_warnings "$BANK_PATH" "$PROJECT_NAME")"
-    write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "true" "vault directory exists and is writable" \
-      "$PROJECT_NAME" "$PROJECT_SOURCE" "$WARNINGS" \
-      "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
+    REACHABLE="false"
   fi
+
+  WARNINGS=""
+  if [[ "$SAME_PATH" == "1" && "$REACHABLE" == "true" ]]; then
+    WARNINGS="$(collect_foreign_project_warnings "$BANK_PATH" "$PROJECT_NAME" "$ATRY_NAME" "1")"
+  else
+    if [[ "$REACHABLE" == "true" && -n "$PROJECT_NAME" ]]; then
+      WARNINGS="$(collect_foreign_project_warnings "$BANK_PATH" "$PROJECT_NAME" "" "0")"
+    fi
+    if [[ "$ATRY_REACHABLE" == "true" && -n "$ATRY_NAME" ]]; then
+      w2="$(collect_foreign_project_warnings "$BANK_ATRY_PATH" "" "$ATRY_NAME" "0")"
+      WARNINGS="$(append_warnings "$WARNINGS" "$w2")"
+    fi
+  fi
+
+  write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "$REACHABLE" "$DETAIL" \
+    "$PROJECT_NAME" "$PROJECT_SOURCE" "$WARNINGS" \
+    "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL" \
+    "$BANK_ATRY_PATH" "$ATRY_REACHABLE" "$ATRY_DETAIL" "$ATRY_NAME" "$ATRY_NAME_SOURCE"
   ;;
 lightrag-http)
   write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" \
     "backend '$BANK_TYPE' is declared but has no driver in this MVP (only obsidian-vault is implemented); see docs/bank.md" \
     "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
-    "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
+    "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL" \
+    "$BANK_ATRY_PATH" "$ATRY_REACHABLE" "$ATRY_DETAIL" "$ATRY_NAME" "$ATRY_NAME_SOURCE"
   ;;
 *)
   write_status "true" "$BANK_TYPE" "$BANK_PATH" "$BANK_ENDPOINT" "false" "unknown BANK_TYPE '$BANK_TYPE'" \
     "$PROJECT_NAME" "$PROJECT_SOURCE" "" \
-    "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL"
+    "$AM_URL" "$AM_REACHABLE" "$AM_DETAIL" \
+    "$BANK_ATRY_PATH" "$ATRY_REACHABLE" "$ATRY_DETAIL" "$ATRY_NAME" "$ATRY_NAME_SOURCE"
   ;;
 esac
 

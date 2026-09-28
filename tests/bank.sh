@@ -207,14 +207,23 @@ set -e
 [[ "$(field "$STATUS" reachable)" == "false" ]] && pass "refused indented key line records reachable: false" || fail "refused indented key line records reachable: false"
 
 # --- helper: write a minimal valid note ---
+# Optional 4th arg is scope (default: atry for process, else project).
+# Uses YMD/RID/RUN_ID_BASE from the caller (set below before first use).
 write_note() {
-  local dest="$1" type="$2" project="${3:-}"
+  local dest="$1" type="$2" project="${3:-}" scope="${4:-}"
   local status_line=""
   case "$type" in
   run) status_line="" ;;
   decision | convention | process) status_line="status: active" ;;
   pitfall | open-item) status_line="status: open" ;;
   esac
+  if [[ -z "$scope" ]]; then
+    if [[ "$type" == "process" ]]; then
+      scope=atry
+    else
+      scope=project
+    fi
+  fi
   {
     printf -- '---\n'
     printf 'type: %s\n' "$type"
@@ -225,7 +234,9 @@ write_note() {
       printf 'key: sample-key\n'
       printf '%s\n' "$status_line"
     fi
+    printf 'run_id: %s\n' "$RUN_ID_BASE"
     printf 'date: 2026-09-27\n'
+    printf 'scope: %s\n' "$scope"
     printf -- '---\n\n'
     printf '## Body\n\nunchanged-body-marker\n'
   } >"$dest"
@@ -235,8 +246,10 @@ NOTES="$T/notes"
 mkdir -p "$NOTES"
 YMD=20260927
 RID=1790505168
-RUN_NOTE="${YMD}-${RID}-bank-flat-push.md"
+RUN_ID_BASE="${YMD}-${RID}-bank-flat-push"
+RUN_NOTE="${RUN_ID_BASE}.md"
 DEC_NOTE="${YMD}-${RID}-choose-flat-layout.md"
+PROC_NOTE="${YMD}-${RID}-improve-push-routing.md"
 
 # --- bank-push: flat layout when reachable ---
 cat >"$REPO/.agent-relay/bank.conf" <<EOF
@@ -827,6 +840,319 @@ MISSING_DIR="$T/not-created-vault"
 "$ATRY" bank init "$INIT_REPO" --path "$MISSING_DIR" >/dev/null 2>"$T/init-missing.err" || true
 [[ ! -e "$MISSING_DIR" ]] && pass "bank init never creates BANK_PATH" || fail "bank init never creates BANK_PATH"
 grep -q "does not exist" "$T/init-missing.err" && pass "bank init warns about missing BANK_PATH" || fail "bank init warns about missing BANK_PATH"
+
+# =============================================================================
+# dual bank lanes (BANK_ATRY_*)
+# =============================================================================
+ATRY_VAULT="$T/atry-vault"
+mkdir -p "$ATRY_VAULT"
+
+# --- check: atry path/name ---
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_PROJECT_NAME=agent-relay
+BANK_ATRY_PATH=$ATRY_VAULT
+BANK_ATRY_NAME=atry-self
+EOF
+bank_check "$REPO" >/dev/null
+[[ "$(field "$STATUS" atry_reachable)" == "true" ]] && pass "atry_reachable: true for writable atry vault" || fail "atry_reachable: true for writable atry vault"
+[[ "$(field "$STATUS" atry_path)" == "$ATRY_VAULT" ]] && pass "atry_path recorded" || fail "atry_path recorded"
+[[ "$(field "$STATUS" atry_name)" == "atry-self" ]] && pass "atry_name from config" || fail "atry_name from config"
+[[ "$(field "$STATUS" atry_name_source)" == "config" ]] && pass "atry_name_source: config" || fail "atry_name_source: config"
+
+# path without name → malformed
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_ATRY_PATH=$ATRY_VAULT
+EOF
+set +e
+bank_check "$REPO" >/dev/null 2>&1
+ATRY_NO_NAME_RC=$?
+set -e
+[[ "$ATRY_NO_NAME_RC" -eq 1 ]] && pass "BANK_ATRY_PATH without BANK_ATRY_NAME exits 1" || fail "BANK_ATRY_PATH without BANK_ATRY_NAME exits 1 (got $ATRY_NO_NAME_RC)"
+
+# invalid atry name
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_ATRY_PATH=$ATRY_VAULT
+BANK_ATRY_NAME=Bad_Name
+EOF
+set +e
+bank_check "$REPO" >/dev/null 2>&1
+ATRY_BAD_RC=$?
+set -e
+[[ "$ATRY_BAD_RC" -eq 1 ]] && pass "invalid BANK_ATRY_NAME exits 1" || fail "invalid BANK_ATRY_NAME exits 1 (got $ATRY_BAD_RC)"
+
+# --- push routes by scope ---
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_PROJECT_NAME=agent-relay
+BANK_ATRY_PATH=$ATRY_VAULT
+BANK_ATRY_NAME=atry-self
+EOF
+bank_check "$REPO" >/dev/null
+rm -f "$VAULT"/*.md "$ATRY_VAULT"/*.md
+ROUTE_NOTES="$T/route-notes"
+mkdir -p "$ROUTE_NOTES"
+write_note "$ROUTE_NOTES/$RUN_NOTE" run agent-relay project
+write_note "$ROUTE_NOTES/$DEC_NOTE" decision agent-relay project
+write_note "$ROUTE_NOTES/$PROC_NOTE" process atry-self atry
+if bank_push "$REPO" "$ROUTE_NOTES" >/dev/null; then
+  pass "dual-lane push exits 0"
+else
+  fail "dual-lane push exits 0"
+fi
+[[ -f "$VAULT/$RUN_NOTE" && -f "$VAULT/$DEC_NOTE" ]] && pass "project-lane notes land in BANK_PATH" || fail "project-lane notes land in BANK_PATH"
+[[ -f "$ATRY_VAULT/$PROC_NOTE" ]] && pass "atry-lane note lands in BANK_ATRY_PATH" || fail "atry-lane note lands in BANK_ATRY_PATH"
+[[ ! -f "$VAULT/$PROC_NOTE" ]] && pass "process note not copied into BANK_PATH" || fail "process note not copied into BANK_PATH"
+[[ ! -f "$ATRY_VAULT/$DEC_NOTE" ]] && pass "decision note not copied into BANK_ATRY_PATH" || fail "decision note not copied into BANK_ATRY_PATH"
+
+# --- equal paths: single write ---
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_PROJECT_NAME=agent-relay
+BANK_ATRY_PATH=$VAULT
+BANK_ATRY_NAME=atry-self
+EOF
+bank_check "$REPO" >/dev/null
+rm -f "$VAULT"/*.md
+EQ_NOTES="$T/eq-notes"
+mkdir -p "$EQ_NOTES"
+write_note "$EQ_NOTES/$RUN_NOTE" run agent-relay project
+write_note "$EQ_NOTES/$PROC_NOTE" process atry-self atry
+EQ_OUT="$(bank_push "$REPO" "$EQ_NOTES" 2>&1)"
+echo "$EQ_OUT" | grep -q "paths equal" && pass "equal-path push reports single vault write" || fail "equal-path push reports single vault write"
+[[ -f "$VAULT/$RUN_NOTE" && -f "$VAULT/$PROC_NOTE" ]] && pass "equal-path writes both lane notes once" || fail "equal-path writes both lane notes once"
+
+# --- validation: missing run_id / scope / process+wrong scope / legacy run: ---
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_PROJECT_NAME=agent-relay
+EOF
+bank_check "$REPO" >/dev/null
+VAL_NOTES="$T/val-notes"
+mkdir -p "$VAL_NOTES"
+{
+  echo '---'
+  echo 'type: decision'
+  echo 'key: no-run-id'
+  echo 'status: active'
+  echo 'date: 2026-09-27'
+  echo 'scope: project'
+  echo '---'
+  echo body
+} >"$VAL_NOTES/${YMD}-${RID}-missing-run-id.md"
+set +e
+bank_push "$REPO" "$VAL_NOTES" >/dev/null 2>&1
+MISS_RUN_RC=$?
+set -e
+[[ "$MISS_RUN_RC" -eq 1 ]] && pass "push refuses missing run_id" || fail "push refuses missing run_id (got $MISS_RUN_RC)"
+
+mkdir -p "$T/val-scope"
+{
+  echo '---'
+  echo 'type: decision'
+  echo 'key: no-scope'
+  echo 'status: active'
+  echo "run_id: $RUN_ID_BASE"
+  echo 'date: 2026-09-27'
+  echo '---'
+  echo body
+} >"$T/val-scope/${YMD}-${RID}-missing-scope.md"
+set +e
+bank_push "$REPO" "$T/val-scope" >/dev/null 2>&1
+MISS_SCOPE_RC=$?
+set -e
+[[ "$MISS_SCOPE_RC" -eq 1 ]] && pass "push refuses missing scope" || fail "push refuses missing scope (got $MISS_SCOPE_RC)"
+
+mkdir -p "$T/val-proc"
+{
+  echo '---'
+  echo 'type: process'
+  echo 'key: wrong-scope'
+  echo 'status: active'
+  echo "run_id: $RUN_ID_BASE"
+  echo 'date: 2026-09-27'
+  echo 'scope: project'
+  echo '---'
+  echo body
+} >"$T/val-proc/${YMD}-${RID}-process-wrong-scope.md"
+set +e
+bank_push "$REPO" "$T/val-proc" >/dev/null 2>&1
+PROC_SCOPE_RC=$?
+set -e
+[[ "$PROC_SCOPE_RC" -eq 1 ]] && pass "push refuses process without scope: atry" || fail "push refuses process without scope: atry (got $PROC_SCOPE_RC)"
+
+mkdir -p "$T/val-legacy"
+{
+  echo '---'
+  echo 'type: decision'
+  echo 'key: legacy-run'
+  echo 'status: active'
+  echo "run: \"[[$RUN_ID_BASE]]\""
+  echo "run_id: $RUN_ID_BASE"
+  echo 'date: 2026-09-27'
+  echo 'scope: project'
+  echo '---'
+  echo body
+} >"$T/val-legacy/${YMD}-${RID}-legacy-run-field.md"
+set +e
+bank_push "$REPO" "$T/val-legacy" >/dev/null 2>&1
+LEGACY_RC=$?
+set -e
+[[ "$LEGACY_RC" -eq 1 ]] && pass "push refuses legacy run: field" || fail "push refuses legacy run: field (got $LEGACY_RC)"
+
+# --- set-status dual-path + cross-lane refuse ---
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_PROJECT_NAME=agent-relay
+BANK_ATRY_PATH=$ATRY_VAULT
+BANK_ATRY_NAME=atry-self
+EOF
+bank_check "$REPO" >/dev/null
+rm -f "$VAULT"/*.md "$ATRY_VAULT"/*.md
+write_note "$ATRY_VAULT/$PROC_NOTE" process atry-self atry
+BY_ATRY="${YMD}-${RID}-later-process.md"
+write_note "$ATRY_VAULT/$BY_ATRY" process atry-self atry
+if bank_set_status "$REPO" "$PROC_NOTE" superseded --by "$BY_ATRY" >/dev/null; then
+  pass "set-status finds note on atry path"
+else
+  fail "set-status finds note on atry path"
+fi
+write_note "$VAULT/$DEC_NOTE" decision agent-relay project
+set +e
+bank_set_status "$REPO" "$DEC_NOTE" superseded --by "$BY_ATRY" >/dev/null 2>"$T/cross-lane.err"
+CROSS_RC=$?
+set -e
+[[ "$CROSS_RC" -eq 1 ]] && pass "set-status refuses cross-lane --by" || fail "set-status refuses cross-lane --by (got $CROSS_RC)"
+grep -q "atry vault path\|same path" "$T/cross-lane.err" && pass "cross-lane --by error names other lane" || fail "cross-lane --by error names other lane"
+
+# --- AM project field per lane ---
+install_curl_stub remember-ok
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_PROJECT_NAME=agent-relay
+BANK_ATRY_PATH=$ATRY_VAULT
+BANK_ATRY_NAME=atry-self
+BANK_AGENTMEMORY_URL=http://127.0.0.1:3111
+EOF
+PATH="$CURL_BIN:$PATH" bank_check "$REPO" >/dev/null
+rm -f "$VAULT"/*.md "$ATRY_VAULT"/*.md "$CURL_LOG"/*
+AM_LANE="$T/am-lane"
+mkdir -p "$AM_LANE"
+write_note "$AM_LANE/$DEC_NOTE" decision agent-relay project
+write_note "$AM_LANE/$PROC_NOTE" process atry-self atry
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_LANE" >/dev/null
+# last remember body is the process note (second); also check urls count
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt")" -eq 2 ]] && pass "AM remember called per note across lanes" || fail "AM remember called per note across lanes"
+if python3 - "$CURL_LOG/last-body.json" <<'PY'
+import json, sys
+b = json.load(open(sys.argv[1]))
+assert b.get("project") == "atry-self", b.get("project")
+assert b.get("type") == "process", b.get("type")
+PY
+then
+  pass "AM project field uses atry_name for scope: atry"
+else
+  fail "AM project field uses atry_name for scope: atry"
+fi
+
+# --- AM skips atry-lane when atry_name unset (project notes still posted) ---
+install_curl_stub remember-ok
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_PROJECT_NAME=agent-relay
+BANK_AGENTMEMORY_URL=http://127.0.0.1:3111
+EOF
+PATH="$CURL_BIN:$PATH" bank_check "$REPO" >/dev/null
+rm -f "$VAULT"/*.md "$CURL_LOG"/*
+AM_SKIP_ATRY="$T/am-skip-atry"
+mkdir -p "$AM_SKIP_ATRY"
+write_note "$AM_SKIP_ATRY/$DEC_NOTE" decision agent-relay project
+write_note "$AM_SKIP_ATRY/$PROC_NOTE" process atry-self atry
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_SKIP_ATRY" >/dev/null 2>"$T/am-skip-atry.err"
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt")" -eq 1 ]] && pass "AM skips atry-lane without atry_name (one remember)" || fail "AM skips atry-lane without atry_name (got $(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0) remembers)"
+grep -q "atry_name not set" "$T/am-skip-atry.err" && pass "AM skip names missing atry_name" || fail "AM skip names missing atry_name"
+if python3 - "$CURL_LOG/last-body.json" <<'PY'
+import json, sys
+b = json.load(open(sys.argv[1]))
+assert b.get("project") == "agent-relay", b.get("project")
+assert b.get("type") == "decision", b.get("type")
+PY
+then
+  pass "AM without atry_name still remembers project-lane note"
+else
+  fail "AM without atry_name still remembers project-lane note"
+fi
+[[ ! -f "$VAULT/$PROC_NOTE" ]] && pass "unset atry does not vault-copy process note" || fail "unset atry does not vault-copy process note"
+
+# --- only atry-lane notes + atry unset: intentional skip, exit 0 (not "all sinks failed") ---
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_TYPE=obsidian-vault
+BANK_PATH=$VAULT
+BANK_PROJECT_NAME=agent-relay
+EOF
+bank_check "$REPO" >/dev/null
+rm -f "$VAULT"/*.md
+ONLY_ATRY="$T/only-atry"
+mkdir -p "$ONLY_ATRY"
+write_note "$ONLY_ATRY/$PROC_NOTE" process atry-self atry
+set +e
+bank_push "$REPO" "$ONLY_ATRY" >/dev/null 2>"$T/only-atry.err"
+ONLY_ATRY_RC=$?
+set -e
+[[ "$ONLY_ATRY_RC" -eq 0 ]] && pass "only atry-lane notes with atry unset exits 0" || fail "only atry-lane notes with atry unset exits 0 (got $ONLY_ATRY_RC)"
+grep -q "atry vault not reachable\|local distill" "$T/only-atry.err" && pass "only-atry unset names local distill skip" || fail "only-atry unset names local distill skip"
+[[ ! -f "$VAULT/$PROC_NOTE" ]] && pass "only-atry unset does not copy into BANK_PATH" || fail "only-atry unset does not copy into BANK_PATH"
+
+# --- short module: slug refused (shared 3–48 slug rule) ---
+mkdir -p "$T/val-mod"
+{
+  echo '---'
+  echo 'type: decision'
+  echo 'key: short-mod'
+  echo 'status: active'
+  echo "run_id: $RUN_ID_BASE"
+  echo 'date: 2026-09-27'
+  echo 'scope: module:ab'
+  echo '---'
+  echo body
+} >"$T/val-mod/${YMD}-${RID}-short-module.md"
+set +e
+bank_push "$REPO" "$T/val-mod" >/dev/null 2>&1
+SHORT_MOD_RC=$?
+set -e
+[[ "$SHORT_MOD_RC" -eq 1 ]] && pass "push refuses module: slug shorter than 3" || fail "push refuses module: slug shorter than 3 (got $SHORT_MOD_RC)"
+
+# --- bank init --atry-path / --atry-name ---
+new_init_repo atry-flags
+ATRY_INIT_VAULT="$T/init-atry-vault"
+mkdir -p "$ATRY_INIT_VAULT"
+if "$ATRY" bank init "$INIT_REPO" --path "$INIT_VAULT" --project my-project \
+  --atry-path "$ATRY_INIT_VAULT" --atry-name atry-self >/dev/null 2>&1; then
+  pass "bank init with atry flags exits 0"
+else
+  fail "bank init with atry flags exits 0"
+fi
+grep -qx "BANK_ATRY_PATH=$ATRY_INIT_VAULT" "$INIT_CONF" && pass "--atry-path written" || fail "--atry-path written"
+grep -qx 'BANK_ATRY_NAME=atry-self' "$INIT_CONF" && pass "--atry-name written" || fail "--atry-name written"
+[[ "$(field "$INIT_REPO/.agent-relay/bank-status.md" atry_reachable)" == "true" ]] && pass "bank init atry_reachable true" || fail "bank init atry_reachable true"
+
+new_init_repo atry-path-only
+set +e
+"$ATRY" bank init "$INIT_REPO" --atry-path "$ATRY_INIT_VAULT" >/dev/null 2>&1
+ATRY_PATH_ONLY_RC=$?
+set -e
+[[ "$ATRY_PATH_ONLY_RC" -eq 1 && ! -e "$INIT_CONF" ]] && pass "bank init --atry-path without --atry-name writes nothing" || fail "bank init --atry-path without --atry-name (rc=$ATRY_PATH_ONLY_RC)"
 
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL BANK TESTS PASSED"

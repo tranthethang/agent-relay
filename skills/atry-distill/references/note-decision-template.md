@@ -6,7 +6,7 @@ status: active
 supersedes:
 superseded_by:
 resolves:
-run: "[[{YMD}-{RUN_ID}-{RUN_SLUG}]]"
+run_id: {YMD}-{RUN_ID}-{RUN_SLUG}
 date: YYYY-MM-DD
 base: <git-ref>
 scope: project
@@ -14,7 +14,7 @@ tags: [atry/decision, project/<name>]
 aliases: [<topic-slug>]
 ---
 
-<!-- template: note-decision. Filename: `{YMD}-{RUN_ID}-<decision-slug>.md` (slug ≠ `RUN_SLUG`). No `#` H1. Copy from the first line; frontmatter must stay on line 1. -->
+<!-- template: note-decision. Filename: `{YMD}-{RUN_ID}-<decision-slug>.md` (slug ≠ `RUN_SLUG`). No `#` H1. Write only when reusable on a later run. `scope` may be `module:<slug>` when narrowed. Copy from the first line; frontmatter must stay on line 1. -->
 
 ## Context
 

@@ -146,13 +146,13 @@ Set it up in a target repo:
 
 Config keys (one `BANK_KEY=value` per line, no inline comments):
 
-| Key                    | Needed                | What it does                                                                        |
-| ---------------------- | --------------------- | ----------------------------------------------------------------------------------- |
-| `BANK_TYPE`            | for the folder sink   | `obsidian-vault` is the only backend with a driver                                  |
-| `BANK_PATH`            | for the folder sink   | Absolute path to an existing, writable folder; notes are written flat into it       |
-| `BANK_PROJECT_NAME`    | no                    | Slug (`a-z` and `-`, 3–48 chars) added to note frontmatter/tags and agentmemory     |
-| `BANK_AGENTMEMORY_URL` | no                    | `http(s)://host[:port]` of an agentmemory server; works with or without `BANK_TYPE` |
-| `BANK_ENDPOINT`        | no (reserved)         | Not used yet                                                                        |
+| Key                    | Needed              | What it does                                                                        |
+| ---------------------- | ------------------- | ----------------------------------------------------------------------------------- |
+| `BANK_TYPE`            | for the folder sink | `obsidian-vault` is the only backend with a driver                                  |
+| `BANK_PATH`            | for the folder sink | Absolute path to an existing, writable folder; notes are written flat into it       |
+| `BANK_PROJECT_NAME`    | no                  | Slug (`a-z` and `-`, 3–48 chars) added to note frontmatter/tags and agentmemory     |
+| `BANK_AGENTMEMORY_URL` | no                  | `http(s)://host[:port]` of an agentmemory server; works with or without `BANK_TYPE` |
+| `BANK_ENDPOINT`        | no (reserved)       | Not used yet                                                                        |
 
 `AGENTMEMORY_SECRET` is an environment variable, not a config key: export it
 only if your agentmemory server requires it. Do not write it into

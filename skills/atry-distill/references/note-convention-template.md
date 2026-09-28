@@ -7,7 +7,7 @@ supersedes:
 superseded_by:
 resolves:
 derived_from:
-run: "[[{YMD}-{RUN_ID}-{RUN_SLUG}]]"
+run_id: {YMD}-{RUN_ID}-{RUN_SLUG}
 date: YYYY-MM-DD
 base: <git-ref>
 scope: project
@@ -15,7 +15,7 @@ tags: [atry/convention, project/<name>]
 aliases: [<topic-slug>]
 ---
 
-<!-- template: note-convention. Filename: `{YMD}-{RUN_ID}-<convention-slug>.md` (slug ≠ `RUN_SLUG`). No `#` H1. `scope` may be `module:<name>` when the rule is not project-wide. Copy from the first line; frontmatter must stay on line 1. -->
+<!-- template: note-convention. Filename: `{YMD}-{RUN_ID}-<convention-slug>.md` (slug ≠ `RUN_SLUG`). No `#` H1. Write only when reusable on a later run. `scope` may be `module:<slug>` when the rule is not project-wide. Copy from the first line; frontmatter must stay on line 1. -->
 
 ## Rule
 

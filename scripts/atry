@@ -16,7 +16,7 @@ Usage:
   atry task-init <id-or-path>
   atry [--session <tag>] [--allow-skipped-deps] claim|steal|update|release|list|rollup|check|report-write|report-list|report-rollup ...
   atry review upsert <file> <"Self-Review"|"Cross-Review"> <YYYY-MM-DD> <body-file|->
-  atry bank init [<start-dir>] [--path <dir>] [--project <slug>] [--agentmemory-url <url>]
+  atry bank init [<start-dir>] [--path <dir>] [--project <slug>] [--atry-path <dir>] [--atry-name <slug>] [--agentmemory-url <url>]
   atry bank check [<start-dir>]
   atry bank push [--vault-only] <start-dir> <notes-dir>
   atry bank set-status <start-dir> <filename> <status> [--by <filename>]

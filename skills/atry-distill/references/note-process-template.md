@@ -1,20 +1,20 @@
 ---
 type: process
-project: <BANK_PROJECT_NAME-or-omit>
+project: <BANK_ATRY_NAME-or-omit>
 key: <topic-slug>
 status: active
 supersedes:
 superseded_by:
 resolves:
-run: "[[{YMD}-{RUN_ID}-{RUN_SLUG}]]"
+run_id: {YMD}-{RUN_ID}-{RUN_SLUG}
 date: YYYY-MM-DD
 base: <git-ref>
-scope: project
-tags: [atry/process, project/<name>]
+scope: atry
+tags: [atry/process, project/<BANK_ATRY_NAME>]
 aliases: [<topic-slug>]
 ---
 
-<!-- template: note-process. Filename: `{YMD}-{RUN_ID}-<process-slug>.md` (slug ≠ `RUN_SLUG`). No `#` H1. Use this type for lessons about atry / the relay workflow itself, not domain rules. Copy from the first line; frontmatter must stay on line 1. -->
+<!-- template: note-process. Filename: `{YMD}-{RUN_ID}-<process-slug>.md` (slug ≠ `RUN_SLUG`). No `#` H1. Always `scope: atry`. Use for actionable suggestions about atry / the relay workflow itself, not domain rules. Soft cap ~1–2 per run; merge by `key` when themes overlap. Copy from the first line; frontmatter must stay on line 1. -->
 
 ## Observation
 
