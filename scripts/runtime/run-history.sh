@@ -6,6 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVE_RUN="$SCRIPT_DIR/resolve-run.sh"
+# shellcheck source=scripts/runtime/diff-size.sh
+source "$SCRIPT_DIR/diff-size.sh"
 
 usage() {
   cat <<'EOF'
@@ -45,18 +47,47 @@ append)
   NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   line="$NOW_ISO stage=$STAGE action=$ACTION"
   HAS_HEAD=0
+  HAS_SIZE=0
   while [[ $# -gt 0 ]]; do
-    case "$1" in head=*) HAS_HEAD=1 ;; esac
+    case "$1" in head=*) HAS_HEAD=1 ;; size=* | size_base=*) HAS_SIZE=1 ;; esac
     line="$line $1"
     shift
   done
 
-  # Record the commit implement starts from, so `atry metrics` can size this
-  # run's change even when several plans share one `base:`. Read-only git.
-  if [[ "$STAGE" == "implement" && "$ACTION" == "started" && "$HAS_HEAD" -eq 0 ]]; then
-    if head_sha="$(GIT_OPTIONAL_LOCKS=0 git -C "$RUN_DIR" rev-parse --verify HEAD 2>/dev/null)"; then
-      line="$line head=$head_sha"
+  # Record HEAD for metrics: implement-start is the diff base; completed on
+  # implement / self-review / cross-review is the run's END. Explicit head= wins.
+  # Read-only git (GIT_OPTIONAL_LOCKS=0).
+  if [[ "$HAS_HEAD" -eq 0 ]]; then
+    should_head=0
+    if [[ "$STAGE" == "implement" && "$ACTION" == "started" ]]; then
+      should_head=1
+    elif [[ "$ACTION" == "completed" ]]; then
+      case "$STAGE" in
+      implement | self-review | cross-review) should_head=1 ;;
+      esac
     fi
+    if [[ "$should_head" -eq 1 ]]; then
+      if head_sha="$(GIT_OPTIONAL_LOCKS=0 git -C "$RUN_DIR" rev-parse --verify HEAD 2>/dev/null)"; then
+        line="$line head=$head_sha"
+      fi
+    fi
+  fi
+
+  # Snapshot the change size when a stage completes, so `atry metrics` does
+  # not depend on when (or whether) the work is committed afterwards:
+  # size_base=<diff base sha> size=<files>/<added>/<deleted>, working tree vs
+  # the diff base (see diff-size.sh). Explicit size=/size_base= wins; any git
+  # failure just skips the snapshot.
+  if [[ "$ACTION" == "completed" && "$HAS_SIZE" -eq 0 ]]; then
+    case "$STAGE" in
+    implement | self-review | cross-review)
+      if size_root="$(diff_size_git_root "$RUN_DIR")" &&
+        size_base="$(diff_size_base "$RUN_DIR" "$size_root")"; then
+        read -r size_f size_a size_d <<<"$(diff_size "$size_root" "$size_base")"
+        line="$line size_base=$size_base size=$size_f/$size_a/$size_d"
+      fi
+      ;;
+    esac
   fi
 
   printf '%s\n' "$line" >>"$RUN_DIR/history.log"

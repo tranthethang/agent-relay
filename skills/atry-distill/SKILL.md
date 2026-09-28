@@ -238,9 +238,11 @@ Do not emit a `run:` wikilink field. Same-lane wikilinks only for
    this stage because bank I/O failed; `$RUN_DIR/distill/` is the local
    record of truth.
 
-1. Once distillation is complete, record completion in `history.log`:
+1. Once distillation is complete, record distill completion, then close the
+   run (`stage: done` / `status: done` in `meta.md`):
    ```bash
    atry history append "$RUN_DIR" distill completed tool=<tool>
+   atry history append "$RUN_DIR" done completed
    ```
 
 ## Non-goals for this skill

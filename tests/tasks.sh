@@ -5,7 +5,7 @@
 #   ./tests/tasks.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT"
 
 ATRY="$ROOT/scripts/atry"
@@ -32,7 +32,24 @@ fail() {
 unset AGENT_RELAY_TEST_STEAL_BARRIER AGENT_RELAY_TEST_STEAL_PAUSE
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/ar-tasks.XXXXXX")"
-cleanup() { rm -rf "$T"; }
+GIT_STATUS_BEFORE=""
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_STATUS_BEFORE="$(git -C "$ROOT" status --porcelain)"
+fi
+cleanup() {
+  local rc=$?
+  rm -rf "$T"
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local after
+    after="$(git -C "$ROOT" status --porcelain)"
+    if [[ "$after" != "$GIT_STATUS_BEFORE" ]]; then
+      echo "FAIL: suite mutated git working tree under $ROOT" >&2
+      printf 'before:\n%s\nafter:\n%s\n' "$GIT_STATUS_BEFORE" "$after" >&2
+      rc=1
+    fi
+  fi
+  exit "$rc"
+}
 trap cleanup EXIT
 
 cd "$T"
@@ -967,6 +984,44 @@ printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=a
 WARN_OUT3="$("$REVIEW_SH" upsert "$WARN_FILE3" Cross-Review "$TODAY" "$T/warn-cross-fenced.md" 2>&1 >/dev/null)"
 [[ -z "$WARN_OUT3" ]] && pass "fenced example provenance is not mistaken for the real prior self-review" || fail "fenced example provenance is not mistaken for the real prior self-review"
 
+# --- CR-1d: Cross-Review tool vs implement-author tool warning ---
+AUTHOR_RUN="$T/author-run"
+mkdir -p "$AUTHOR_RUN"
+cat >"$AUTHOR_RUN/history.log" <<'EOF'
+2026-09-27T10:10:00Z stage=implement action=started tool=cursor
+2026-09-27T10:40:00Z stage=implement action=completed tool=cursor
+EOF
+printf '<!-- relay: stage=cross-review tool=cursor model=other-model base=abc date=%s -->\nCross.\n' "$TODAY" >"$T/warn-cross-author-same.md"
+AUTHOR_OUT="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-same.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT" | grep -qi "implement author" && pass "cross-review same as implement author warns" || fail "cross-review same as implement author warns (got '$AUTHOR_OUT')"
+
+printf '<!-- relay: stage=cross-review tool=claude model=opus base=abc date=%s -->\nCross.\n' "$TODAY" >"$T/warn-cross-author-diff.md"
+AUTHOR_OUT2="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-diff.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT2" | grep -qi "implement author" && fail "different implement author tool is silent" || pass "different implement author tool is silent"
+
+# unknown on either side: no author warning
+cat >"$AUTHOR_RUN/history.log" <<'EOF'
+2026-09-27T10:10:00Z stage=implement action=started tool=unknown
+EOF
+printf '<!-- relay: stage=cross-review tool=cursor model=x base=abc date=%s -->\nCross.\n' "$TODAY" >"$T/warn-cross-author-unk.md"
+AUTHOR_OUT3="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-unk.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT3" | grep -qi "implement author" && fail "unknown implement tool skips author warning" || pass "unknown implement tool skips author warning"
+
+# missing history: fall back to implement-report.md provenance
+rm -f "$AUTHOR_RUN/history.log"
+cat >"$AUTHOR_RUN/implement-report.md" <<'EOF'
+<!-- relay: stage=implement tool=cursor model=x base=abc date=2026-09-27 -->
+done
+EOF
+printf '<!-- relay: stage=cross-review tool=cursor model=y base=abc date=%s -->\nCross.\n' "$TODAY" >"$T/warn-cross-author-fb.md"
+AUTHOR_OUT4="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-fb.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT4" | grep -qi "implement author" && pass "author tool falls back to implement-report" || fail "author tool falls back to implement-report (got '$AUTHOR_OUT4')"
+
+# missing history and report: silent
+rm -f "$AUTHOR_RUN/implement-report.md"
+AUTHOR_OUT5="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-fb.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT5" | grep -qi "implement author" && fail "missing history/report skips author warning" || pass "missing history/report skips author warning"
+
 # --- find-agent-relay-dir.sh: no fallback to $PWD/.agent-relay (T3) ---
 # Deliberately OUTSIDE $T (which has its own .agent-relay/ for the rest of
 # this suite) so nothing above it can be found by accident.
@@ -1413,30 +1468,35 @@ done
 rm -rf "$CROSS_DIR"
 
 # --- CR-2: skill bundle references must not drift; no skill scripts/ ---
-if bash "$ROOT/scripts/maint/sync-references.sh" --check; then
+# Drift/orphan probes mutate a temp copy via --root — never $ROOT.
+SYNC_COPY="$T/sync-root"
+mkdir -p "$SYNC_COPY/docs"
+cp "$ROOT/docs/file-conventions.md" "$SYNC_COPY/docs/"
+cp -R "$ROOT/skills" "$SYNC_COPY/skills"
+if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check; then
   pass "skill bundles in sync with sources"
 else
   fail "skill bundles in sync with sources"
 fi
-_drift_target="$ROOT/skills/atry-implement/references/file-conventions.md"
-cp "$_drift_target" "$T/drift-backup.md"
+_drift_target="$SYNC_COPY/skills/atry-implement/references/file-conventions.md"
 printf '\n<!-- drift -->\n' >>"$_drift_target"
-if bash "$ROOT/scripts/maint/sync-references.sh" --check >/dev/null 2>&1; then
+if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check >/dev/null 2>&1; then
   fail "sync --check detects reference drift"
 else
   pass "sync --check detects reference drift"
 fi
-cp "$T/drift-backup.md" "$_drift_target"
+# Restore drifted file so orphan check is independent
+cp "$ROOT/skills/atry-implement/references/file-conventions.md" "$_drift_target"
 
-# Orphan scripts/ under a skill must fail --check
-mkdir -p "$ROOT/skills/atry-implement/scripts"
-echo '#!/bin/sh' >"$ROOT/skills/atry-implement/scripts/orphan.sh"
-if bash "$ROOT/scripts/maint/sync-references.sh" --check >/dev/null 2>&1; then
+# Orphan scripts/ under a skill must fail --check (on the temp copy only)
+mkdir -p "$SYNC_COPY/skills/atry-implement/scripts"
+echo '#!/bin/sh' >"$SYNC_COPY/skills/atry-implement/scripts/orphan.sh"
+if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check >/dev/null 2>&1; then
   fail "sync --check detects orphan skill scripts/"
 else
   pass "sync --check detects orphan skill scripts/"
 fi
-rm -rf "$ROOT/skills/atry-implement/scripts"
+rm -rf "$SYNC_COPY/skills/atry-implement/scripts"
 
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL TASK TESTS PASSED"

@@ -3,7 +3,7 @@
 #   ./tests/smoke.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT"
 INSTALL="$ROOT/bin/install.sh"
 UNINSTALL="$ROOT/bin/uninstall.sh"
@@ -17,7 +17,24 @@ fail() {
 }
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/ar-smoke.XXXXXX")"
-cleanup() { rm -rf "$T"; }
+GIT_STATUS_BEFORE=""
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_STATUS_BEFORE="$(git -C "$ROOT" status --porcelain)"
+fi
+cleanup() {
+  local rc=$?
+  rm -rf "$T"
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local after
+    after="$(git -C "$ROOT" status --porcelain)"
+    if [[ "$after" != "$GIT_STATUS_BEFORE" ]]; then
+      echo "FAIL: suite mutated git working tree under $ROOT" >&2
+      printf 'before:\n%s\nafter:\n%s\n' "$GIT_STATUS_BEFORE" "$after" >&2
+      rc=1
+    fi
+  fi
+  exit "$rc"
+}
 trap cleanup EXIT
 
 # Isolate installs under a fake HOME so we never touch the real machine.
@@ -75,7 +92,59 @@ check_frontmatter "$HOME/.kiro/skills" "kiro"
 # that files exist), so export the installed shim's directory before calling
 # it -- same as an agent's shell would need to.
 export PATH="$HOME/.local/bin:$PATH"
+VERIFY_MATCH_OUT="$("$VERIFY" 2>&1)" || true
+if echo "$VERIFY_MATCH_OUT" | grep -q '\[OK\] installed ~/.agent-relay matches this clone'; then
+  pass "verify reports clone matches installed"
+else
+  fail "verify reports clone matches installed (got: $VERIFY_MATCH_OUT)"
+fi
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
+
+# Stale install is [WARN] only — mutate installed helper, expect WARN + still exit 0
+cp "$HOME/.agent-relay/lib/run-history.sh" "$T/run-history.sh.bak"
+printf '\n# smoke stale marker\n' >>"$HOME/.agent-relay/lib/run-history.sh"
+set +e
+VERIFY_STALE_OUT="$("$VERIFY" 2>&1)"
+verify_stale_rc=$?
+set -e
+if [[ "$verify_stale_rc" -eq 0 ]] &&
+  echo "$VERIFY_STALE_OUT" | grep -q '\[WARN\] installed lib/run-history.sh differs' &&
+  echo "$VERIFY_STALE_OUT" | grep -q './bin/install.sh'; then
+  pass "verify warns on stale install helper (exit 0)"
+else
+  fail "verify warns on stale install helper (rc=$verify_stale_rc out=$VERIFY_STALE_OUT)"
+fi
+mv "$T/run-history.sh.bak" "$HOME/.agent-relay/lib/run-history.sh"
+printf '0.0.0-stale\n' >"$HOME/.agent-relay/VERSION"
+set +e
+VERIFY_VER_OUT="$("$VERIFY" 2>&1)"
+verify_ver_rc=$?
+set -e
+if [[ "$verify_ver_rc" -eq 0 ]] &&
+  echo "$VERIFY_VER_OUT" | grep -q '\[WARN\] installed VERSION differs' &&
+  echo "$VERIFY_VER_OUT" | grep -q './bin/install.sh'; then
+  pass "verify warns on VERSION mismatch (exit 0)"
+else
+  fail "verify warns on VERSION mismatch (rc=$verify_ver_rc out=$VERIFY_VER_OUT)"
+fi
+cp "$ROOT/VERSION" "$HOME/.agent-relay/VERSION"
+# Missing helper and drifted dispatcher are stale too (not just differing helpers)
+mv "$HOME/.agent-relay/lib/run-metrics.sh" "$T/run-metrics.sh.bak"
+cp "$HOME/.agent-relay/bin/atry" "$T/atry.bak"
+printf '\n# smoke stale marker\n' >>"$HOME/.agent-relay/bin/atry"
+set +e
+VERIFY_MISS_OUT="$("$VERIFY" 2>&1)"
+verify_miss_rc=$?
+set -e
+if [[ "$verify_miss_rc" -eq 0 ]] &&
+  echo "$VERIFY_MISS_OUT" | grep -q '\[WARN\] installed lib/run-metrics.sh is missing' &&
+  echo "$VERIFY_MISS_OUT" | grep -q '\[WARN\] installed bin/atry differs'; then
+  pass "verify warns on missing helper and stale dispatcher (exit 0)"
+else
+  fail "verify warns on missing helper and stale dispatcher (rc=$verify_miss_rc out=$VERIFY_MISS_OUT)"
+fi
+mv "$T/run-metrics.sh.bak" "$HOME/.agent-relay/lib/run-metrics.sh"
+cp "$T/atry.bak" "$HOME/.agent-relay/bin/atry"
 
 # Without any atry on PATH, verify must fail and name the fix. Use a minimal
 # PATH rather than stripping only $HOME/.local/bin: the inherited PATH may

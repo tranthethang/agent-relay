@@ -69,6 +69,13 @@ Today's date: run `date +%F`. Open each Cross-Review section with:
 Use `unknown` when you cannot know the tool or model. This is a record, not
 enforcement — nothing here can verify which tool is running you.
 
+`atry review upsert` also prints a **non-blocking** warning when the
+Cross-Review `tool=` equals the implement author tool (from the latest
+`implement started` line in `history.log`, else the first
+`<!-- relay: stage=implement ` line in `implement-report.md`). Empty or
+`unknown` on either side skips the check. Prefer a different tool than the
+implementer when you can.
+
 ## Instructions
 
 1. Resolve `$RUN_DIR` as above. Record stage start in `history.log`:

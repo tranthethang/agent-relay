@@ -102,6 +102,11 @@ Field definitions:
 - `status`: Lifecycle status (`active`, `done`, or `abandoned`).
 - `base`: Git commit ref from which the work branches or diffs.
 
+`atry history append` updates `stage:` for recognized stages. Appending
+`done completed` also sets `status: done` (distill’s final step). Appending
+an `abandoned` action sets `status: abandoned`. Runs that skip distill are
+closed by a human command, not automatically.
+
 ## `history.log` (Append-Only Event Log)
 
 An optional, append-only log file `history.log` records stage transitions and
@@ -118,7 +123,12 @@ Example:
 ```
 
 Timestamp must be ISO8601 UTC. Use `atry history` to safely append to
-this file.
+this file. On `implement started` and on `implement` / `self-review` /
+`cross-review` `completed`, `atry history append` records `head=` (current
+`HEAD`) automatically unless `head=` was passed explicitly — used by
+`atry metrics` as the change-size base and END. On those `completed` events it
+also records `size_base=<sha> size=<files>/<added>/<deleted>` (working tree
+vs the diff base at that moment), which `atry metrics` prefers.
 
 ## Plan header
 
@@ -302,17 +312,19 @@ tend to recur silently across runs otherwise:
 
 ## Knowledge bank (optional, project-level)
 
-`.agent-relay/bank.conf` and `.agent-relay/bank-status.md` live at the
-`.agent-relay/` root, **not** inside a per-run directory — a bank connection
-is a property of the target repo, not of one run. `bank.conf` is parsed
-line-by-line (never sourced/eval'd) by `atry bank check`; see
+`.agent-relay/bank.conf`, `.agent-relay/bank-status.md`, and (when the
+agentmemory sink has posted) `.agent-relay/bank-agentmemory-sent.tsv` live
+at the `.agent-relay/` root, **not** inside a per-run directory — a bank
+connection is a property of the target repo, not of one run. `bank.conf` is
+parsed line-by-line (never sourced/eval'd) by `atry bank check`; see
 [bank.md](bank.md) for the format, supported `BANK_TYPE` values, dual vault
 lanes (`BANK_PATH`/`BANK_PROJECT_NAME` vs `BANK_ATRY_PATH`/`BANK_ATRY_NAME`),
 status fields (`reachable` / `atry_reachable`, …), push partitioning by
-`scope:`, set-status dual-path lookup, unset-atry skip, path-equal dedupe,
-`--vault-only`, and what "reachable" does and does not mean. `atry-distill`
-is the only skill that reads/writes these files. Note schema (including
-`run_id:` and lane `scope:`): `skills/atry-distill/references/note-schema.md`.
+`scope:`, the agentmemory sent ledger / retry behaviour, set-status
+dual-path lookup, unset-atry skip, path-equal dedupe, `--vault-only`, and
+what "reachable" does and does not mean. `atry-distill` is the only skill
+that reads/writes these files. Note schema (including `run_id:` and lane
+`scope:`): `skills/atry-distill/references/note-schema.md`.
 
 ## Notes
 

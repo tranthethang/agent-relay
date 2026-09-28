@@ -8,6 +8,18 @@ Versions use calendar versioning `YY.MM.DD` (UTC day of release); see
 
 ## [Unreleased]
 
+### Added
+
+- `sync-references.sh --root DIR` (and `AGENT_RELAY_SYNC_ROOT`) so drift/orphan
+  checks can run against a temp copy; test suites assert
+  `git status --porcelain` is unchanged under the real repo.
+- `atry bank push` agentmemory sent ledger
+  (`.agent-relay/bank-agentmemory-sent.tsv`) skips exact
+  server-URL/project/filename/body-hash rows on retry; POST failures no longer abort
+  the remaining notes.
+- `bin/verify.sh` `[WARN]` when a clone's `VERSION` or `scripts/runtime/`
+  differs from `~/.agent-relay` (fix: `./bin/install.sh`; never `[FAIL]`).
+
 ### Changed
 
 - `atry bank push` agentmemory sink now sends a recall-oriented projection
@@ -24,6 +36,25 @@ Versions use calendar versioning `YY.MM.DD` (UTC day of release); see
   are also skipped. Both are intentional skips; exit remains `0`. The
   "no notes eligible" message now covers all skip reasons, not just missing
   `atry_name`.
+- `atry history append` records `head=` on `completed` for `implement`,
+  `self-review`, and `cross-review` (explicit `head=` still wins).
+- `atry history append` also records a `size_base=` / `size=` working-tree
+  snapshot on those `completed` events; `atry metrics` prefers the last
+  snapshot (`diff_end: snapshot`) so committing after review does not empty
+  or shrink the size, then falls back to END `head=` (`diff_end` reserved
+  key; four documented cases including unknowable empty size).
+- `atry bank push` ledger rows include the agentmemory server URL, and
+  `verify.sh` also warns on a missing installed helper or a stale `bin/atry`
+  (cross-review fixes).
+- `atry-distill` ends with `done completed` so `meta.md` closes the run.
+- `atry review` Cross-Review warns when the reviewer's tool matches the
+  implement author's tool (history.log / implement-report fallback).
+
+### Fixed
+
+- Test suites no longer mutate the source tree for sync-references
+  drift/orphan probes (temp `--root` copy + porcelain identity guard).
+- Untracked `.DS_Store`; `.gitignore` ignores it at any depth.
 
 ## [26.09.28] — 2026-09-28
 

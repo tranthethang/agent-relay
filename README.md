@@ -266,7 +266,9 @@ missing). Details: [`docs/installer.md`](docs/installer.md).
   cross-review. Provenance lines are **records**, not enforcement.
   `atry review` prints a **non-blocking** warning when a Cross-Review
   provenance `tool=`/`model=` matches the latest Self-Review in the same file
-  (fence-aware; `unknown` is ignored).
+  (fence-aware; `unknown` is ignored), and when the Cross-Review `tool=`
+  matches the implement author tool from `history.log` (else
+  `implement-report.md`).
 - Parallel claim does not protect overlapping source-file edits.
 - Antigravity’s skills path has moved before; install can “succeed” while the
   app ignores the files.

@@ -273,6 +273,18 @@ write_status_warnings() {
   rm -f "$tmp"
 }
 
+# Temp body / auth-header files for agentmemory POSTs — cleaned on EXIT/INT/TERM.
+AM_BODY=""
+AM_HDR=""
+am_cleanup_temps() {
+  rm -f "${AM_BODY:-}" "${AM_HDR:-}"
+  AM_BODY=""
+  AM_HDR=""
+}
+trap am_cleanup_temps EXIT
+trap 'am_cleanup_temps; exit 130' INT
+trap 'am_cleanup_temps; exit 143' TERM
+
 am_auth_header_file() {
   local f
   [[ -n "${AGENTMEMORY_SECRET:-}" ]] || return 1
@@ -280,6 +292,38 @@ am_auth_header_file() {
   chmod 600 "$f"
   printf 'Authorization: Bearer %s\n' "$AGENTMEMORY_SECRET" >"$f"
   printf '%s' "$f"
+}
+
+am_sha256_file() {
+  local f="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$f" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$f" | awk '{print $1}'
+  else
+    echo "Error: neither shasum nor sha256sum found (needed for agentmemory sent ledger)" >&2
+    return 1
+  fi
+}
+
+# Ledger: url<TAB>project<TAB>filename<TAB>sha256-of-posted-body (skip exact rows on
+# retry). The server URL is part of the key so pointing BANK_AGENTMEMORY_URL at a
+# different server posts every note there instead of silently skipping it.
+AM_LEDGER="$AGENT_RELAY_DIR/bank-agentmemory-sent.tsv"
+
+am_ledger_has() {
+  local url="$1" project="$2" filename="$3" hash="$4" line want
+  [[ -f "$AM_LEDGER" ]] || return 1
+  want="$(printf '%s\t%s\t%s\t%s' "$url" "$project" "$filename" "$hash")"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == "$want" ]] && return 0
+  done <"$AM_LEDGER"
+  return 1
+}
+
+am_ledger_append() {
+  local url="$1" project="$2" filename="$3" hash="$4"
+  printf '%s\t%s\t%s\t%s\n' "$url" "$project" "$filename" "$hash" >>"$AM_LEDGER"
 }
 
 build_remember_body() {
@@ -595,10 +639,15 @@ fi
 # --- agentmemory sink ---
 # Eligibility: skip type:run, skip terminal statuses (not active/open),
 # skip atry-lane without atry_name. Intentional skips are not failures.
+# POST failure: do not break — continue remaining notes, list failures;
+# sink still counts as failed. Local ledger skips exact url/project/filename/
+# body-hash rows already posted (changed content or another server posts again).
 if [[ "$AM_USABLE" -eq 1 ]]; then
   am_failed=0
   am_posted=0
   am_skipped=0
+  am_ledger_skipped=0
+  am_failed_names=""
   for f in "${NOTE_FILES[@]}"; do
     base="$(basename "$f")"
     note_type="$(frontmatter_field "$f" type)"
@@ -631,35 +680,65 @@ if [[ "$AM_USABLE" -eq 1 ]]; then
     else
       am_project="$PROJECT_NAME"
     fi
-    body="$(mktemp "${TMPDIR:-/tmp}/ar-am-body.XXXXXX")"
-    if ! build_remember_body "$f" "$am_project" "$body"; then
+    am_cleanup_temps
+    AM_BODY="$(mktemp "${TMPDIR:-/tmp}/ar-am-body.XXXXXX")"
+    if ! build_remember_body "$f" "$am_project" "$AM_BODY"; then
       echo "bank-push: agentmemory: failed to build body for $base" >&2
-      rm -f "$body"
+      am_cleanup_temps
       am_failed=1
-      break
+      if [[ -z "$am_failed_names" ]]; then
+        am_failed_names="$base"
+      else
+        am_failed_names="$am_failed_names $base"
+      fi
+      continue
+    fi
+    body_hash="$(am_sha256_file "$AM_BODY")" || {
+      echo "bank-push: agentmemory: failed to hash body for $base" >&2
+      am_cleanup_temps
+      am_failed=1
+      if [[ -z "$am_failed_names" ]]; then
+        am_failed_names="$base"
+      else
+        am_failed_names="$am_failed_names $base"
+      fi
+      continue
+    }
+    if am_ledger_has "$AM_URL" "$am_project" "$base" "$body_hash"; then
+      echo "bank-push: agentmemory: skipped $base — already in sent ledger" >&2
+      am_cleanup_temps
+      am_ledger_skipped=$((am_ledger_skipped + 1))
+      continue
     fi
     set +e
+    AM_HDR=""
     if hdr="$(am_auth_header_file)"; then
+      AM_HDR="$hdr"
       curl_out="$(curl -fsS --connect-timeout 2 --max-time 30 \
-        -H 'Content-Type: application/json' -H @"$hdr" \
-        --data-binary @"$body" \
+        -H 'Content-Type: application/json' -H @"$AM_HDR" \
+        --data-binary @"$AM_BODY" \
         "${AM_URL}/agentmemory/remember" 2>&1)"
       curl_rc=$?
-      rm -f "$hdr"
     else
       curl_out="$(curl -fsS --connect-timeout 2 --max-time 30 \
         -H 'Content-Type: application/json' \
-        --data-binary @"$body" \
+        --data-binary @"$AM_BODY" \
         "${AM_URL}/agentmemory/remember" 2>&1)"
       curl_rc=$?
     fi
     set -e
-    rm -f "$body"
+    am_cleanup_temps
     if [[ "$curl_rc" -ne 0 ]]; then
       echo "bank-push: agentmemory: remember failed for $base (curl exit $curl_rc): $(printf '%s' "$curl_out" | tr '\n' ' ')" >&2
       am_failed=1
-      break
+      if [[ -z "$am_failed_names" ]]; then
+        am_failed_names="$base"
+      else
+        am_failed_names="$am_failed_names $base"
+      fi
+      continue
     fi
+    am_ledger_append "$AM_URL" "$am_project" "$base" "$body_hash"
     am_posted=$((am_posted + 1))
     echo "bank-push: agentmemory: remembered $base (project=${am_project:-none})"
   done
@@ -667,11 +746,11 @@ if [[ "$AM_USABLE" -eq 1 ]]; then
     AM_OK=1
     echo "bank-push: agentmemory: ok ($am_posted note(s))"
   elif [[ "$am_failed" -eq 0 ]]; then
-    # Every note was intentionally skipped — not a transfer failure.
-    echo "bank-push: agentmemory: skipped — no notes eligible ($am_skipped skipped)" >&2
+    # Every note was intentionally skipped (eligibility and/or ledger) — not a transfer failure.
+    echo "bank-push: agentmemory: skipped — no notes eligible ($am_skipped skipped, $am_ledger_skipped already sent)" >&2
     AM_OK=1
   else
-    echo "bank-push: agentmemory: failed" >&2
+    echo "bank-push: agentmemory: failed ($am_failed_names)" >&2
   fi
 fi
 
