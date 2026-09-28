@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `atry bank init [<start-dir>] [--path <dir>] [--project <slug>] [--agentmemory-url <url>]`
+  writes `.agent-relay/bank.conf` from the commented template
+  `scripts/runtime/bank.conf.example` (installed with the helpers), validating
+  values first. It never overwrites an existing `bank.conf`, never creates
+  `BANK_PATH`, and runs `atry bank check` once at the end.
+- Docs: README knowledge-bank section now has setup steps and a key table;
+  `docs/bank.md` documents creating `bank.conf` and lists `AGENTMEMORY_SECRET`
+  as an environment variable (never a config key).
+- Optional agentmemory bank sink via `BANK_AGENTMEMORY_URL` in `bank.conf`
+  (`http(s)://host[:port]`). `atry bank check` probes
+  `GET /agentmemory/health`; `atry bank push` POSTs each distilled note to
+  `/agentmemory/remember` (full note + project/type/key/status/tags metadata).
+  Vault and agentmemory are independent sinks (agentmemory-only configs
+  allowed). Exit `2` only when no sink is usable. Confirmed against
+  agentmemory `@0.9.29`. Docs: `docs/bank.md`.
+  Bearer auth is sent when `AGENTMEMORY_SECRET` is set in the environment
+  (header via a temp file, never argv or `bank.conf`); a missing `python3`
+  marks the agentmemory sink unreachable. `atry bank push --vault-only` skips
+  agentmemory, and distill's second push uses it so notes are not duplicated.
+- Optional MCP enrichment steps in `atry-plan`, `atry-self-review`,
+  `atry-cross-review`, and `atry-distill` (`memory_smart_search` /
+  `memory_recall`); optional `## Context used` in the plan template.
+- `atry history append … implement started` now also records `head=<commit>`
+  (read-only `git rev-parse HEAD`); `atry metrics` measures change size from it
+  (`diff_base`) so chained plans sharing one `base:` are sized separately.
+- `atry metrics <run-dir-or-id> [--write <run-note>]` (`scripts/runtime/run-metrics.sh`):
+  deterministic run benchmark fields (stage durations, tools/models, change
+  size, task and review counts; `tokens`/`cost` always empty). Distill runs it
+  with `--write` on the run note. Docs: `docs/metrics.md`. Tests:
+  `tests/metrics.sh` / `make metrics` (also in `make smoke` and CI).
+- Knowledge-bank note schema and copy-and-fill templates under
+  `skills/atry-distill/references/` (`note-schema.md`, `note-*-template.md`):
+  six typed notes (`run`, `decision`, `convention`, `pitfall`, `open-item`,
+  `process`) with YAML frontmatter for flat Obsidian folders.
+- `atry bank set-status <start-dir> <filename> <status> [--by <filename>]` —
+  edits only lifecycle fields on a note already in `BANK_PATH`, storing `--by`
+  as a quoted wikilink and keeping the file's permissions.
+- Optional `BANK_PROJECT_NAME` in `bank.conf` (slug validated by
+  `atry bank check`); `bank-status.md` gains `project_name:`,
+  `project_source:`, `check_warnings:` (written only by `atry bank check`), and
+  `push_warnings:` (written only by `atry bank push`), so neither command
+  erases the other's advisory warnings.
+
+### Changed
+
+- When `BANK_PROJECT_NAME` is unset, `atry bank check` defaults `project_name`
+  to the slugified repo-root basename (`project_source: default`) instead of
+  leaving it empty (`none` remains only when there is no `bank.conf`).
+- `bank-status.md` adds `agentmemory_url:`, `agentmemory_reachable:`, and
+  `agentmemory_detail:` beside vault `reachable:`.
+- `atry bank set-status` does **not** forward lifecycle changes to agentmemory
+  (no status-by-key REST in agentmemory `@0.9.29`); it notes the limitation on
+  stderr when an agentmemory URL is configured.
+- **Breaking (no migrate):** `atry-distill` writes `$RUN_DIR/distill/` (atomic
+  typed notes per `note-schema.md`) instead of a single `distillation.md`.
+  `references/distillation-template.md` is removed. `atry bank push` takes
+  that directory (`atry bank push <start-dir> <notes-dir>`). After a successful
+  push, distill may call `atry bank set-status` for supersession / resolution,
+  then re-pushes once so the bank copy of the run note matches the local one.
+  `process` is classified first, and `resolves` is allowed on every note type
+  except `run`.
+- **Breaking (no migrate):** `atry bank push` is now
+  `atry bank push <start-dir> <notes-dir>`. It validates every note, copies
+  flat into `BANK_PATH` (no `agent-relay/` subfolder, no injected title), and
+  never creates directories. The old
+  `<start-dir> <run-id-or-slug> <title> <body>` interface is removed.
+  Notes whose frontmatter does not open with `---` on line 1 are refused.
+- `atry-plan` "Prior lessons" reads `active` / `open` notes under prior
+  `.agent-relay/*/distill/` directories (newest version per `key`, skipping
+  notes a newer note supersedes or resolves), not `distillation.md`.
+- `atry bank check` strips a trailing `/` from `BANK_PATH`, drops the reserved
+  `agentmemory-cli` type (`lightrag-http` remains), and emits advisory
+  foreign-`project` warnings. `atry bank push` emits orphan + foreign-project
+  warnings the same way.
+- Docs: `docs/bank.md`, README, architecture, overview SVG, and file
+  conventions (`distill/` row).
+
 ### Fixed
 
 - `~/.local/bin/atry` (the installed PATH shim) failed with `Error: cannot

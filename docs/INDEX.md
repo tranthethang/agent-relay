@@ -12,6 +12,7 @@ are in [`AGENTS.md`](../AGENTS.md).
 | [skills-authoring.md](skills-authoring.md) | Edit or add a skill bundle                                                                 |
 | [task-claim.md](task-claim.md)             | Maintain parallel task helpers / locks / `check`                                           |
 | [bank.md](bank.md)                         | Configure/understand the optional knowledge-bank connection (`bank.conf`, `atry-distill`)  |
+| [metrics.md](metrics.md)                   | Understand `atry metrics` keys, sources, caveats, and a Bases benchmark table              |
 | [testing.md](testing.md)                   | Run or extend the offline test suites                                                      |
 | [release.md](release.md)                   | Cut a versioned GitHub release                                                             |
 | [security.md](security.md)                 | Understand trust boundaries (no “secure installer” claim)                                  |

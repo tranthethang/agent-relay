@@ -1,0 +1,43 @@
+# .agent-relay/bank.conf — optional knowledge-bank config for this repo.
+#
+# Format: one BANK_KEY=value per line, key at column 0. Whole-line comments
+# only (a "# ..." after a value becomes part of the value). The file is parsed
+# line by line and never sourced. Full reference: docs/bank.md.
+#
+# Remove the leading "# " from a key line to turn it on, then run:
+#   atry bank check
+# and read .agent-relay/bank-status.md.
+#
+# Two independent vault lanes. Values may be equal when dogfooding; scripts
+# treat equal absolute paths as one filesystem write per filename and still
+# set each note's project: from its lane name. Unset BANK_ATRY_* → atry-lane
+# notes stay in local distill/ only (never fall back into BANK_PATH).
+
+# --- Project lane (domain notes) ----------------------------------------
+# BANK_TYPE: which backend receives notes. Only "obsidian-vault" has a driver.
+# BANK_PATH: absolute path to an existing, writable folder. atry never creates
+#            it or any subfolder; notes are written flat into it.
+# Notes with scope: project or module:<slug> go here (including the run note).
+# BANK_TYPE=obsidian-vault
+# BANK_PATH=/absolute/path/to/your/project-vault-folder
+
+# --- Project name (optional) ----------------------------------------------
+# Lowercase letters and single hyphens, 3-48 characters. Goes into project-lane
+# note frontmatter/tags and scopes agentmemory for those notes. When unset,
+# project-lane notes carry no project field and atry scopes agentmemory by the
+# repo folder name. Several repos may share a name on purpose.
+# BANK_PROJECT_NAME=my-project
+
+# --- Atry lane (process / atry-workflow open-items) ----------------------
+# Independent block. Notes with scope: atry go here (process must be atry).
+# When BANK_ATRY_PATH is set, BANK_ATRY_NAME must be a valid slug.
+# BANK_ATRY_PATH=/absolute/path/to/your/atry-vault-folder
+# BANK_ATRY_NAME=my-atry-project
+
+# --- agentmemory server (optional second sink) ----------------------------
+# http(s)://host[:port], no path. Can be used without BANK_TYPE.
+# If the server runs with AGENTMEMORY_SECRET, export the same variable in the
+# shell that runs atry. Never put the secret in this file.
+# Pushing to agentmemory needs python3. Remember uses the lane's name
+# (BANK_PROJECT_NAME vs BANK_ATRY_NAME) as the project field per note.
+# BANK_AGENTMEMORY_URL=http://127.0.0.1:3111

@@ -44,10 +44,20 @@ append)
 
   NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   line="$NOW_ISO stage=$STAGE action=$ACTION"
+  HAS_HEAD=0
   while [[ $# -gt 0 ]]; do
+    case "$1" in head=*) HAS_HEAD=1 ;; esac
     line="$line $1"
     shift
   done
+
+  # Record the commit implement starts from, so `atry metrics` can size this
+  # run's change even when several plans share one `base:`. Read-only git.
+  if [[ "$STAGE" == "implement" && "$ACTION" == "started" && "$HAS_HEAD" -eq 0 ]]; then
+    if head_sha="$(GIT_OPTIONAL_LOCKS=0 git -C "$RUN_DIR" rev-parse --verify HEAD 2>/dev/null)"; then
+      line="$line head=$head_sha"
+    fi
+  fi
 
   printf '%s\n' "$line" >>"$RUN_DIR/history.log"
 

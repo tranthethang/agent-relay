@@ -5,3 +5,5 @@
 
 # Release build output (scripts/build-release-assets.sh)
 dist/
+
+.DS_Store

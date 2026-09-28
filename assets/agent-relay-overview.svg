@@ -87,7 +87,7 @@
 <text class="faint mono" x="1094" y="488" font-size="15" font-style="italic">(same two files)</text>
 <text class="faint mono" x="1094" y="514" font-size="15">adds § Cross-Review</text>
 <line class="line" x1="1435.0" y1="356" x2="1435.0" y2="402" stroke-width="1" stroke-dasharray="3 4"/>
-<text class="ink mono" x="1348" y="488" font-size="15">distillation.md</text>
+<text class="ink mono" x="1348" y="488" font-size="15">distill/</text>
 <text class="muted" x="60" y="596" font-size="15">Plain markdown files. Commit them with the branch, or add the folder to .gitignore.</text>
 <text class="ink mono" x="60" y="668" font-size="18" font-weight="700">atry</text>
 <text class="muted" x="122" y="668" font-size="17">a small bash CLI the skills call: run ids, dated review sections, task locks when several agents share a run</text>
