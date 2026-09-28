@@ -8,6 +8,23 @@ Versions use calendar versioning `YY.MM.DD` (UTC day of release); see
 
 ## [Unreleased]
 
+### Changed
+
+- `atry bank push` agentmemory sink now sends a recall-oriented projection
+  instead of the full note file. `content` starts with a `<type>: <key>`
+  opener, then the markdown body (frontmatter stripped). `type` is mapped to
+  agentmemory's enum (`decision→architecture`, `convention→pattern`,
+  `pitfall→bug`, `process→workflow`, `open-item→fact`). `concepts` are built
+  from note `tags` (dropping `project/<name>` when `project` is set), plus
+  `key:<slug>`, `status:<value>`, and `module:<slug>` from `scope`. Top-level
+  `key`, `status`, and `tags` fields are no longer sent.
+- `atry bank push` now skips `type: run` notes for the agentmemory sink
+  (per-run metrics; not durable lessons). Notes with `status` outside
+  `active`/`open` (e.g. `superseded`, `deprecated`, `resolved`, or empty)
+  are also skipped. Both are intentional skips; exit remains `0`. The
+  "no notes eligible" message now covers all skip reasons, not just missing
+  `atry_name`.
+
 ## [26.09.28] — 2026-09-28
 
 CalVer cutover release: folds prior SemVer history (`v0.1.0`–`v4.0.0`)
@@ -312,6 +329,7 @@ Releases and tags were removed.
 
 Re-install skill bundles after upgrading. Existing `{YMD}_{RUN_ID}/` folders from
 v2.0.0 still resolve; new runs use the slug format.
+
 - Artifact names inside a run directory are short and stable: `plan.md`,
   `meta.md`, `history.log`, `implement-plan.md`, `implement-report.md`,
   `review-report.md`, `review-walkthrough.md` (no longer

@@ -285,17 +285,31 @@ Checked against agentmemory `@0.9.29` (`src/triggers/api.ts` /
 | Method | Path                    | Role in atry                                                                      |
 | ------ | ----------------------- | --------------------------------------------------------------------------------- |
 | `GET`  | `/agentmemory/health`   | `atry bank check` reachability probe (HTTP 200 unless health is `critical` → 503) |
-| `POST` | `/agentmemory/remember` | `atry bank push` — one call per note                                              |
+| `POST` | `/agentmemory/remember` | `atry bank push` — one call per eligible note                                     |
 
 `POST /agentmemory/remember` body fields atry sends:
 
-- `content` (required) — full note file (frontmatter + body)
+- `content` (required) — recall-oriented projection: `<type>: <key>` opener,
+  blank line, then the markdown body (YAML frontmatter stripped). Vault and
+  `$RUN_DIR/distill/` copies remain full notes.
 - `project` — from the note's lane: `project_name:` for project /
   `module:*` notes, `atry_name:` for `scope: atry` notes (when non-empty)
-- `type`, `key`, `status`, `tags` — from note frontmatter (as metadata;
-  unknown top-level keys are dropped by the server whitelist; durable copy
-  stays in `content`)
-- `concepts` — note tags plus `key:…`, `status:…`, `note-type:…` for search
+- `type` — mapped to agentmemory's enum: `decision→architecture`,
+  `convention→pattern`, `pitfall→bug`, `process→workflow`, `open-item→fact`
+- `concepts` — from note `tags` (dropping `project/<name>` when `project` is
+  set), plus `key:<slug>`, `status:<value>`, and `module:<slug>` when `scope`
+  is `module:*`. Does not include `note-type:…`.
+- `key`, `status`, `tags` are **not** sent as top-level fields.
+
+**Eligibility.** Push skips notes for the agentmemory sink when:
+
+- `type: run` — per-run metrics; not durable lessons
+- `status` is not `active` or `open` (terminal: `superseded`, `deprecated`,
+  `resolved`; empty or unknown status also skips)
+- atry-lane note without `atry_name` set
+
+Intentional skips are not failures; push still exits `0` when every note was
+skipped.
 
 Server-side, remember's own `type` enum is
 `pattern|preference|architecture|bug|workflow|fact`; values outside that set
@@ -404,13 +418,13 @@ No `.base` files are shipped with this repo.
 
 Same honesty standard as [security.md](security.md):
 
-| Surface                               | What you get                                                                                | What you do not get                                                                           |
-| ------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `bank.conf` line parser               | Refuses obvious RCE shapes and non-`BANK_KEY=value` lines before ever writing a status file | A proof that the declared path/endpoint is itself safe, or that pushed content is sound       |
-| `bank-status.md`                      | A point-in-time reachability probe (+ advisory warnings)                                    | A guarantee the bank stays reachable until the push actually runs                             |
-| `atry bank push` obsidian-vault write | Plain markdown files on disk at deterministic flat paths (per lane)                         | Confirmation your notes app indexed them, or that the notes are any good                      |
-| `atry bank push` agentmemory remember | One REST POST per note with full content + lane project metadata                            | Proof the memory was indexed, dedupe across pushes, or status-by-key sync                     |
-| `atry bank set-status`                | Lifecycle fields updated in place on the vault file (either lane)                           | Edits to the run-dir snapshot, agentmemory status forward, or validation of note body quality |
+| Surface                               | What you get                                                                                              | What you do not get                                                                           |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `bank.conf` line parser               | Refuses obvious RCE shapes and non-`BANK_KEY=value` lines before ever writing a status file               | A proof that the declared path/endpoint is itself safe, or that pushed content is sound       |
+| `bank-status.md`                      | A point-in-time reachability probe (+ advisory warnings)                                                  | A guarantee the bank stays reachable until the push actually runs                             |
+| `atry bank push` obsidian-vault write | Plain markdown files on disk at deterministic flat paths (per lane)                                       | Confirmation your notes app indexed them, or that the notes are any good                      |
+| `atry bank push` agentmemory remember | One REST POST per eligible note with projected content + lane `project` + mapped `type` / lean `concepts` | Proof the memory was indexed, dedupe across pushes, or status-by-key sync                     |
+| `atry bank set-status`                | Lifecycle fields updated in place on the vault file (either lane)                                         | Edits to the run-dir snapshot, agentmemory status forward, or validation of note body quality |
 
 ## Adding another backend later
 

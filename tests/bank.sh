@@ -662,20 +662,67 @@ grep -q '/agentmemory/remember' "$CURL_LOG/urls.txt" && pass "remember POST URL"
 if python3 - "$CURL_LOG/last-body.json" <<'PY'
 import json, sys
 b = json.load(open(sys.argv[1]))
-assert "content" in b and b["content"].lstrip().startswith("---"), repr(b.get("content","")[:40])
+# content is a projection: opener line, blank line, then body (no frontmatter)
+assert "content" in b, "missing content"
+lines = b["content"].split("\n")
+assert lines[0] == "decision: sample-key", repr(lines[0])
+assert lines[1] == "", repr(lines[1])
+assert "unchanged-body-marker" in b["content"], "body not included"
+# no frontmatter in projected content
+assert not b["content"].lstrip().startswith("---"), "frontmatter not stripped"
 assert b.get("project") == "agent-relay", b.get("project")
-assert b.get("type") == "decision", b.get("type")
-assert b.get("key") == "sample-key", b.get("key")
-assert b.get("status") == "active", b.get("status")
-assert "atry/decision" in b.get("tags", []), b.get("tags")
-assert any(str(c).startswith("key:") for c in b.get("concepts", [])), b.get("concepts")
+# type mapped to AM enum
+assert b.get("type") == "architecture", b.get("type")
+# key, status, tags NOT sent as top-level fields
+assert "key" not in b, "key should not be top-level"
+assert "status" not in b, "status should not be top-level"
+assert "tags" not in b, "tags should not be top-level"
+# concepts: atry/decision kept, project/agent-relay dropped, key: and status: added
+concepts = b.get("concepts", [])
+assert "atry/decision" in concepts, concepts
+assert not any(c.startswith("project/") for c in concepts), concepts
+assert any(str(c).startswith("key:") for c in concepts), concepts
+assert any(str(c).startswith("status:") for c in concepts), concepts
 PY
 then
-  pass "remember body has content/project/type/key/status/tags/concepts"
+  pass "remember body has projected content/project/mapped-type/lean-concepts"
 else
-  fail "remember body has content/project/type/key/status/tags/concepts"
+  fail "remember body has projected content/project/mapped-type/lean-concepts"
 fi
 [[ ! -f "$VAULT/$DEC_NOTE" ]] && pass "agentmemory-only push does not write vault" || fail "agentmemory-only push does not write vault"
+# --- AM skips type:run notes ---
+install_curl_stub remember-ok
+AM_SKIP_RUN="$T/am-skip-run"
+mkdir -p "$AM_SKIP_RUN"
+write_note "$AM_SKIP_RUN/$RUN_NOTE" run agent-relay
+write_note "$AM_SKIP_RUN/$DEC_NOTE" decision agent-relay
+rm -f "$CURL_LOG"/*
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_SKIP_RUN" >/dev/null 2>"$T/skip-run.err"
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0)" -eq 1 ]] && pass "AM skips type:run (one remember for decision)" || fail "AM skips type:run (expected 1 remember)"
+grep -q "type:run not remembered" "$T/skip-run.err" && pass "AM skip:run reports on stderr" || fail "AM skip:run reports on stderr"
+# --- AM skips terminal-status notes ---
+install_curl_stub remember-ok
+AM_SKIP_STATUS="$T/am-skip-status"
+mkdir -p "$AM_SKIP_STATUS"
+write_note "$AM_SKIP_STATUS/$DEC_NOTE" decision agent-relay
+# Overwrite status to terminal
+awk '
+  BEGIN { c = 0 }
+  /^---[[:space:]]*$/ { c++; print; next }
+  c == 1 && /^status:/ { print "status: superseded"; next }
+  { print }
+' "$AM_SKIP_STATUS/$DEC_NOTE" >"$AM_SKIP_STATUS/tmp" && mv "$AM_SKIP_STATUS/tmp" "$AM_SKIP_STATUS/$DEC_NOTE"
+rm -f "$CURL_LOG"/*
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_SKIP_STATUS" >/dev/null 2>"$T/skip-status.err"
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0)" -eq 0 ]] && pass "AM skips terminal-status note (no remember)" || fail "AM skips terminal-status note (expected 0 remembers)"
+grep -q "not active/open" "$T/skip-status.err" && pass "AM skip:terminal-status reports on stderr" || fail "AM skip:terminal-status reports on stderr"
+# AM-only all-skipped (terminal status) is an intentional skip → exit 0
+SKIP_ONLY_RC=0
+set +e
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_SKIP_STATUS" >/dev/null 2>/dev/null
+SKIP_ONLY_RC=$?
+set -e
+[[ "$SKIP_ONLY_RC" -eq 0 ]] && pass "AM-only all-skipped (terminal status) exits 0" || fail "AM-only all-skipped (terminal status) exits 0 (got $SKIP_ONLY_RC)"
 
 # --- both sinks ---
 install_curl_stub remember-ok
@@ -735,7 +782,7 @@ EOF
 AGENTMEMORY_SECRET="s3cret-token" PATH="$CURL_BIN:$PATH" bank_check "$REPO" >/dev/null
 rm -f "$VAULT"/*.md
 AGENTMEMORY_SECRET="s3cret-token" PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$BOTH_NOTES" >/dev/null
-[[ "$(grep -c '^Authorization: Bearer s3cret-token$' "$CURL_LOG/headers.txt" 2>/dev/null)" -ge 3 ]] && pass "AGENTMEMORY_SECRET sent as bearer on health + every remember" || fail "AGENTMEMORY_SECRET bearer header (got: $(cat "$CURL_LOG/headers.txt" 2>/dev/null))"
+[[ "$(grep -c '^Authorization: Bearer s3cret-token$' "$CURL_LOG/headers.txt" 2>/dev/null)" -ge 2 ]] && pass "AGENTMEMORY_SECRET sent as bearer on health + every remember" || fail "AGENTMEMORY_SECRET bearer header (got: $(cat "$CURL_LOG/headers.txt" 2>/dev/null))"
 grep -q "s3cret-token" "$CURL_LOG/last-args.txt" && fail "secret kept out of curl argv" || pass "secret kept out of curl argv"
 install_curl_stub remember-ok
 env -u AGENTMEMORY_SECRET PATH="$CURL_BIN:$PATH" "$ATRY" bank push "$REPO" "$BOTH_NOTES" >/dev/null
@@ -1057,7 +1104,7 @@ if python3 - "$CURL_LOG/last-body.json" <<'PY'
 import json, sys
 b = json.load(open(sys.argv[1]))
 assert b.get("project") == "atry-self", b.get("project")
-assert b.get("type") == "process", b.get("type")
+assert b.get("type") == "workflow", b.get("type")
 PY
 then
   pass "AM project field uses atry_name for scope: atry"
@@ -1086,7 +1133,7 @@ if python3 - "$CURL_LOG/last-body.json" <<'PY'
 import json, sys
 b = json.load(open(sys.argv[1]))
 assert b.get("project") == "agent-relay", b.get("project")
-assert b.get("type") == "decision", b.get("type")
+assert b.get("type") == "architecture", b.get("type")
 PY
 then
   pass "AM without atry_name still remembers project-lane note"

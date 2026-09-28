@@ -5,11 +5,11 @@ unless explicitly asked.
 
 ## Version source of truth
 
-| File                              | Role                                         |
-| --------------------------------- | -------------------------------------------- |
-| [`VERSION`](../VERSION)           | Single-line `YY.MM.DD` (UTC; no `v` prefix)  |
-| [`CHANGELOG.md`](../CHANGELOG.md) | Keep-a-Changelog entry for that version      |
-| Git tag                           | Must be `v` + contents of `VERSION`          |
+| File                              | Role                                        |
+| --------------------------------- | ------------------------------------------- |
+| [`VERSION`](../VERSION)           | Single-line `YY.MM.DD` (UTC; no `v` prefix) |
+| [`CHANGELOG.md`](../CHANGELOG.md) | Keep-a-Changelog entry for that version     |
+| Git tag                           | Must be `v` + contents of `VERSION`         |
 
 The release workflow refuses to build if the tag and `VERSION` disagree.
 

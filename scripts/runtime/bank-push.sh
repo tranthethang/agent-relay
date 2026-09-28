@@ -290,59 +290,68 @@ build_remember_body() {
   fi
   NOTE_FILE="$note_file" PROJECT="$project" OUT_FILE="$out_file" python3 <<'PY'
 import json, os, re
-
 path = os.environ["NOTE_FILE"]
 project = os.environ["PROJECT"]
 out = os.environ["OUT_FILE"]
-
 with open(path, "r", encoding="utf-8") as f:
-    content = f.read()
-
+    raw_content = f.read()
+# Parse frontmatter
 fm = {}
-if content.startswith("---"):
-    parts = content.split("---", 2)
+body_text = raw_content
+if raw_content.startswith("---"):
+    parts = raw_content.split("---", 2)
     if len(parts) >= 3:
         for line in parts[1].splitlines():
             if ":" not in line:
                 continue
             k, v = line.split(":", 1)
             fm[k.strip()] = v.strip()
-
+        body_text = parts[2]
 note_type = fm.get("type", "")
 key = fm.get("key", "")
 status = fm.get("status", "")
+scope = fm.get("scope", "")
 tags_raw = fm.get("tags", "")
 tags = []
 m = re.match(r"^\[(.*)\]$", tags_raw)
 if m:
     tags = [t.strip() for t in m.group(1).split(",") if t.strip()]
-
-concepts = list(tags)
+# AM type map
+type_map = {
+    "decision": "architecture",
+    "convention": "pattern",
+    "pitfall": "bug",
+    "process": "workflow",
+    "open-item": "fact",
+}
+am_type = type_map.get(note_type, "fact")
+# Build lean concepts from note tags, applying filtering rules
+concepts = []
+for tag in tags:
+    # Drop project/<name> tags when top-level project is set
+    if project and tag.startswith("project/"):
+        continue
+    concepts.append(tag)
 if key:
     concepts.append("key:" + key)
 if status:
     concepts.append("status:" + status)
-if note_type:
-    concepts.append("note-type:" + note_type)
-
+# Add module:<slug> from scope when scope is module:*
+if scope.startswith("module:"):
+    mod_tag = scope  # scope is already "module:<slug>"
+    if mod_tag not in concepts:
+        concepts.append(mod_tag)
+# Build projected content: <type>: <key> opener, blank line, stripped body
+body_lines = body_text.lstrip("\n")
+opener = note_type + ": " + key if key else note_type
+projected_content = opener + "\n\n" + body_lines
 body = {
-    "content": content,
-    "project": project,
-    "type": note_type,
-    "key": key,
-    "status": status,
-    "tags": tags,
+    "content": projected_content,
+    "type": am_type,
     "concepts": concepts,
 }
-if not body["project"]:
-    del body["project"]
-if not body["type"]:
-    del body["type"]
-if not body["key"]:
-    del body["key"]
-if not body["status"]:
-    del body["status"]
-
+if project:
+    body["project"] = project
 with open(out, "w", encoding="utf-8") as f:
     json.dump(body, f, ensure_ascii=False)
 PY
@@ -584,19 +593,38 @@ else
 fi
 
 # --- agentmemory sink ---
-# Atry-lane notes need atry_name (docs/bank.md): path/name unset → local
-# distill/ only; name-only still posts to AM when reachable.
+# Eligibility: skip type:run, skip terminal statuses (not active/open),
+# skip atry-lane without atry_name. Intentional skips are not failures.
 if [[ "$AM_USABLE" -eq 1 ]]; then
   am_failed=0
   am_posted=0
+  am_skipped=0
   for f in "${NOTE_FILES[@]}"; do
     base="$(basename "$f")"
+    note_type="$(frontmatter_field "$f" type)"
+    note_status="$(frontmatter_field "$f" status)"
     scope="$(frontmatter_field "$f" scope)"
     lane="$(note_lane "$scope")"
+    # Skip run notes — per-run index/metrics; not shared durable lessons
+    if [[ "$note_type" == "run" ]]; then
+      echo "bank-push: agentmemory: skipped $base — type:run not remembered" >&2
+      am_skipped=$((am_skipped + 1))
+      continue
+    fi
+    # Skip terminal statuses; empty/unknown status → skip
+    case "$note_status" in
+    active | open) ;;
+    *)
+      echo "bank-push: agentmemory: skipped $base — status '$note_status' not active/open" >&2
+      am_skipped=$((am_skipped + 1))
+      continue
+      ;;
+    esac
     am_project=""
     if [[ "$lane" == "atry" ]]; then
       if [[ -z "$ATRY_NAME" ]]; then
         echo "bank-push: agentmemory: skipped $base — atry_name not set (atry-lane notes need BANK_ATRY_NAME)" >&2
+        am_skipped=$((am_skipped + 1))
         continue
       fi
       am_project="$ATRY_NAME"
@@ -639,9 +667,8 @@ if [[ "$AM_USABLE" -eq 1 ]]; then
     AM_OK=1
     echo "bank-push: agentmemory: ok ($am_posted note(s))"
   elif [[ "$am_failed" -eq 0 ]]; then
-    # Every note was ineligible (typically atry-lane without atry_name) —
-    # intentional skip, not a transfer failure.
-    echo "bank-push: agentmemory: skipped — no notes eligible (atry-lane needs atry_name)" >&2
+    # Every note was intentionally skipped — not a transfer failure.
+    echo "bank-push: agentmemory: skipped — no notes eligible ($am_skipped skipped)" >&2
     AM_OK=1
   else
     echo "bank-push: agentmemory: failed" >&2
