@@ -240,7 +240,7 @@ redirects, and control operators refused. That is a mitigation, not a proof
 that sourcing is safe. Treat release trust like any other script you download.
 
 ```bash
-REF="v4.0.0"
+REF="v26.09.28"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 shasum -a 256 -c SHA256SUMS

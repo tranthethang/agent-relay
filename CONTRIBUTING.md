@@ -81,7 +81,7 @@ Include:
 - Artifact names: [`docs/file-conventions.md`](docs/file-conventions.md)
 - Empty outlines (not a sample run): each skill's
   `skills/<name>/references/*-template.md`
-- Release version: [`VERSION`](VERSION) (must match the `v*` tag)
+- Release version: [`VERSION`](VERSION) (`YY.MM.DD` UTC CalVer; must match the `v*` tag)
 
 Install support for a tool is not the same as having used the stages in that
 tool. This repo does not keep a log of either.

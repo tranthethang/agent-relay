@@ -89,6 +89,14 @@ bash -n bin/*.sh lib/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh t
 
 `shellcheck -S error` runs in CI; warning-level findings still exist.
 
+## Versioning
+
+- Calendar version `YY.MM.DD` (UTC day of the release; zero-padded), no `v`
+  in [`VERSION`](VERSION); git tag is `v` + that string (e.g. `26.09.28` →
+  `v26.09.28`).
+- One release per UTC calendar day; do not cut a second tag the same UTC day.
+- Full release steps: [`docs/release.md`](docs/release.md).
+
 ## Release checklist (humans)
 
 Full steps: [`docs/release.md`](docs/release.md). Short form — **commit the
@@ -97,7 +105,7 @@ builds `dist/` from the tagged commit; it does not rewrite README.
 
 1. Bump [`VERSION`](VERSION) and [`CHANGELOG.md`](CHANGELOG.md) together.
 2. Update [`README.md`](README.md) so user-facing pins match that version:
-   - Release-install `REF="vX.Y.Z"` must equal `v` + contents of `VERSION`.
+   - Release-install `REF="vYY.MM.DD"` must equal `v` + contents of `VERSION`.
    - If install/upgrade behavior changed (ownership marker, `uninstall --force`,
      unsupported layouts), refresh the README upgrade section and
      [`docs/installer.md`](docs/installer.md) in the same commit.
