@@ -16,6 +16,8 @@ file that `atry task-init` can parse without guessing.
 
 ## Preflight
 
+<!-- BEGIN PREFLIGHT -->
+
 Run `atry version` before anything else in this stage. If it fails, stop —
 do not search the filesystem for helpers and do not fall back to running
 `scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
@@ -24,6 +26,13 @@ Tell the user to run `verify.sh` and fix what it reports (most often
 confirm each `atry resolve` / `atry run-init` call below prints `atry: using
 <path>` on stderr. Full rule: `references/file-conventions.md` ("atry
 preflight").
+
+<!-- END PREFLIGHT -->
+
+Do **not** run `atry approve`, `atry decide`, `atry stamp`, or `atry close`
+unless the user explicitly asked for that exact command in this conversation.
+Those verbs are for the human cockpit; skill text states the rule, nothing in
+the CLI enforces it.
 
 ### Commands used in this stage
 

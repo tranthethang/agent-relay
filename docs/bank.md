@@ -2,7 +2,9 @@
 
 An **opt-in** connection from one target repo to external flat folder(s) of
 typed markdown notes. After a run, `atry-distill` writes notes under
-`$RUN_DIR/distill/` and `atry bank push` copies them flat into one or two
+`$RUN_DIR/distill/`; `atry distill finalize` then runs bank check, metrics,
+push, set-status, the Bank push line, and a vault-only re-push.
+`atry bank push` copies notes flat into one or two
 vault paths by note `scope:` — **project** lane (`BANK_PATH` /
 `BANK_PROJECT_NAME`) vs **atry self-improve** lane (`BANK_ATRY_PATH` /
 `BANK_ATRY_NAME`). This is project-level configuration — one bank config per
@@ -233,7 +235,7 @@ usable sink failed during transfer (or a note failed validation before any
 write).
 
 `--vault-only` skips agentmemory for **both** vault lanes (project and atry);
-used by `atry-distill` for its second push after the Bank push line.
+used by `atry distill finalize` for its second push after the Bank push line.
 Re-push overwrites the same vault filenames; agentmemory creates a new
 memory per call when not skipped by the local sent ledger (below).
 
@@ -356,7 +358,7 @@ server URL + `project` + filename + posted-body hash row on retry so a partial f
 can be re-run without re-posting successes. What still duplicates:
 
 - Changed note content (new body hash) → posted again as a new memory
-- `atry bank push --vault-only` skips agentmemory entirely; `atry-distill`'s
+- `atry bank push --vault-only` skips agentmemory entirely; `atry distill finalize`'s
   second push uses that flag after the Bank push line (vault overwrite only)
 - Deleting or editing the ledger by hand, or pushing from a different
   checkout without that ledger file

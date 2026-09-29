@@ -216,6 +216,86 @@ echo "$rel_out" | grep -q '^lib=' && pass "atry relative-symlink chain" || fail 
 [[ -f "$HOME/.cursor/skills/atry-cross-review/references/review-walkthrough-template.md" ]] &&
   pass "atry-cross-review review-walkthrough-template" || fail "atry-cross-review review-walkthrough-template"
 
+# Every references/<file>.md named in an installed SKILL.md must exist in that bundle.
+# Also: preflight block between markers must match docs/partials/preflight.md.
+PF_CANON="$ROOT/docs/partials/preflight.md"
+pf_canon_hash="$(
+  awk 'NF{p=1} p' "$PF_CANON" | awk '
+    BEGIN { n = 0 }
+    { lines[++n] = $0 }
+    END {
+      while (n > 0 && lines[n] == "") n--
+      for (i = 1; i <= n; i++) print lines[i]
+    }
+  ' | shasum -a 256 | awk '{print $1}'
+)"
+for skill_dir in "$HOME"/.cursor/skills/atry-*/; do
+  [[ -d "$skill_dir" ]] || continue
+  skill_name="$(basename "$skill_dir")"
+  skill_md="${skill_dir}SKILL.md"
+  [[ -f "$skill_md" ]] || {
+    fail "$skill_name: SKILL.md missing"
+    continue
+  }
+  # Extract references/foo.md mentions (backtick-wrapped or bare)
+  missing=0
+  while IFS= read -r ref; do
+    [[ -n "$ref" ]] || continue
+    # Skip template placeholders like note-<type>-template.md
+    case "$ref" in
+    *'<'* | *'>'* | *'{'* | *'}'*) continue ;;
+    esac
+    base="$(basename "$ref")"
+    if [[ ! -f "${skill_dir}references/$base" ]]; then
+      echo "  missing in $skill_name: references/$base (from SKILL.md)" >&2
+      missing=1
+    fi
+  done < <(grep -oE 'references/[A-Za-z0-9._<>-]+\.md' "$skill_md" | sort -u)
+  if [[ "$missing" -eq 0 ]]; then
+    pass "$skill_name: named references exist"
+  else
+    fail "$skill_name: named references exist"
+  fi
+  # Preflight markers + body match
+  if grep -q '<!-- BEGIN PREFLIGHT -->' "$skill_md" && grep -q '<!-- END PREFLIGHT -->' "$skill_md"; then
+    pf_hash="$(
+      awk '
+        /<!-- BEGIN PREFLIGHT -->/ { in_block=1; next }
+        /<!-- END PREFLIGHT -->/ { in_block=0; next }
+        in_block { print }
+      ' "$skill_md" | awk 'NF{p=1} p' | awk '
+        BEGIN { n = 0 }
+        { lines[++n] = $0 }
+        END {
+          while (n > 0 && lines[n] == "") n--
+          for (i = 1; i <= n; i++) print lines[i]
+        }
+      ' | shasum -a 256 | awk '{print $1}'
+    )"
+    if [[ "$pf_hash" == "$pf_canon_hash" ]]; then
+      pass "$skill_name: preflight matches partial"
+    else
+      fail "$skill_name: preflight matches partial"
+    fi
+  else
+    fail "$skill_name: preflight markers present"
+  fi
+done
+
+# distill finalize helper installed with runtime
+[[ -f "$HOME/.agent-relay/lib/distill-finalize.sh" ]] &&
+  pass "distill-finalize.sh installed" || fail "distill-finalize.sh installed"
+
+# Word-count snapshot (informational; thresholds gated in implement report / CHANGELOG)
+echo "WORD_COUNTS:"
+for skill_dir in "$HOME"/.cursor/skills/atry-*/; do
+  [[ -d "$skill_dir" ]] || continue
+  skill_name="$(basename "$skill_dir")"
+  sw="$(wc -w <"${skill_dir}SKILL.md" | tr -d ' ')"
+  rw="$(wc -w "${skill_dir}references"/*.md 2>/dev/null | tail -1 | awk '{print $1}')"
+  echo "  $skill_name skill=$sw refs=$rw"
+done
+
 "$INSTALL" --dry-run --only CURSOR >/dev/null
 pass "--only CURSOR"
 

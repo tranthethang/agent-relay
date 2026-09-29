@@ -12,6 +12,21 @@ keep a short list of open items, and change nothing. This skill writes no
 files and creates no run directory. Nothing enforces the rule below; it
 holds only as long as you follow this text.
 
+## Preflight
+
+<!-- BEGIN PREFLIGHT -->
+
+Run `atry version` before anything else in this stage. If it fails, stop —
+do not search the filesystem for helpers and do not fall back to running
+`scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
+Tell the user to run `verify.sh` and fix what it reports (most often
+`$HOME/.local/bin` missing from `PATH`). Run `atry` from the repo root, and
+confirm each `atry resolve` / `atry run-init` call below prints `atry: using
+<path>` on stderr. Full rule: `references/file-conventions.md` ("atry
+preflight").
+
+<!-- END PREFLIGHT -->
+
 ## Rules
 
 Allowed: reading files, searching, `git status` / `diff` / `log` / `show`,
@@ -25,6 +40,9 @@ Not allowed, for the rest of this thread unless the user lifts it:
 - Installs, `atry run-init`, or starting another stage's work.
 - Running tests or builds. They often write caches, fixtures, or build
   output; ask first, even when a test looks read-only.
+- `atry approve`, `atry decide`, `atry stamp`, or `atry close` unless the
+  user explicitly asked for that exact command (human cockpit verbs; skill
+  text only — the CLI does not enforce this).
 
 The rule ends only on an explicit signal: the user names the next skill
 ("run atry-plan") or explicitly lifts the rule ("you can edit files now").

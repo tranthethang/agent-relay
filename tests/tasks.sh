@@ -1470,7 +1470,9 @@ rm -rf "$CROSS_DIR"
 # --- CR-2: skill bundle references must not drift; no skill scripts/ ---
 # Drift/orphan probes mutate a temp copy via --root — never $ROOT.
 SYNC_COPY="$T/sync-root"
-mkdir -p "$SYNC_COPY/docs"
+mkdir -p "$SYNC_COPY/docs" "$SYNC_COPY/docs/conventions" "$SYNC_COPY/docs/partials"
+cp -R "$ROOT/docs/conventions/." "$SYNC_COPY/docs/conventions/"
+cp -R "$ROOT/docs/partials/." "$SYNC_COPY/docs/partials/"
 cp "$ROOT/docs/file-conventions.md" "$SYNC_COPY/docs/"
 cp -R "$ROOT/skills" "$SYNC_COPY/skills"
 if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check; then
@@ -1497,6 +1499,15 @@ else
   pass "sync --check detects orphan skill scripts/"
 fi
 rm -rf "$SYNC_COPY/skills/atry-implement/scripts"
+
+# Preflight partial drift must fail --check
+printf '\n<!-- pf-drift -->\n' >>"$SYNC_COPY/docs/partials/preflight.md"
+if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check >/dev/null 2>&1; then
+  fail "sync --check detects preflight partial drift"
+else
+  pass "sync --check detects preflight partial drift"
+fi
+cp "$ROOT/docs/partials/preflight.md" "$SYNC_COPY/docs/partials/preflight.md"
 
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL TASK TESTS PASSED"

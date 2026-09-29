@@ -37,6 +37,12 @@ jobs:
       - name: Run metrics helper tests
         run: bash ./tests/metrics.sh
 
+      - name: Run human cockpit helper tests
+        run: bash ./tests/status.sh
+
+      - name: Run distill finalize tests
+        run: bash ./tests/distill-finalize.sh
+
       - name: Run remote smoke tests
         run: bash ./tests/smoke-remote.sh
 

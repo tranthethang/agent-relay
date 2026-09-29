@@ -17,6 +17,8 @@ previous review — it's to catch what a same-family model/tool is likely to mis
 
 ## Preflight
 
+<!-- BEGIN PREFLIGHT -->
+
 Run `atry version` before anything else in this stage. If it fails, stop —
 do not search the filesystem for helpers and do not fall back to running
 `scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
@@ -25,6 +27,13 @@ Tell the user to run `verify.sh` and fix what it reports (most often
 confirm each `atry resolve` / `atry run-init` call below prints `atry: using
 <path>` on stderr. Full rule: `references/file-conventions.md` ("atry
 preflight").
+
+<!-- END PREFLIGHT -->
+
+Do **not** run `atry approve`, `atry decide`, `atry stamp`, or `atry close`
+unless the user explicitly asked for that exact command in this conversation.
+Those verbs are for the human cockpit; skill text states the rule, nothing in
+the CLI enforces it.
 
 ### Commands used in this stage
 
@@ -117,7 +126,9 @@ implementer when you can.
    - For a genuine tradeoff/decision point (not a bug, not style, not already
      resolved by the plan), escalate per `reviewer-conduct.md` — ask the
      developer if interactive; otherwise record under `### Open decisions`
-     and leave the code as-is.
+     and leave the code as-is. When the human settles an open item, they
+     record it with `atry decide <run> <id> "<resolution>"` (writes
+     `decisions.md`); do not run that command yourself unless they asked.
    - If you override a prior decision, state why.
 
 1. If the plan itself was ambiguous or wrong and the implementation correctly
