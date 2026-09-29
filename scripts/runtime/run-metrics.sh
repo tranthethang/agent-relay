@@ -11,6 +11,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVE_RUN="$SCRIPT_DIR/resolve-run.sh"
+# shellcheck source=scripts/runtime/diff-size.sh
+source "$SCRIPT_DIR/diff-size.sh"
 
 usage() {
   cat <<'EOF'
@@ -135,7 +137,7 @@ read_base_ref() {
 }
 
 # Metric key names (order used for stdout and --write inserts).
-METRIC_KEYS="dur_implement_min dur_self_review_min dur_cross_review_min dur_distill_min tool_implement tool_self_review tool_cross_review tool_distill model_implement model_self_review model_cross_review model_distill model_source diff_base files_changed lines_added lines_deleted tasks_planned tasks_implemented review_findings review_rounds tokens cost"
+METRIC_KEYS="dur_implement_min dur_self_review_min dur_cross_review_min dur_distill_min tool_implement tool_self_review tool_cross_review tool_distill model_implement model_self_review model_cross_review model_distill model_source diff_base diff_end files_changed lines_added lines_deleted tasks_planned tasks_implemented review_findings review_rounds tokens cost"
 
 # Values stored as METRIC_VAL_<key> (keys use only [a-z_]). Use printf -v so
 # values with quotes/spaces do not break an eval assignment.
@@ -177,11 +179,19 @@ for _s in implement self_review cross_review distill; do
   eval "STAGE_SECS_${_s}=0"
   eval "STAGE_HADPAIR_${_s}=0"
   eval "STAGE_TOOLS_${_s}="
+  eval "STAGE_ATTESTED_TOOL_${_s}="
+  eval "STAGE_ATTESTED_MODEL_${_s}="
+  eval "STAGE_HAD_ATTEST_${_s}=0"
 done
 
 REVIEW_ROUNDS=0
 # First `head=` recorded on an `implement started` line (see run-history.sh).
 IMPL_HEAD=""
+# Last `head=` on implement / self-review / cross-review `completed` (END for sizing).
+DIFF_END_SHA=""
+# Last `size=` snapshot (and the diff base it was measured from) on those events.
+SNAP_SIZE=""
+SNAP_BASE=""
 
 if [[ -f "$HISTORY" ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -196,13 +206,19 @@ if [[ -f "$HISTORY" ]]; then
     stage=""
     action=""
     tool=""
+    model=""
     head=""
+    size=""
+    size_base=""
     for tok in $rest; do
       case "$tok" in
       stage=*) stage="${tok#stage=}" ;;
       action=*) action="${tok#action=}" ;;
       tool=*) tool="${tok#tool=}" ;;
+      model=*) model="${tok#model=}" ;;
       head=*) head="${tok#head=}" ;;
+      size=*) size="${tok#size=}" ;;
+      size_base=*) size_base="${tok#size_base=}" ;;
       esac
     done
     [[ -n "$stage" && -n "$action" ]] || continue
@@ -210,11 +226,37 @@ if [[ -f "$HISTORY" ]]; then
     if [[ "$stage" == "implement" && "$action" == "started" && -n "$head" && -z "$IMPL_HEAD" ]]; then
       IMPL_HEAD="$head"
     fi
+    if [[ "$action" == "completed" && -n "$head" ]]; then
+      case "$stage" in
+      implement | self-review | cross-review) DIFF_END_SHA="$head" ;;
+      esac
+    fi
+    if [[ "$action" == "completed" && -n "$size" && -n "$size_base" ]]; then
+      case "$stage" in
+      implement | self-review | cross-review)
+        SNAP_SIZE="$size"
+        SNAP_BASE="$size_base"
+        ;;
+      esac
+    fi
 
     sk=""
-    sk="$(stage_to_key "$stage")" || continue
+    sk="$(stage_to_key "$stage")" || true
 
-    if [[ -n "$tool" ]]; then
+    # Latest human attestation wins for tool/model when present.
+    if [[ "$action" == "attested" && -n "$sk" ]]; then
+      eval "STAGE_HAD_ATTEST_${sk}=1"
+      if [[ -n "$tool" ]]; then
+        printf -v "STAGE_ATTESTED_TOOL_${sk}" '%s' "$tool"
+      fi
+      if [[ -n "$model" ]]; then
+        printf -v "STAGE_ATTESTED_MODEL_${sk}" '%s' "$model"
+      fi
+    fi
+
+    [[ -n "$sk" ]] || continue
+
+    if [[ -n "$tool" && "$action" != "attested" ]]; then
       cur=""
       eval "cur=\"\$STAGE_TOOLS_${sk}\""
       cur="$(csv_append_unique "$cur" "$tool")"
@@ -266,7 +308,13 @@ for sk in implement self_review cross_review distill; do
     metric_set "dur_${sk}_min" ""
   fi
   tools=""
-  eval "tools=\"\$STAGE_TOOLS_${sk}\""
+  attested=0
+  eval "attested=\"\$STAGE_HAD_ATTEST_${sk}\""
+  if [[ "$attested" -eq 1 ]]; then
+    eval "tools=\"\$STAGE_ATTESTED_TOOL_${sk}\""
+  else
+    eval "tools=\"\$STAGE_TOOLS_${sk}\""
+  fi
   metric_set "tool_${sk}" "$tools"
 done
 
@@ -291,7 +339,7 @@ extract_models_from_file() {
       # Normalize: take content after stage=...
       for tok in $line; do
         case "$tok" in
-        model=* | model=*/ | model=*--\>)
+        model=*)
           model="${tok#model=}"
           model="${model%%-->*}"
           model="${model%%\"*}"
@@ -361,6 +409,38 @@ metric_set model_self_review "$(collect_model self-review)"
 metric_set model_cross_review "$(collect_model cross-review)"
 metric_set model_distill "$(collect_model distill)"
 
+# Prefer latest attested model= over provenance self-report when present.
+ATTESTED_MEASURED=0
+MEASURED_STAGES=0
+for sk in implement self_review cross_review distill; do
+  attested=0
+  eval "attested=\"\$STAGE_HAD_ATTEST_${sk}\""
+  if [[ "$attested" -eq 1 ]]; then
+    amodel=""
+    eval "amodel=\"\$STAGE_ATTESTED_MODEL_${sk}\""
+    if [[ -n "$amodel" ]]; then
+      metric_set "model_${sk}" "$amodel"
+    fi
+  fi
+  # A stage "counts" toward model_source when it has a tool or model value.
+  tval="$(metric_get "tool_${sk}")"
+  mval="$(metric_get "model_${sk}")"
+  if [[ -n "$tval" || -n "$mval" ]]; then
+    MEASURED_STAGES=$((MEASURED_STAGES + 1))
+    if [[ "$attested" -eq 1 ]]; then
+      ATTESTED_MEASURED=$((ATTESTED_MEASURED + 1))
+    fi
+  fi
+done
+
+if [[ "$MEASURED_STAGES" -eq 0 || "$ATTESTED_MEASURED" -eq 0 ]]; then
+  metric_set model_source "self-reported"
+elif [[ "$ATTESTED_MEASURED" -eq "$MEASURED_STAGES" ]]; then
+  metric_set model_source "human-attested"
+else
+  metric_set model_source "mixed"
+fi
+
 # ---- git change size ----
 BASE_REF=""
 if ! BASE_REF="$(read_base_ref)"; then
@@ -388,23 +468,65 @@ if [[ -n "$IMPL_HEAD" ]] && GIT_OPTIONAL_LOCKS=0 git -C "$GIT_ROOT" rev-parse --
 fi
 metric_set diff_base "$DIFF_BASE"
 
-FILES_CHANGED=0
-LINES_ADDED=0
-LINES_DELETED=0
-# Read-only numstat; exclude .agent-relay/ from the working-tree diff.
-# Binary entries are "-\t-\tpath": still count the file, skip unknown line deltas.
-while IFS=$'\t' read -r added deleted path || [[ -n "${added:-}" ]]; do
-  [[ -n "${path:-}" ]] || continue
-  FILES_CHANGED=$((FILES_CHANGED + 1))
-  case "$added" in
-  *[!0-9]*) ;; # binary or non-numeric
-  *) LINES_ADDED=$((LINES_ADDED + added)) ;;
-  esac
-  case "$deleted" in
-  *[!0-9]*) ;;
-  *) LINES_DELETED=$((LINES_DELETED + deleted)) ;;
-  esac
-done < <(GIT_OPTIONAL_LOCKS=0 git -C "$GIT_ROOT" diff --numstat "$DIFF_BASE" -- . ':(exclude).agent-relay' ':(exclude).agent-relay/**' 2>/dev/null || true)
+# Resolve END: last completed head= among implement / self-review / cross-review.
+# Four cases (see docs/metrics.md):
+# 1. END present, END != DIFF_BASE → commit-range diff (later commits excluded)
+# 2. END present, END == DIFF_BASE, HEAD == END → working-tree (change never committed)
+# 3. END present, END == DIFF_BASE, HEAD moved → unknowable; empty sizes + warn
+# 4. No END → working-tree + warn (legacy runs)
+END_OK=0
+if [[ -n "$DIFF_END_SHA" ]] && GIT_OPTIONAL_LOCKS=0 git -C "$GIT_ROOT" rev-parse --verify "${DIFF_END_SHA}^{commit}" >/dev/null 2>&1; then
+  END_OK=1
+fi
+
+CURRENT_HEAD=""
+CURRENT_HEAD="$(GIT_OPTIONAL_LOCKS=0 git -C "$GIT_ROOT" rev-parse --verify HEAD 2>/dev/null || true)"
+
+# Preferred: the last size= snapshot that `atry history append` took when a
+# stage completed, if it was measured from this same diff base. It does not
+# depend on when the work is committed afterwards. Otherwise fall back to the
+# four END cases.
+DIFF_BASE_SHA="$(GIT_OPTIONAL_LOCKS=0 git -C "$GIT_ROOT" rev-parse --verify "${DIFF_BASE}^{commit}" 2>/dev/null || true)"
+SNAP_OK=0
+if [[ -n "$SNAP_SIZE" && -n "$DIFF_BASE_SHA" && "$SNAP_BASE" == "$DIFF_BASE_SHA" && "$SNAP_SIZE" =~ ^[0-9]+/[0-9]+/[0-9]+$ ]]; then
+  SNAP_OK=1
+fi
+
+DIFF_MODE="" # snapshot | range | worktree | empty
+DIFF_END_VAL=""
+if [[ "$SNAP_OK" -eq 1 ]]; then
+  DIFF_MODE="snapshot"
+  DIFF_END_VAL="snapshot"
+elif [[ "$END_OK" -eq 1 && "$DIFF_END_SHA" != "${DIFF_BASE_SHA:-$DIFF_BASE}" ]]; then
+  DIFF_MODE="range"
+  DIFF_END_VAL="$DIFF_END_SHA"
+elif [[ "$END_OK" -eq 1 && -n "$CURRENT_HEAD" && "$CURRENT_HEAD" == "$DIFF_END_SHA" ]]; then
+  DIFF_MODE="worktree"
+  DIFF_END_VAL="worktree"
+elif [[ "$END_OK" -eq 1 ]]; then
+  DIFF_MODE="empty"
+  DIFF_END_VAL=""
+  echo "run-metrics: warning: change size is unknowable (END equals diff_base but HEAD has moved, and no size= snapshot); leaving files_changed/lines_* empty" >&2
+else
+  DIFF_MODE="worktree"
+  DIFF_END_VAL="worktree"
+  echo "run-metrics: warning: no size= snapshot or END head= on implement/self-review/cross-review completed; size is measured to the current tree" >&2
+fi
+metric_set diff_end "$DIFF_END_VAL"
+
+FILES_CHANGED=""
+LINES_ADDED=""
+LINES_DELETED=""
+case "$DIFF_MODE" in
+snapshot)
+  FILES_CHANGED="${SNAP_SIZE%%/*}"
+  _rest="${SNAP_SIZE#*/}"
+  LINES_ADDED="${_rest%%/*}"
+  LINES_DELETED="${_rest#*/}"
+  ;;
+range) read -r FILES_CHANGED LINES_ADDED LINES_DELETED <<<"$(diff_size "$GIT_ROOT" "$DIFF_BASE" "$DIFF_END_SHA")" ;;
+worktree) read -r FILES_CHANGED LINES_ADDED LINES_DELETED <<<"$(diff_size "$GIT_ROOT" "$DIFF_BASE")" ;;
+esac
 
 metric_set files_changed "$FILES_CHANGED"
 metric_set lines_added "$LINES_ADDED"
@@ -518,7 +640,7 @@ for k in $METRIC_KEYS; do
 done
 
 tmp="$(mktemp "${TMPDIR:-/tmp}/ar-metrics-note.XXXXXX")"
-WRITE_NOTE="$WRITE_NOTE" KV_FILE="$KV_FILE" KEYS_FILE="$KEYS_FILE" awk '
+env WRITE_NOTE="$WRITE_NOTE" KV_FILE="$KV_FILE" KEYS_FILE="$KEYS_FILE" awk '
   BEGIN {
     note = ENVIRON["WRITE_NOTE"]
     kv = ENVIRON["KV_FILE"]

@@ -8,11 +8,10 @@ hyphens, length 3–48 inclusive). All run artifacts live inside this per-run
 directory using short, stable names (no `<id>` suffixes inside filenames).
 Nothing in this repo enforces the names except the skill text and bash helpers.
 
-This file is the **source of truth** for those names. Maintainer docs that
-point here (architecture, task-claim, skill authoring, …):
-[`INDEX.md`](INDEX.md). Do not hand-edit the copies under
-`skills/*/references/` — run `bash scripts/maint/sync-references.sh` from the repo
-root after changing this file.
+This file is generated from parts under `docs/conventions/` by
+`scripts/maint/sync-references.sh`. Edit those parts (not this file, and not
+the copies under `skills/*/references/`). Maintainer docs that point here
+(architecture, task-claim, skill authoring, …): [`INDEX.md`](INDEX.md).
 
 | Purpose            | Path                                                                                                   | Written by                                                                           |
 | ------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
@@ -23,6 +22,7 @@ root after changing this file.
 | Review walkthrough | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md`                                         | Same as the review report.                                                           |
 | Metadata           | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md`                                                       | `atry run-init` creates; stages update `stage:` and `status:`.                       |
 | History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log`                                                   | `atry history` / stages append events.                                               |
+| Decisions          | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/decisions.md`                                                  | `atry decide` (human); append-only resolutions distill can read.                     |
 | Distill (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distill/`                                                      | `atry-distill`, run after cross-review (or self-review if cross-review was skipped). |
 
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
@@ -102,6 +102,14 @@ Field definitions:
 - `status`: Lifecycle status (`active`, `done`, or `abandoned`).
 - `base`: Git commit ref from which the work branches or diffs.
 
+`atry history append` updates `stage:` for recognized stages on lifecycle
+actions (`created` / `started` / `completed` / `abandoned`) only — not on
+human record actions (`approved` / `attested` / `resolved`). Appending
+`done completed` also sets `status: done` (distill’s final step, or
+`atry close`). Appending an `abandoned` action sets `status: abandoned`
+(`atry close --abandon`). Runs that skip distill are closed by a human
+command, not automatically.
+
 ## `history.log` (Append-Only Event Log)
 
 An optional, append-only log file `history.log` records stage transitions and
@@ -118,7 +126,38 @@ Example:
 ```
 
 Timestamp must be ISO8601 UTC. Use `atry history` to safely append to
-this file.
+this file. On `implement started` and on `implement` / `self-review` /
+`cross-review` `completed`, `atry history append` records `head=` (current
+`HEAD`) automatically unless `head=` was passed explicitly — used by
+`atry metrics` as the change-size base and END. On those `completed` events it
+also records `size_base=<sha> size=<files>/<added>/<deleted>` (working tree
+vs the diff base at that moment), which `atry metrics` prefers.
+
+Human cockpit writers (`atry approve` / `stamp` / `decide` / `close`) also
+append through this path with `by=human`:
+
+| Command                        | History line                                                           |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| `atry approve <run> plan`      | `stage=plan action=approved by=human [note=…]`                         |
+| `atry stamp <run> <stage> …`   | `stage=<stage> action=attested by=human tool=… model=…`                |
+| `atry decide <run> <id> "…"`   | `stage=decision action=resolved by=human id=<slug>` (+ `decisions.md`) |
+| `atry close <run>`             | `stage=done action=completed by=human`                                 |
+| `atry close <run> --abandon …` | `stage=done action=abandoned by=human reason=…`                        |
+
+On `implement started`, if the run has no `stage=plan action=approved` event,
+`atry history append` prints one stderr warning and still appends (exit 0).
+
+## `decisions.md` (human resolutions)
+
+Append-only file written by `atry decide`. Each line:
+
+```text
+- <YYYY-MM-DD> <id>: <resolution> (by=human)
+```
+
+`<id>` follows the run-slug rules (`^[a-z]+(-[a-z]+)*$`, length 3–48). Free
+text lives here; the history event only carries `id=<slug>`. Distill reads
+this file when present.
 
 ## Plan header
 
@@ -157,6 +196,27 @@ byte-identical by `sync-references.sh`). When a genuine tradeoff cannot be
 resolved interactively, record it as an optional `### Open decisions`
 subsection **inside** that day's Self-Review or Cross-Review body — not a new
 top-level `##` kind.
+
+## Review notes worth flagging explicitly
+
+Reviewers (`atry-self-review`, `atry-cross-review`) routinely touch package
+manager files as part of a change. Two are worth calling out by name in the
+review report's notes rather than only mentioning in passing, because they
+tend to recur silently across runs otherwise:
+
+- **Dual lockfiles.** A diff that updates more than one lockfile for the same
+  package manager ecosystem (for example both `pnpm-lock.yaml` and
+  `package-lock.json`) for a project whose own rules (e.g. `AGENTS.md`) name
+  one preferred package manager is a maintenance smell: the second lockfile
+  drifts the moment someone forgets to update it by hand. Note it explicitly
+  in the review report even if fixing it is out of scope for the current
+  plan.
+- **Directory/rollup drift.** If `implement-plan/` or
+  `implement-report/` exists for the run under review, run
+  `atry check <run-dir-or-id>` before writing the review. A
+  `MISMATCH` means the rollup `.md` was hand-edited outside the claim
+  protocol and the per-task `.status`/report files are stale — call this out
+  in the review rather than treating the rollup `.md` as ground truth.
 
 ## Parallel task implementation (optional)
 
@@ -279,40 +339,21 @@ The claim protocol serializes **task status**, not file contents:
 | Multiple sub-agents, same `<RUN_ID>`, same task                   | No — second claim fails loudly                         |
 | Hand-editing `implement-plan.md` while parallel mode is active    | No — it's generated, gets overwritten                  |
 
-## Review notes worth flagging explicitly
-
-Reviewers (`atry-self-review`, `atry-cross-review`) routinely touch package
-manager files as part of a change. Two are worth calling out by name in the
-review report's notes rather than only mentioning in passing, because they
-tend to recur silently across runs otherwise:
-
-- **Dual lockfiles.** A diff that updates more than one lockfile for the same
-  package manager ecosystem (for example both `pnpm-lock.yaml` and
-  `package-lock.json`) for a project whose own rules (e.g. `AGENTS.md`) name
-  one preferred package manager is a maintenance smell: the second lockfile
-  drifts the moment someone forgets to update it by hand. Note it explicitly
-  in the review report even if fixing it is out of scope for the current
-  plan.
-- **Directory/rollup drift.** If `implement-plan/` or
-  `implement-report/` exists for the run under review, run
-  `atry check <run-dir-or-id>` before writing the review. A
-  `MISMATCH` means the rollup `.md` was hand-edited outside the claim
-  protocol and the per-task `.status`/report files are stale — call this out
-  in the review rather than treating the rollup `.md` as ground truth.
-
 ## Knowledge bank (optional, project-level)
 
-`.agent-relay/bank.conf` and `.agent-relay/bank-status.md` live at the
-`.agent-relay/` root, **not** inside a per-run directory — a bank connection
-is a property of the target repo, not of one run. `bank.conf` is parsed
-line-by-line (never sourced/eval'd) by `atry bank check`; see
+`.agent-relay/bank.conf`, `.agent-relay/bank-status.md`, and (when the
+agentmemory sink has posted) `.agent-relay/bank-agentmemory-sent.tsv` live
+at the `.agent-relay/` root, **not** inside a per-run directory — a bank
+connection is a property of the target repo, not of one run. `bank.conf` is
+parsed line-by-line (never sourced/eval'd) by `atry bank check`; see
 [bank.md](bank.md) for the format, supported `BANK_TYPE` values, dual vault
 lanes (`BANK_PATH`/`BANK_PROJECT_NAME` vs `BANK_ATRY_PATH`/`BANK_ATRY_NAME`),
 status fields (`reachable` / `atry_reachable`, …), push partitioning by
-`scope:`, set-status dual-path lookup, unset-atry skip, path-equal dedupe,
-`--vault-only`, and what "reachable" does and does not mean. `atry-distill`
-is the only skill that reads/writes these files. Note schema (including
-`run_id:` and lane `scope:`): `skills/atry-distill/references/note-schema.md`.
+`scope:`, the agentmemory sent ledger / retry behaviour, set-status
+dual-path lookup, unset-atry skip, path-equal dedupe, `--vault-only`, and
+what "reachable" does and does not mean. `atry-distill` is the only skill
+that reads/writes these files. Note schema (including `run_id:` and lane
+`scope:`): `skills/atry-distill/references/note-schema.md`.
 
 ## Notes
 

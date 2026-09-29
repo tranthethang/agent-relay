@@ -245,7 +245,6 @@ PLAN_DIR="$RUN_DIR/implement-plan"
 ROLLUP_FILE="$RUN_DIR/implement-plan.md"
 PLAN_FILE="$RUN_DIR/plan.md"
 REPORT_DIR="$RUN_DIR/implement-report"
-REPORT_ROLLUP_FILE="$RUN_DIR/implement-report.md"
 bname="$(basename "$RUN_DIR")"
 if [[ "$bname" =~ ^[0-9]{8}-([0-9]{10,11})-[a-z]+(-[a-z]+)*$ ]]; then
   ID="${BASH_REMATCH[1]}"

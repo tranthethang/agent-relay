@@ -121,6 +121,6 @@ prefix" today rather than assuming the shape above matches exactly.
 ## Release-mode install
 
 Users may download `install.sh` + `SHA256SUMS` from a GitHub Release and run
-`bash ./install.sh --ref vX.Y.Z`. Checksums catch **truncated** downloads; they
+`bash ./install.sh --ref vYY.MM.DD`. Checksums catch **truncated** downloads; they
 do not prove the release asset was not replaced. See [release.md](release.md)
 and [security.md](security.md).

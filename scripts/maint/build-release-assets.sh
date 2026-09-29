@@ -2,14 +2,14 @@
 # scripts/maint/build-release-assets.sh
 #
 # Builds distribution release assets in dist/:
-#   - dist/agent-relay-vX.Y.Z.tar.gz (tarball with prefix agent-relay-vX.Y.Z/)
-#   - dist/install.sh   (with DEFAULT_REF=vX.Y.Z baked in)
-#   - dist/uninstall.sh (with DEFAULT_REF=vX.Y.Z baked in)
-#   - dist/verify.sh    (with DEFAULT_REF=vX.Y.Z baked in)
+#   - dist/agent-relay-vYY.MM.DD.tar.gz (tarball with prefix agent-relay-vYY.MM.DD/)
+#   - dist/install.sh   (with DEFAULT_REF=vYY.MM.DD baked in)
+#   - dist/uninstall.sh (with DEFAULT_REF=vYY.MM.DD baked in)
+#   - dist/verify.sh    (with DEFAULT_REF=vYY.MM.DD baked in)
 #   - dist/SHA256SUMS   (checksums for tarball and scripts)
 #
 # Usage:
-#   bash scripts/maint/build-release-assets.sh [vX.Y.Z]
+#   bash scripts/maint/build-release-assets.sh [vYY.MM.DD]
 
 set -euo pipefail
 
@@ -44,7 +44,7 @@ DIST_DIR="$ROOT_DIR/dist"
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
-# 1. Build tarball with prefix agent-relay-vX.Y.Z/
+# 1. Build tarball with prefix agent-relay-vYY.MM.DD/
 PREFIX="agent-relay-$TAG"
 TARBALL_NAME="agent-relay-$TAG.tar.gz"
 TARBALL_PATH="$DIST_DIR/$TARBALL_NAME"

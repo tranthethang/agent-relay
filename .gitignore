@@ -6,4 +6,6 @@
 # Release build output (scripts/build-release-assets.sh)
 dist/
 
+# macOS Finder metadata (any depth; pattern without slash matches nested paths)
 .DS_Store
+**/.DS_Store

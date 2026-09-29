@@ -5,7 +5,7 @@
 #   make metrics
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 ATRY="$ROOT/scripts/atry"
 METRICS_SH="$ROOT/scripts/runtime/run-metrics.sh"
 
@@ -17,7 +17,24 @@ fail() {
 }
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/ar-metrics.XXXXXX")"
-cleanup() { rm -rf "$T"; }
+GIT_STATUS_BEFORE=""
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_STATUS_BEFORE="$(git -C "$ROOT" status --porcelain)"
+fi
+cleanup() {
+  local rc=$?
+  rm -rf "$T"
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local after
+    after="$(git -C "$ROOT" status --porcelain)"
+    if [[ "$after" != "$GIT_STATUS_BEFORE" ]]; then
+      echo "FAIL: suite mutated git working tree under $ROOT" >&2
+      printf 'before:\n%s\nafter:\n%s\n' "$GIT_STATUS_BEFORE" "$after" >&2
+      rc=1
+    fi
+  fi
+  exit "$rc"
+}
 trap cleanup EXIT
 
 field() {
@@ -410,7 +427,247 @@ new_run 1000000010 history-head
 "$ATRY" history append "$RUN" implement started tool=cursor >/dev/null 2>&1
 grep -q "stage=implement action=started tool=cursor head=$C2\$" "$RUN/history.log" && pass "history append adds head= on implement started" || fail "history append head= (got '$(cat "$RUN/history.log")')"
 "$ATRY" history append "$RUN" implement completed tool=cursor >/dev/null 2>&1
-tail -1 "$RUN/history.log" | grep -q "head=" && fail "head= only on implement started" || pass "head= only on implement started"
+tail -1 "$RUN/history.log" | grep -qE "stage=implement action=completed tool=cursor head=$C2( |\$)" && pass "history append adds head= on implement completed" || fail "history append completed head= (got '$(tail -1 "$RUN/history.log")')"
+"$ATRY" history append "$RUN" self-review completed tool=cursor >/dev/null 2>&1
+tail -1 "$RUN/history.log" | grep -qE "head=$C2( |\$)" && pass "history append adds head= on self-review completed" || fail "self-review completed head="
+"$ATRY" history append "$RUN" cross-review completed tool=claude >/dev/null 2>&1
+tail -1 "$RUN/history.log" | grep -qE "head=$C2( |\$)" && pass "history append adds head= on cross-review completed" || fail "cross-review completed head="
+# Explicit head= wins (do not overwrite).
+"$ATRY" history append "$RUN" implement completed tool=cursor head=deadbeefdeadbeef >/dev/null 2>&1
+tail -1 "$RUN/history.log" | grep -qE "head=deadbeefdeadbeef( |\$)" && pass "explicit head= wins on completed" || fail "explicit head= (got '$(tail -1 "$RUN/history.log")')"
+# distill completed does not auto-record head=
+"$ATRY" history append "$RUN" distill completed tool=cursor >/dev/null 2>&1
+tail -1 "$RUN/history.log" | grep -q "head=" && fail "distill completed must not auto-add head=" || pass "distill completed has no auto head="
+
+# ========== 11. metrics END cases (diff_end) ==========
+# Case 1: END present and END != diff_base → commit-range; later commits excluded.
+END_REPO="$T/end-repo"
+mkdir -p "$END_REPO"
+(
+  cd "$END_REPO"
+  git init -q
+  echo "base" >file.txt
+  git add file.txt
+  git commit -qm "init"
+)
+E_BASE="$(git -C "$END_REPO" rev-parse HEAD)"
+echo "start-marker" >>"$END_REPO/file.txt"
+git -C "$END_REPO" add file.txt
+git -C "$END_REPO" commit -qm "implement start"
+E_START="$(git -C "$END_REPO" rev-parse HEAD)"
+echo "end-change" >>"$END_REPO/file.txt"
+git -C "$END_REPO" add file.txt
+git -C "$END_REPO" commit -qm "implement end"
+E_END="$(git -C "$END_REPO" rev-parse HEAD)"
+echo "later-change" >>"$END_REPO/file.txt"
+git -C "$END_REPO" add file.txt
+git -C "$END_REPO" commit -qm "unrelated later"
+E_LATER="$(git -C "$END_REPO" rev-parse HEAD)"
+EAR="$END_REPO/.agent-relay"
+mkdir -p "$EAR"
+RUN="$EAR/20260927-1000000011-end-range"
+mkdir -p "$RUN"
+cat >"$RUN/meta.md" <<EOF
+id: 1000000011
+slug: end-range
+created: 2026-09-27
+title: end range
+stage: distill
+status: active
+base: $E_BASE
+EOF
+cat >"$RUN/plan.md" <<EOF
+base: $E_BASE
+id: 1000000011
+
+# end range
+
+## Tasks
+
+1. One (deps: )
+EOF
+cat >"$RUN/history.log" <<EOF
+2026-09-27T10:10:00Z stage=implement action=started tool=cursor head=$E_START
+2026-09-27T10:40:00Z stage=implement action=completed tool=cursor head=$E_END
+2026-09-27T10:50:00Z stage=self-review action=completed tool=cursor head=$E_END
+EOF
+OUT="$("$ATRY" metrics "$RUN" 2>/dev/null)"
+ERR="$("$ATRY" metrics "$RUN" 2>&1 >/dev/null || true)"
+[[ "$(field "$OUT" diff_base)" == "$E_START" ]] && pass "case1: diff_base is implement start" || fail "case1: diff_base (got '$(field "$OUT" diff_base)')"
+[[ "$(field "$OUT" diff_end)" == "$E_END" ]] && pass "case1: diff_end is last review completed head" || fail "case1: diff_end (got '$(field "$OUT" diff_end)')"
+# Range E_START..E_END is one line added ("end-change"); later-change excluded.
+[[ "$(field "$OUT" files_changed)" == "1" ]] && pass "case1: files_changed excludes later commit" || fail "case1: files_changed (got '$(field "$OUT" files_changed)')"
+[[ "$(field "$OUT" lines_added)" == "1" ]] && pass "case1: lines_added is commit-range only" || fail "case1: lines_added (got '$(field "$OUT" lines_added)')"
+
+# Case 2: END == diff_base and HEAD == END → working-tree diff; diff_end=worktree
+RUN="$EAR/20260927-1000000012-end-wt"
+mkdir -p "$RUN"
+# Detach to E_START (= END); leave uncommitted edit.
+git -C "$END_REPO" checkout -q "$E_START"
+echo "wt-only" >>"$END_REPO/file.txt"
+cat >"$RUN/meta.md" <<EOF
+id: 1000000012
+slug: end-wt
+created: 2026-09-27
+title: end wt
+stage: distill
+status: active
+base: $E_BASE
+EOF
+cat >"$RUN/plan.md" <<EOF
+base: $E_BASE
+id: 1000000012
+
+# end wt
+
+## Tasks
+
+1. One (deps: )
+EOF
+cat >"$RUN/history.log" <<EOF
+2026-09-27T10:10:00Z stage=implement action=started tool=cursor head=$E_START
+2026-09-27T10:40:00Z stage=implement action=completed tool=cursor head=$E_START
+EOF
+OUT="$("$ATRY" metrics "$RUN" 2>/dev/null)"
+[[ "$(field "$OUT" diff_end)" == "worktree" ]] && pass "case2: diff_end=worktree when END==diff_base and HEAD==END" || fail "case2: diff_end (got '$(field "$OUT" diff_end)')"
+[[ "$(field "$OUT" files_changed)" == "1" ]] && pass "case2: working-tree files_changed" || fail "case2: files_changed (got '$(field "$OUT" files_changed)')"
+[[ "$(field "$OUT" lines_added)" == "1" ]] && pass "case2: working-tree lines_added" || fail "case2: lines_added (got '$(field "$OUT" lines_added)')"
+
+# Case 3: END == diff_base but HEAD has moved → empty sizes, warning, exit 0
+# Case 2 left an uncommitted edit on file.txt; discard before moving HEAD.
+git -C "$END_REPO" checkout -qf "$E_LATER"
+RUN="$EAR/20260927-1000000013-end-unk"
+mkdir -p "$RUN"
+cat >"$RUN/meta.md" <<EOF
+id: 1000000013
+slug: end-unk
+created: 2026-09-27
+title: end unk
+stage: distill
+status: active
+base: $E_BASE
+EOF
+cat >"$RUN/plan.md" <<EOF
+base: $E_BASE
+id: 1000000013
+
+# end unk
+
+## Tasks
+
+1. One (deps: )
+EOF
+cat >"$RUN/history.log" <<EOF
+2026-09-27T10:10:00Z stage=implement action=started tool=cursor head=$E_START
+2026-09-27T10:40:00Z stage=implement action=completed tool=cursor head=$E_START
+EOF
+set +e
+OUT="$("$ATRY" metrics "$RUN" 2>/dev/null)"
+ERR="$("$ATRY" metrics "$RUN" 2>&1 >/dev/null)"
+RC=$?
+set -e
+[[ "$RC" -eq 0 ]] && pass "case3: exit 0 when size unknowable" || fail "case3: exit $RC"
+[[ "$(field "$OUT" diff_end)" == "" ]] && pass "case3: diff_end empty" || fail "case3: diff_end (got '$(field "$OUT" diff_end)')"
+[[ "$(field "$OUT" files_changed)" == "" ]] && pass "case3: files_changed empty" || fail "case3: files_changed (got '$(field "$OUT" files_changed)')"
+[[ "$(field "$OUT" lines_added)" == "" && "$(field "$OUT" lines_deleted)" == "" ]] && pass "case3: line counts empty" || fail "case3: lines"
+echo "$ERR" | grep -qi "unknowable\|cannot size\|HEAD has moved\|size is unknowable" && pass "case3: warns on stderr" || fail "case3: stderr warning (got '$ERR')"
+
+# Case 4: no END recorded → working-tree + warning; diff_end=worktree
+git -C "$END_REPO" checkout -q "$E_LATER"
+# Ensure working tree dirty relative to E_START for a non-zero count
+echo "case4" >>"$END_REPO/file.txt"
+RUN="$EAR/20260927-1000000014-no-end"
+mkdir -p "$RUN"
+cat >"$RUN/meta.md" <<EOF
+id: 1000000014
+slug: no-end
+created: 2026-09-27
+title: no end
+stage: distill
+status: active
+base: $E_BASE
+EOF
+cat >"$RUN/plan.md" <<EOF
+base: $E_BASE
+id: 1000000014
+
+# no end
+
+## Tasks
+
+1. One (deps: )
+EOF
+cat >"$RUN/history.log" <<EOF
+2026-09-27T10:10:00Z stage=implement action=started tool=cursor head=$E_START
+2026-09-27T10:40:00Z stage=implement action=completed tool=cursor
+EOF
+set +e
+OUT="$("$ATRY" metrics "$RUN" 2>/dev/null)"
+ERR="$("$ATRY" metrics "$RUN" 2>&1 >/dev/null)"
+RC=$?
+set -e
+[[ "$RC" -eq 0 ]] && pass "case4: exit 0 without END" || fail "case4: exit $RC"
+[[ "$(field "$OUT" diff_end)" == "worktree" ]] && pass "case4: diff_end=worktree" || fail "case4: diff_end (got '$(field "$OUT" diff_end)')"
+[[ -n "$(field "$OUT" files_changed)" ]] && pass "case4: working-tree size still computed" || fail "case4: files_changed empty"
+echo "$ERR" | grep -qi "current tree\|working.tree\|no end\|no END\|diff_end" && pass "case4: warns on stderr" || fail "case4: stderr warning (got '$ERR')"
+
+# ========== 12. size= snapshot on completed (preferred over END cases) ==========
+# Snapshot: history append records size_base= / size= on implement,
+# self-review and cross-review completed; metrics prefers the last one when its
+# base matches diff_base, so committing afterwards does not change the size.
+snap_run() {
+  # snap_run <name> <id>: fresh repo + run dir; sets SNAP_REPO / SNAP_RUN / SNAP_BASE0
+  SNAP_REPO="$T/snap-$1"
+  mkdir -p "$SNAP_REPO"
+  (
+    cd "$SNAP_REPO"
+    git init -q
+    echo "base" >f.txt
+    git add f.txt
+    git commit -qm init
+  )
+  SNAP_BASE0="$(git -C "$SNAP_REPO" rev-parse HEAD)"
+  SNAP_RUN="$SNAP_REPO/.agent-relay/20260928-$2-$1"
+  mkdir -p "$SNAP_RUN"
+  printf 'base: %s\nid: %s\n\n# %s\n\n## Tasks\n\n1. One (deps: )\n' "$SNAP_BASE0" "$2" "$1" >"$SNAP_RUN/plan.md"
+  printf 'id: %s\nslug: %s\ncreated: 2026-09-28\ntitle: %s\nstage: plan\nstatus: active\nbase: %s\n' "$2" "$1" "$1" "$SNAP_BASE0" >"$SNAP_RUN/meta.md"
+}
+
+# Z: everything uncommitted through cross-review, human commits afterwards.
+snap_run snap-uncommitted 1000000021
+"$ATRY" history append "$SNAP_RUN" implement started tool=cursor 2>/dev/null
+printf 'a\nb\n' >>"$SNAP_REPO/f.txt"
+"$ATRY" history append "$SNAP_RUN" implement completed tool=cursor 2>/dev/null
+"$ATRY" history append "$SNAP_RUN" cross-review completed tool=claude 2>/dev/null
+tail -1 "$SNAP_RUN/history.log" | grep -qE " size_base=$SNAP_BASE0 size=1/2/0( |\$)" && pass "snapshot: completed records size_base= and size=" || fail "snapshot: completed size= (got '$(tail -1 "$SNAP_RUN/history.log")')"
+git -C "$SNAP_REPO" commit -qam work
+printf 'later\n' >>"$SNAP_REPO/f.txt"
+git -C "$SNAP_REPO" commit -qam later
+OUT="$("$ATRY" metrics "$SNAP_RUN" 2>/dev/null)"
+[[ "$(field "$OUT" diff_end)" == "snapshot" ]] && pass "snapshot: diff_end=snapshot" || fail "snapshot: diff_end (got '$(field "$OUT" diff_end)')"
+[[ "$(field "$OUT" files_changed)" == "1" && "$(field "$OUT" lines_added)" == "2" && "$(field "$OUT" lines_deleted)" == "0" ]] && pass "snapshot: size survives commit-after-review and later commits" || fail "snapshot: sizes (got $(field "$OUT" files_changed)/$(field "$OUT" lines_added)/$(field "$OUT" lines_deleted))"
+
+# X: implement committed, reviewer fix left uncommitted at cross-review end.
+snap_run snap-mixed 1000000022
+"$ATRY" history append "$SNAP_RUN" implement started tool=cursor 2>/dev/null
+printf 'a\nb\n' >>"$SNAP_REPO/f.txt"
+git -C "$SNAP_REPO" commit -qam impl
+"$ATRY" history append "$SNAP_RUN" implement completed tool=cursor 2>/dev/null
+printf 'fix\n' >>"$SNAP_REPO/f.txt"
+"$ATRY" history append "$SNAP_RUN" cross-review completed tool=claude 2>/dev/null
+OUT="$("$ATRY" metrics "$SNAP_RUN" 2>/dev/null)"
+[[ "$(field "$OUT" lines_added)" == "3" ]] && pass "snapshot: uncommitted review fix is counted" || fail "snapshot: mixed lines_added (got '$(field "$OUT" lines_added)')"
+
+# Explicit size= wins; a snapshot from another base is ignored (falls back).
+snap_run snap-explicit 1000000023
+"$ATRY" history append "$SNAP_RUN" implement started tool=cursor 2>/dev/null
+"$ATRY" history append "$SNAP_RUN" implement completed tool=cursor size_base=$SNAP_BASE0 size=7/8/9 2>/dev/null
+tail -1 "$SNAP_RUN/history.log" | grep -qE "size=7/8/9( |\$)" && [[ "$(grep -c 'size=' <(tail -1 "$SNAP_RUN/history.log"))" -eq 1 ]] && pass "snapshot: explicit size= wins (no auto snapshot)" || fail "snapshot: explicit size= (got '$(tail -1 "$SNAP_RUN/history.log")')"
+OUT="$("$ATRY" metrics "$SNAP_RUN" 2>/dev/null)"
+[[ "$(field "$OUT" lines_added)" == "8" ]] && pass "snapshot: metrics uses explicit size=" || fail "snapshot: explicit metrics (got '$(field "$OUT" lines_added)')"
+printf '2026-09-28T00:00:00Z stage=cross-review action=completed tool=claude size_base=0000000000000000000000000000000000000000 size=5/5/5\n' >>"$SNAP_RUN/history.log"
+OUT="$("$ATRY" metrics "$SNAP_RUN" 2>/dev/null)"
+[[ "$(field "$OUT" diff_end)" != "snapshot" ]] && pass "snapshot: base mismatch falls back to END cases" || fail "snapshot: base mismatch used snapshot"
 
 if [[ "$FAIL" -ne 0 ]]; then
   echo "metrics tests FAILED"

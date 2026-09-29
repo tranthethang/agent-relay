@@ -37,6 +37,12 @@ jobs:
       - name: Run metrics helper tests
         run: bash ./tests/metrics.sh
 
+      - name: Run human cockpit helper tests
+        run: bash ./tests/status.sh
+
+      - name: Run distill finalize tests
+        run: bash ./tests/distill-finalize.sh
+
       - name: Run remote smoke tests
         run: bash ./tests/smoke-remote.sh
 
@@ -50,9 +56,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: Run shellcheck
-        # Severity floor: -S error (see CONTRIBUTING.md). Tighten toward
-        # -S warning once existing warnings are cleared.
-        run: shellcheck -S error bin/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh lib/*.sh tests/*.sh
+        # Severity floor: -S warning (see CONTRIBUTING.md).
+        run: shellcheck -S warning bin/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh lib/*.sh tests/*.sh
 
   format:
     runs-on: ubuntu-latest

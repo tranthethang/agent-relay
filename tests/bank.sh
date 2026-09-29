@@ -5,7 +5,7 @@
 #   ./tests/bank.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 ATRY="$ROOT/scripts/atry"
 BANK_CHECK_SH="$ROOT/scripts/runtime/bank-check.sh"
 BANK_PUSH_SH="$ROOT/scripts/runtime/bank-push.sh"
@@ -22,7 +22,24 @@ fail() {
 }
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/ar-bank.XXXXXX")"
-cleanup() { rm -rf "$T"; }
+GIT_STATUS_BEFORE=""
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_STATUS_BEFORE="$(git -C "$ROOT" status --porcelain)"
+fi
+cleanup() {
+  local rc=$?
+  rm -rf "$T"
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local after
+    after="$(git -C "$ROOT" status --porcelain)"
+    if [[ "$after" != "$GIT_STATUS_BEFORE" ]]; then
+      echo "FAIL: suite mutated git working tree under $ROOT" >&2
+      printf 'before:\n%s\nafter:\n%s\n' "$GIT_STATUS_BEFORE" "$after" >&2
+      rc=1
+    fi
+  fi
+  exit "$rc"
+}
 trap cleanup EXIT
 
 REPO="$T/repo"
@@ -486,9 +503,17 @@ CURL_LOG="$T/curl-log"
 mkdir -p "$CURL_BIN" "$CURL_LOG"
 
 install_curl_stub() {
-  # $1 = mode: health-ok | health-fail | remember-ok | remember-fail | health-ok-remember-fail
+  # $1 = mode: health-ok | health-fail | remember-ok | remember-fail |
+  #             health-ok-remember-fail | remember-fail-first
+  # $2 = optional --keep-ledger (do not clear bank-agentmemory-sent.tsv)
   local mode="$1"
+  local keep_ledger="${2:-}"
+  if [[ "$keep_ledger" != "--keep-ledger" ]]; then
+    rm -f "$REPO/.agent-relay/bank-agentmemory-sent.tsv"
+  fi
   rm -f "$CURL_LOG"/*
+  : >"$CURL_LOG/remember-count.txt"
+  echo 0 >"$CURL_LOG/remember-count.txt"
   cat >"$CURL_BIN/curl" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -552,6 +577,25 @@ health-ok-remember-fail)
   fi
   echo "remember failed" >&2
   exit 22
+  ;;
+remember-fail-first)
+  if [[ "\$url" == */agentmemory/health ]]; then
+    echo '{"status":"healthy"}'
+    exit 0
+  fi
+  if [[ "\$url" == */agentmemory/remember ]]; then
+    n=\$(cat "\$LOGDIR/remember-count.txt")
+    n=\$((n + 1))
+    echo "\$n" >"\$LOGDIR/remember-count.txt"
+    if [[ "\$n" -eq 1 ]]; then
+      echo "remember failed (first)" >&2
+      exit 22
+    fi
+    echo '{"success":true}'
+    exit 0
+  fi
+  echo "unexpected url: \$url" >&2
+  exit 1
   ;;
 *)
   echo "unknown curl stub mode: \$MODE" >&2
@@ -662,20 +706,67 @@ grep -q '/agentmemory/remember' "$CURL_LOG/urls.txt" && pass "remember POST URL"
 if python3 - "$CURL_LOG/last-body.json" <<'PY'
 import json, sys
 b = json.load(open(sys.argv[1]))
-assert "content" in b and b["content"].lstrip().startswith("---"), repr(b.get("content","")[:40])
+# content is a projection: opener line, blank line, then body (no frontmatter)
+assert "content" in b, "missing content"
+lines = b["content"].split("\n")
+assert lines[0] == "decision: sample-key", repr(lines[0])
+assert lines[1] == "", repr(lines[1])
+assert "unchanged-body-marker" in b["content"], "body not included"
+# no frontmatter in projected content
+assert not b["content"].lstrip().startswith("---"), "frontmatter not stripped"
 assert b.get("project") == "agent-relay", b.get("project")
-assert b.get("type") == "decision", b.get("type")
-assert b.get("key") == "sample-key", b.get("key")
-assert b.get("status") == "active", b.get("status")
-assert "atry/decision" in b.get("tags", []), b.get("tags")
-assert any(str(c).startswith("key:") for c in b.get("concepts", [])), b.get("concepts")
+# type mapped to AM enum
+assert b.get("type") == "architecture", b.get("type")
+# key, status, tags NOT sent as top-level fields
+assert "key" not in b, "key should not be top-level"
+assert "status" not in b, "status should not be top-level"
+assert "tags" not in b, "tags should not be top-level"
+# concepts: atry/decision kept, project/agent-relay dropped, key: and status: added
+concepts = b.get("concepts", [])
+assert "atry/decision" in concepts, concepts
+assert not any(c.startswith("project/") for c in concepts), concepts
+assert any(str(c).startswith("key:") for c in concepts), concepts
+assert any(str(c).startswith("status:") for c in concepts), concepts
 PY
 then
-  pass "remember body has content/project/type/key/status/tags/concepts"
+  pass "remember body has projected content/project/mapped-type/lean-concepts"
 else
-  fail "remember body has content/project/type/key/status/tags/concepts"
+  fail "remember body has projected content/project/mapped-type/lean-concepts"
 fi
 [[ ! -f "$VAULT/$DEC_NOTE" ]] && pass "agentmemory-only push does not write vault" || fail "agentmemory-only push does not write vault"
+# --- AM skips type:run notes ---
+install_curl_stub remember-ok
+AM_SKIP_RUN="$T/am-skip-run"
+mkdir -p "$AM_SKIP_RUN"
+write_note "$AM_SKIP_RUN/$RUN_NOTE" run agent-relay
+write_note "$AM_SKIP_RUN/$DEC_NOTE" decision agent-relay
+rm -f "$CURL_LOG"/*
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_SKIP_RUN" >/dev/null 2>"$T/skip-run.err"
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0)" -eq 1 ]] && pass "AM skips type:run (one remember for decision)" || fail "AM skips type:run (expected 1 remember)"
+grep -q "type:run not remembered" "$T/skip-run.err" && pass "AM skip:run reports on stderr" || fail "AM skip:run reports on stderr"
+# --- AM skips terminal-status notes ---
+install_curl_stub remember-ok
+AM_SKIP_STATUS="$T/am-skip-status"
+mkdir -p "$AM_SKIP_STATUS"
+write_note "$AM_SKIP_STATUS/$DEC_NOTE" decision agent-relay
+# Overwrite status to terminal
+awk '
+  BEGIN { c = 0 }
+  /^---[[:space:]]*$/ { c++; print; next }
+  c == 1 && /^status:/ { print "status: superseded"; next }
+  { print }
+' "$AM_SKIP_STATUS/$DEC_NOTE" >"$AM_SKIP_STATUS/tmp" && mv "$AM_SKIP_STATUS/tmp" "$AM_SKIP_STATUS/$DEC_NOTE"
+rm -f "$CURL_LOG"/*
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_SKIP_STATUS" >/dev/null 2>"$T/skip-status.err"
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0)" -eq 0 ]] && pass "AM skips terminal-status note (no remember)" || fail "AM skips terminal-status note (expected 0 remembers)"
+grep -q "not active/open" "$T/skip-status.err" && pass "AM skip:terminal-status reports on stderr" || fail "AM skip:terminal-status reports on stderr"
+# AM-only all-skipped (terminal status) is an intentional skip → exit 0
+SKIP_ONLY_RC=0
+set +e
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_SKIP_STATUS" >/dev/null 2>/dev/null
+SKIP_ONLY_RC=$?
+set -e
+[[ "$SKIP_ONLY_RC" -eq 0 ]] && pass "AM-only all-skipped (terminal status) exits 0" || fail "AM-only all-skipped (terminal status) exits 0 (got $SKIP_ONLY_RC)"
 
 # --- both sinks ---
 install_curl_stub remember-ok
@@ -735,7 +826,7 @@ EOF
 AGENTMEMORY_SECRET="s3cret-token" PATH="$CURL_BIN:$PATH" bank_check "$REPO" >/dev/null
 rm -f "$VAULT"/*.md
 AGENTMEMORY_SECRET="s3cret-token" PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$BOTH_NOTES" >/dev/null
-[[ "$(grep -c '^Authorization: Bearer s3cret-token$' "$CURL_LOG/headers.txt" 2>/dev/null)" -ge 3 ]] && pass "AGENTMEMORY_SECRET sent as bearer on health + every remember" || fail "AGENTMEMORY_SECRET bearer header (got: $(cat "$CURL_LOG/headers.txt" 2>/dev/null))"
+[[ "$(grep -c '^Authorization: Bearer s3cret-token$' "$CURL_LOG/headers.txt" 2>/dev/null)" -ge 2 ]] && pass "AGENTMEMORY_SECRET sent as bearer on health + every remember" || fail "AGENTMEMORY_SECRET bearer header (got: $(cat "$CURL_LOG/headers.txt" 2>/dev/null))"
 grep -q "s3cret-token" "$CURL_LOG/last-args.txt" && fail "secret kept out of curl argv" || pass "secret kept out of curl argv"
 install_curl_stub remember-ok
 env -u AGENTMEMORY_SECRET PATH="$CURL_BIN:$PATH" "$ATRY" bank push "$REPO" "$BOTH_NOTES" >/dev/null
@@ -1057,7 +1148,7 @@ if python3 - "$CURL_LOG/last-body.json" <<'PY'
 import json, sys
 b = json.load(open(sys.argv[1]))
 assert b.get("project") == "atry-self", b.get("project")
-assert b.get("type") == "process", b.get("type")
+assert b.get("type") == "workflow", b.get("type")
 PY
 then
   pass "AM project field uses atry_name for scope: atry"
@@ -1086,7 +1177,7 @@ if python3 - "$CURL_LOG/last-body.json" <<'PY'
 import json, sys
 b = json.load(open(sys.argv[1]))
 assert b.get("project") == "agent-relay", b.get("project")
-assert b.get("type") == "decision", b.get("type")
+assert b.get("type") == "architecture", b.get("type")
 PY
 then
   pass "AM without atry_name still remembers project-lane note"
@@ -1132,6 +1223,74 @@ bank_push "$REPO" "$T/val-mod" >/dev/null 2>&1
 SHORT_MOD_RC=$?
 set -e
 [[ "$SHORT_MOD_RC" -eq 1 ]] && pass "push refuses module: slug shorter than 3" || fail "push refuses module: slug shorter than 3 (got $SHORT_MOD_RC)"
+
+# --- AM partial failure: continue remaining notes; retry posts only missing ---
+DEC_NOTE_B="${YMD}-${RID}-second-flat-layout.md"
+AM_PARTIAL="$T/am-partial"
+mkdir -p "$AM_PARTIAL"
+write_note "$AM_PARTIAL/$DEC_NOTE" decision agent-relay
+write_note "$AM_PARTIAL/$DEC_NOTE_B" decision agent-relay
+# Distinct keys so bodies (and hashes) differ
+awk 'BEGIN{c=0} /^---/{c++} c==1 && /^key:/{print "key: first-note"; next} {print}' \
+  "$AM_PARTIAL/$DEC_NOTE" >"$AM_PARTIAL/tmp" && mv "$AM_PARTIAL/tmp" "$AM_PARTIAL/$DEC_NOTE"
+awk 'BEGIN{c=0} /^---/{c++} c==1 && /^key:/{print "key: second-note"; next} {print}' \
+  "$AM_PARTIAL/$DEC_NOTE_B" >"$AM_PARTIAL/tmp" && mv "$AM_PARTIAL/tmp" "$AM_PARTIAL/$DEC_NOTE_B"
+
+rm -f "$REPO/.agent-relay/bank-agentmemory-sent.tsv"
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_AGENTMEMORY_URL=http://127.0.0.1:3111
+EOF
+install_curl_stub remember-fail-first
+PATH="$CURL_BIN:$PATH" bank_check "$REPO" >/dev/null
+set +e
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_PARTIAL" >/dev/null 2>"$T/am-partial.err"
+AM_PARTIAL_RC=$?
+set -e
+[[ "$AM_PARTIAL_RC" -eq 1 ]] && pass "AM partial fail (AM-only) exits 1" || fail "AM partial fail exits 1 (got $AM_PARTIAL_RC)"
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt")" -eq 2 ]] && pass "AM partial fail still POSTs remaining notes" || fail "AM partial fail POSTs remaining (got $(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0))"
+grep -q "agentmemory: failed" "$T/am-partial.err" && pass "AM partial fail lists sink failure" || fail "AM partial fail sink failure message"
+# Failed filename should appear (first note fails in remember-fail-first order = lexical note order)
+grep -E "failed \([^)]*\.md" "$T/am-partial.err" && pass "AM partial fail names failed filename(s)" || fail "AM partial fail names failed filename(s) (got $(cat "$T/am-partial.err"))"
+# Second note should be in the ledger (first failed, not recorded)
+LEDGER="$REPO/.agent-relay/bank-agentmemory-sent.tsv"
+[[ -f "$LEDGER" ]] && pass "AM sent ledger created after partial success" || fail "AM sent ledger created after partial success"
+ledger_lines="$(wc -l <"$LEDGER" | tr -d ' ')"
+[[ "$ledger_lines" -eq 1 ]] && pass "AM ledger has one row after partial (only success)" || fail "AM ledger one row (got $ledger_lines)"
+
+# Retry with remember-ok: only the missing note is POSTed (keep ledger)
+install_curl_stub remember-ok --keep-ledger
+set +e
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_PARTIAL" >/dev/null 2>"$T/am-retry.err"
+AM_RETRY_RC=$?
+set -e
+[[ "$AM_RETRY_RC" -eq 0 ]] && pass "AM retry after partial exits 0" || fail "AM retry after partial exits 0 (got $AM_RETRY_RC)"
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt")" -eq 1 ]] && pass "AM retry POSTs only missing note" || fail "AM retry POSTs only missing (got $(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0))"
+grep -q "already in sent ledger" "$T/am-retry.err" && pass "AM retry skips ledger hit on stderr" || fail "AM retry skips ledger hit on stderr"
+ledger_lines="$(wc -l <"$LEDGER" | tr -d ' ')"
+[[ "$ledger_lines" -eq 2 ]] && pass "AM ledger has both notes after retry" || fail "AM ledger both notes (got $ledger_lines)"
+
+# Third push: both ledger-hit, no remember POSTs
+install_curl_stub remember-ok --keep-ledger
+set +e
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_PARTIAL" >/dev/null 2>"$T/am-dedupe.err"
+AM_DEDUPE_RC=$?
+set -e
+[[ "$AM_DEDUPE_RC" -eq 0 ]] && pass "AM full-ledger skip exits 0" || fail "AM full-ledger skip exits 0 (got $AM_DEDUPE_RC)"
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0)" -eq 0 ]] && pass "AM full-ledger skip POSTs nothing" || fail "AM full-ledger skip POSTs nothing"
+# Changed content must post again
+awk 'BEGIN{c=0} /^---/{c++} c==1 && /^key:/{print "key: first-note-v2"; next} {print}' \
+  "$AM_PARTIAL/$DEC_NOTE" >"$AM_PARTIAL/tmp" && mv "$AM_PARTIAL/tmp" "$AM_PARTIAL/$DEC_NOTE"
+install_curl_stub remember-ok --keep-ledger
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_PARTIAL" >/dev/null 2>"$T/am-changed.err"
+[[ "$(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt")" -eq 1 ]] && pass "AM changed content posts again" || fail "AM changed content posts again (got $(grep -c '/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0))"
+# Another server: the ledger is keyed by URL too, so every note posts there
+cat >"$REPO/.agent-relay/bank.conf" <<EOF
+BANK_AGENTMEMORY_URL=http://127.0.0.2:3111
+EOF
+install_curl_stub remember-ok --keep-ledger
+PATH="$CURL_BIN:$PATH" bank_check "$REPO" >/dev/null
+PATH="$CURL_BIN:$PATH" bank_push "$REPO" "$AM_PARTIAL" >/dev/null 2>"$T/am-newurl.err"
+[[ "$(grep -c '127.0.0.2:3111/agentmemory/remember' "$CURL_LOG/urls.txt")" -eq 2 ]] && pass "AM new server URL posts every note (ledger keyed by URL)" || fail "AM new server URL posts every note (got $(grep -c '127.0.0.2:3111/agentmemory/remember' "$CURL_LOG/urls.txt" 2>/dev/null || echo 0))"
 
 # --- bank init --atry-path / --atry-name ---
 new_init_repo atry-flags

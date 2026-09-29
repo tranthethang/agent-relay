@@ -17,6 +17,8 @@ not a fact.
 
 ## Preflight
 
+<!-- BEGIN PREFLIGHT -->
+
 Run `atry version` before anything else in this stage. If it fails, stop —
 do not search the filesystem for helpers and do not fall back to running
 `scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
@@ -25,6 +27,13 @@ Tell the user to run `verify.sh` and fix what it reports (most often
 confirm each `atry resolve` / `atry run-init` call below prints `atry: using
 <path>` on stderr. Full rule: `references/file-conventions.md` ("atry
 preflight").
+
+<!-- END PREFLIGHT -->
+
+Do **not** run `atry approve`, `atry decide`, `atry stamp`, or `atry close`
+unless the user explicitly asked for that exact command in this conversation.
+Those verbs are for the human cockpit; skill text states the rule, nothing in
+the CLI enforces it.
 
 ### Commands used in this stage
 
@@ -132,24 +141,38 @@ cross-review is skipped.
    - For a genuine tradeoff/decision point (not a bug, not style, not already
      resolved by the plan), escalate per `reviewer-conduct.md` — ask the
      developer if interactive; otherwise record under `### Open decisions`
-     and leave the code as-is.
+     and leave the code as-is. When the human settles an open item, they
+     record it with `atry decide <run> <id> "<resolution>"` (writes
+     `decisions.md`); do not run that command yourself unless they asked.
    - If a fix requires deviating from the original plan, say so explicitly.
 
 1. Upsert today's Self-Review section with `atry review` (do not
    hand-edit other sections). Before writing the body files, read
    `references/review-report-template.md` and
    `references/review-walkthrough-template.md` and use them as the
-   copy-and-fill outlines:
+   copy-and-fill outlines.
+
+   **Workspace hygiene:** Never write review intermediates (such as body files,
+   walk bodies, diff dumps/patches, or ad-hoc scratch directories) under the
+   repository workspace or under `$RUN_DIR` for staging. Always write bodies to
+   system temporary files using `mktemp "${TMPDIR:-/tmp}/ar-*.XXXXXX"` and
+   register cleanup with `trap 'rm -f …' EXIT` before populating them, so
+   intermediate files are cleaned up even if the stage aborts early:
 
    ```bash
    TODAY="$(date +%F)"
-   # body file must start with the provenance HTML comment, then the section body
+   body_tmp="$(mktemp "${TMPDIR:-/tmp}/ar-self-body.XXXXXX")"
+   walk_tmp="$(mktemp "${TMPDIR:-/tmp}/ar-self-walk.XXXXXX")"
+   trap 'rm -f "$body_tmp" "$walk_tmp"' EXIT
+
+   # Populate $body_tmp and $walk_tmp; each file must start with the provenance
+   # HTML comment, then the section body.
    atry review upsert \
      "$RUN_DIR/review-report.md" \
-     Self-Review "$TODAY" body.md
+     Self-Review "$TODAY" "$body_tmp"
    atry review upsert \
      "$RUN_DIR/review-walkthrough.md" \
-     Self-Review "$TODAY" walk-body.md
+     Self-Review "$TODAY" "$walk_tmp"
    ```
 
    Never remove `## Cross-Review` sections or Self-Review sections from other

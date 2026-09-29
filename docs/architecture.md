@@ -40,7 +40,7 @@ call agents, pick models, or watch project `.agent-relay/` run dirs.
 | Layer                | Location                                                | Job                                                                                           |
 | -------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Skill text           | `skills/<name>/SKILL.md`                                | Tell an agent what to do; **record**, rarely enforce                                          |
-| Shared conventions   | `docs/file-conventions.md`                              | Artifact names / id / per-run layout (copied into every bundle)                               |
+| Shared conventions   | `docs/conventions/*.md` → `docs/file-conventions.md`    | Artifact names / id / per-run layout (per-skill subset in each bundle)                        |
 | Helpers              | `scripts/atry` + `scripts/runtime/` → `~/.agent-relay/` | Bash the agent runs (`atry resolve`, `atry claim`, `atry review`, …)                          |
 | Maintainer scripts   | `scripts/maint/`                                        | Sync / release only (not installed for agents)                                                |
 | Installer            | `bin/install.sh`, `uninstall.sh`, `verify.sh`           | Copy / remove / check files under `$HOME` (+ atry home)                                       |
@@ -53,23 +53,31 @@ call agents, pick models, or watch project `.agent-relay/` run dirs.
 0. **brainstorm** (optional) → read-only investigation and discussion; writes
    nothing, no run directory
 1. **plan** → create run directory via `atry run-init`, write `plan.md`
-2. **implement** → code + `implement-plan.md` / `implement-report.md` (or parallel dirs)
-3. **self-review** → upsert dated Self-Review section; broad-vision analysis;
+2. **approve** (optional, human) → `atry approve <run> plan` records approval;
+   implement warns but does not stop when missing
+3. **implement** → code + `implement-plan.md` / `implement-report.md` (or parallel dirs)
+4. **self-review** → upsert dated Self-Review section; broad-vision analysis;
    escalate tradeoffs per `reviewer-conduct.md`
-4. **cross-review** → upsert Cross-Review with inverted-question framing
+5. **cross-review** → upsert Cross-Review with inverted-question framing
    (skill asks for a different tool; nothing enforces it)
-5. **distill** → write atomic typed notes under `$RUN_DIR/distill/`;
-   optionally push that directory to an external knowledge bank
-   (e.g., Obsidian vault) via `atry bank push <start-dir> <notes-dir>`
+6. **distill** → write atomic typed notes under `$RUN_DIR/distill/`; then
+   `atry distill finalize` runs bank check, metrics, push, set-status, the
+   Bank push line, vault-only re-push, and closes the run
+7. **close** (human, when distill is skipped) → `atry close` / `--abandon`
 
-Nothing in this repo schedules that order. Skipping a stage is always possible.
+`atry status` is the read-only cockpit for “where is this run / what next”.
+`atry stamp` / `atry decide` record tool/model attestation and decision
+resolutions. Nothing in this repo schedules that order. Skipping a stage is
+always possible.
 
 ## Sync gates (do not skip)
 
 Two copy-vs-source checks keep installable bundles from silently diverging:
 
-- `scripts/maint/sync-references.sh` — `docs/file-conventions.md` → skill
-  bundle copies; also keeps review `*-template.md` and `reviewer-conduct.md`
+- `scripts/maint/sync-references.sh` — `docs/conventions/*.md` →
+  `docs/file-conventions.md` and per-skill `references/file-conventions.md`
+  (manifest subsets); `docs/partials/preflight.md` → marked regions in each
+  `SKILL.md`; also keeps review `*-template.md` and `reviewer-conduct.md`
   byte-identical between `atry-self-review` and `atry-cross-review`; refuses
   orphan `skills/*/scripts/`
 - `scripts/maint/sync-bootstrap.sh` — `lib/bootstrap.sh` body → marked regions in `bin/*.sh`

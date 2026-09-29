@@ -5,7 +5,7 @@
 #   ./tests/tasks.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT"
 
 ATRY="$ROOT/scripts/atry"
@@ -32,7 +32,24 @@ fail() {
 unset AGENT_RELAY_TEST_STEAL_BARRIER AGENT_RELAY_TEST_STEAL_PAUSE
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/ar-tasks.XXXXXX")"
-cleanup() { rm -rf "$T"; }
+GIT_STATUS_BEFORE=""
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_STATUS_BEFORE="$(git -C "$ROOT" status --porcelain)"
+fi
+cleanup() {
+  local rc=$?
+  rm -rf "$T"
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local after
+    after="$(git -C "$ROOT" status --porcelain)"
+    if [[ "$after" != "$GIT_STATUS_BEFORE" ]]; then
+      echo "FAIL: suite mutated git working tree under $ROOT" >&2
+      printf 'before:\n%s\nafter:\n%s\n' "$GIT_STATUS_BEFORE" "$after" >&2
+      rc=1
+    fi
+  fi
+  exit "$rc"
+}
 trap cleanup EXIT
 
 cd "$T"
@@ -79,14 +96,14 @@ grep -q -- "- \[in-progress\] T1:" "$HAPPY_DIR/implement-plan.md" && pass "claim
 grep -q "status: in-progress" "$HAPPY_DIR/implement-plan/T1.status" && pass "claim sets in-progress" || fail "claim sets in-progress"
 
 # Update with wrong session-tag should fail
-if "$TASK_CLAIM" update happy T1 wrong-agent done >/dev/null 2>&1; then
+if "$TASK_CLAIM" update happy T1 wrong-agent "done" >/dev/null 2>&1; then
   fail "update with wrong session-tag should fail"
 else
   pass "update with wrong session-tag fails"
 fi
 
 # Update with correct session-tag
-"$TASK_CLAIM" update happy T1 agent-1 done >/dev/null
+"$TASK_CLAIM" update happy T1 agent-1 "done" >/dev/null
 grep -q "status: done" "$HAPPY_DIR/implement-plan/T1.status" && pass "update sets done" || fail "update sets done"
 grep -q -- "- \[done\] T1:" "$HAPPY_DIR/implement-plan.md" && pass "update updates rollup" || fail "update updates rollup"
 
@@ -449,7 +466,7 @@ else
 fi
 # Finish T1
 "$TASK_CLAIM" claim deps T1 worker >/dev/null
-"$TASK_CLAIM" update deps T1 worker done >/dev/null
+"$TASK_CLAIM" update deps T1 worker "done" >/dev/null
 # Claim T2 -> should succeed
 if "$TASK_CLAIM" claim deps T2 worker >/dev/null; then
   pass "claim T2 succeeds when T1 is done"
@@ -615,7 +632,7 @@ id: 1700000013
 EOF
 "$TASK_INIT" sess >/dev/null
 "$TASK_CLAIM" claim sess T1 tagA >/dev/null
-if "$TASK_CLAIM" update --session tagA sess T1 done >/dev/null; then
+if "$TASK_CLAIM" update --session tagA sess T1 "done" >/dev/null; then
   pass "update --session after subcommand works"
 else
   fail "update --session after subcommand works"
@@ -656,7 +673,7 @@ else
 fi
 after="$(cat "$SESS_DIR/implement-plan/T1.status")"
 [[ "$before" == "$after" ]] && pass "bogus status leaves file unchanged" || fail "bogus status leaves file unchanged"
-if "$TASK_CLAIM" update sess T1 agentA done "extra reason" >/dev/null 2>&1; then
+if "$TASK_CLAIM" update sess T1 agentA "done" "extra reason" >/dev/null 2>&1; then
   fail "done rejects extra reason"
 else
   pass "done rejects extra reason"
@@ -746,7 +763,7 @@ else
   pass "steal respects unmet deps"
 fi
 "$TASK_CLAIM" claim stealdep T1 owner1 >/dev/null
-"$TASK_CLAIM" update stealdep T1 owner1 done >/dev/null
+"$TASK_CLAIM" update stealdep T1 owner1 "done" >/dev/null
 if "$TASK_CLAIM" steal stealdep T2 taker >/dev/null 2>&1; then
   pass "steal ok when deps satisfied"
 else
@@ -966,6 +983,44 @@ printf '<!-- relay: stage=self-review tool=gemini model=weak-model base=abc date
 printf '<!-- relay: stage=cross-review tool=cursor model=composer-unknown base=abc date=%s -->\nCross body.\n' "$TODAY" >"$T/warn-cross-fenced.md"
 WARN_OUT3="$("$REVIEW_SH" upsert "$WARN_FILE3" Cross-Review "$TODAY" "$T/warn-cross-fenced.md" 2>&1 >/dev/null)"
 [[ -z "$WARN_OUT3" ]] && pass "fenced example provenance is not mistaken for the real prior self-review" || fail "fenced example provenance is not mistaken for the real prior self-review"
+
+# --- CR-1d: Cross-Review tool vs implement-author tool warning ---
+AUTHOR_RUN="$T/author-run"
+mkdir -p "$AUTHOR_RUN"
+cat >"$AUTHOR_RUN/history.log" <<'EOF'
+2026-09-27T10:10:00Z stage=implement action=started tool=cursor
+2026-09-27T10:40:00Z stage=implement action=completed tool=cursor
+EOF
+printf '<!-- relay: stage=cross-review tool=cursor model=other-model base=abc date=%s -->\nCross.\n' "$TODAY" >"$T/warn-cross-author-same.md"
+AUTHOR_OUT="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-same.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT" | grep -qi "implement author" && pass "cross-review same as implement author warns" || fail "cross-review same as implement author warns (got '$AUTHOR_OUT')"
+
+printf '<!-- relay: stage=cross-review tool=claude model=opus base=abc date=%s -->\nCross.\n' "$TODAY" >"$T/warn-cross-author-diff.md"
+AUTHOR_OUT2="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-diff.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT2" | grep -qi "implement author" && fail "different implement author tool is silent" || pass "different implement author tool is silent"
+
+# unknown on either side: no author warning
+cat >"$AUTHOR_RUN/history.log" <<'EOF'
+2026-09-27T10:10:00Z stage=implement action=started tool=unknown
+EOF
+printf '<!-- relay: stage=cross-review tool=cursor model=x base=abc date=%s -->\nCross.\n' "$TODAY" >"$T/warn-cross-author-unk.md"
+AUTHOR_OUT3="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-unk.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT3" | grep -qi "implement author" && fail "unknown implement tool skips author warning" || pass "unknown implement tool skips author warning"
+
+# missing history: fall back to implement-report.md provenance
+rm -f "$AUTHOR_RUN/history.log"
+cat >"$AUTHOR_RUN/implement-report.md" <<'EOF'
+<!-- relay: stage=implement tool=cursor model=x base=abc date=2026-09-27 -->
+done
+EOF
+printf '<!-- relay: stage=cross-review tool=cursor model=y base=abc date=%s -->\nCross.\n' "$TODAY" >"$T/warn-cross-author-fb.md"
+AUTHOR_OUT4="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-fb.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT4" | grep -qi "implement author" && pass "author tool falls back to implement-report" || fail "author tool falls back to implement-report (got '$AUTHOR_OUT4')"
+
+# missing history and report: silent
+rm -f "$AUTHOR_RUN/implement-report.md"
+AUTHOR_OUT5="$("$REVIEW_SH" upsert "$AUTHOR_RUN/review-report.md" Cross-Review "$TODAY" "$T/warn-cross-author-fb.md" 2>&1 >/dev/null)"
+echo "$AUTHOR_OUT5" | grep -qi "implement author" && fail "missing history/report skips author warning" || pass "missing history/report skips author warning"
 
 # --- find-agent-relay-dir.sh: no fallback to $PWD/.agent-relay (T3) ---
 # Deliberately OUTSIDE $T (which has its own .agent-relay/ for the rest of
@@ -1360,7 +1415,7 @@ while [[ $i -le $CROSS_N ]]; do
   HOLD="$T/mutex-hold-update-steal-$i"
   rm -f "$HOLD" "$HOLD.ready"
   touch "$HOLD"
-  AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" update crossop T1 owner-u done >/dev/null 2>&1 &
+  AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" update crossop T1 owner-u "done" >/dev/null 2>&1 &
   pid_up=$!
   waits=0
   while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do
@@ -1413,30 +1468,46 @@ done
 rm -rf "$CROSS_DIR"
 
 # --- CR-2: skill bundle references must not drift; no skill scripts/ ---
-if bash "$ROOT/scripts/maint/sync-references.sh" --check; then
+# Drift/orphan probes mutate a temp copy via --root — never $ROOT.
+SYNC_COPY="$T/sync-root"
+mkdir -p "$SYNC_COPY/docs" "$SYNC_COPY/docs/conventions" "$SYNC_COPY/docs/partials"
+cp -R "$ROOT/docs/conventions/." "$SYNC_COPY/docs/conventions/"
+cp -R "$ROOT/docs/partials/." "$SYNC_COPY/docs/partials/"
+cp "$ROOT/docs/file-conventions.md" "$SYNC_COPY/docs/"
+cp -R "$ROOT/skills" "$SYNC_COPY/skills"
+if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check; then
   pass "skill bundles in sync with sources"
 else
   fail "skill bundles in sync with sources"
 fi
-_drift_target="$ROOT/skills/atry-implement/references/file-conventions.md"
-cp "$_drift_target" "$T/drift-backup.md"
+_drift_target="$SYNC_COPY/skills/atry-implement/references/file-conventions.md"
 printf '\n<!-- drift -->\n' >>"$_drift_target"
-if bash "$ROOT/scripts/maint/sync-references.sh" --check >/dev/null 2>&1; then
+if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check >/dev/null 2>&1; then
   fail "sync --check detects reference drift"
 else
   pass "sync --check detects reference drift"
 fi
-cp "$T/drift-backup.md" "$_drift_target"
+# Restore drifted file so orphan check is independent
+cp "$ROOT/skills/atry-implement/references/file-conventions.md" "$_drift_target"
 
-# Orphan scripts/ under a skill must fail --check
-mkdir -p "$ROOT/skills/atry-implement/scripts"
-echo '#!/bin/sh' >"$ROOT/skills/atry-implement/scripts/orphan.sh"
-if bash "$ROOT/scripts/maint/sync-references.sh" --check >/dev/null 2>&1; then
+# Orphan scripts/ under a skill must fail --check (on the temp copy only)
+mkdir -p "$SYNC_COPY/skills/atry-implement/scripts"
+echo '#!/bin/sh' >"$SYNC_COPY/skills/atry-implement/scripts/orphan.sh"
+if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check >/dev/null 2>&1; then
   fail "sync --check detects orphan skill scripts/"
 else
   pass "sync --check detects orphan skill scripts/"
 fi
-rm -rf "$ROOT/skills/atry-implement/scripts"
+rm -rf "$SYNC_COPY/skills/atry-implement/scripts"
+
+# Preflight partial drift must fail --check
+printf '\n<!-- pf-drift -->\n' >>"$SYNC_COPY/docs/partials/preflight.md"
+if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check >/dev/null 2>&1; then
+  fail "sync --check detects preflight partial drift"
+else
+  pass "sync --check detects preflight partial drift"
+fi
+cp "$ROOT/docs/partials/preflight.md" "$SYNC_COPY/docs/partials/preflight.md"
 
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL TASK TESTS PASSED"

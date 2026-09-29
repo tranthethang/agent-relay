@@ -21,6 +21,7 @@ model_cross_review:
 model_distill:
 model_source:
 diff_base:
+diff_end:
 files_changed:
 lines_added:
 lines_deleted:

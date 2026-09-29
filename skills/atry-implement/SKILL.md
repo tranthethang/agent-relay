@@ -16,6 +16,8 @@ re-plan from scratch — decompose and execute the plan that already exists.
 
 ## Preflight
 
+<!-- BEGIN PREFLIGHT -->
+
 Run `atry version` before anything else in this stage. If it fails, stop —
 do not search the filesystem for helpers and do not fall back to running
 `scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
@@ -25,13 +27,26 @@ confirm each `atry resolve` / `atry run-init` call below prints `atry: using
 <path>` on stderr. Full rule: `references/file-conventions.md` ("atry
 preflight").
 
+<!-- END PREFLIGHT -->
+
+After resolve, run `atry status "$RUN_DIR"` and relay its output to the user
+(especially `plan approved: no` and any `run-history: warning: plan not
+approved` on the subsequent `implement started` append). Do **not** stop for a
+missing approval — warn and continue. The approval gate is advisory only.
+
+Do **not** run `atry approve`, `atry decide`, `atry stamp`, or `atry close`
+unless the user explicitly asked for that exact command in this conversation.
+Those verbs are for the human cockpit; skill text states the rule, nothing in
+the CLI enforces it.
+
 ### Commands used in this stage
 
 | Command                                                                                 | Meaning of a non-zero exit                                            |
 | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `atry version`                                                                          | atry is missing or broken on PATH -- stop, see Preflight above        |
 | `atry resolve [RUN_ID or path]`                                                         | ambiguous or not found -- ask the user for the `RUN_ID` or path       |
-| `atry history append <run-dir> implement started\|completed tool=<tool>`                | run dir invalid                                                       |
+| `atry status "$RUN_DIR"`                                                                | informational; relay approval / next-step lines to the user           |
+| `atry history append <run-dir> implement started\|completed tool=<tool>`                | run dir invalid; may warn on stderr if plan is unapproved (exit 0)    |
 | `atry task-init "$RUN_DIR"` (parallel mode setup)                                       | the plan doesn't parse (bad checkbox status or dependency id)         |
 | `atry list "$RUN_DIR"` (parallel mode)                                                  | informational only -- no special non-zero meaning                     |
 | `atry claim "$RUN_DIR" <task-id> <session-tag>` (parallel mode)                         | already locked, or a dep isn't `done` -- pick a different task        |

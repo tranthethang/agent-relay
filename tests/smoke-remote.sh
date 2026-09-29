@@ -15,8 +15,8 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 FIXTURES_DIR="$SCRIPT_DIR/fixtures"
 
 PASS=0
@@ -39,8 +39,23 @@ fi
 VALID_SHA256="$(awk '{print $1; exit}' "$FIXTURES_DIR/SHA256SUMS")"
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/smoke-remote.XXXXXX")"
+GIT_STATUS_BEFORE=""
+if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_STATUS_BEFORE="$(git -C "$ROOT_DIR" status --porcelain)"
+fi
 cleanup() {
+  local rc=$?
   rm -rf "$T"
+  if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local after
+    after="$(git -C "$ROOT_DIR" status --porcelain)"
+    if [[ "$after" != "$GIT_STATUS_BEFORE" ]]; then
+      echo "FAIL: suite mutated git working tree under $ROOT_DIR" >&2
+      printf 'before:\n%s\nafter:\n%s\n' "$GIT_STATUS_BEFORE" "$after" >&2
+      rc=1
+    fi
+  fi
+  exit "$rc"
 }
 trap cleanup EXIT INT TERM
 

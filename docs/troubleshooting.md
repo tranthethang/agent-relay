@@ -22,7 +22,7 @@ cause over disabling sync/CI checks.
 | `Drift: skills/…/file-conventions.md` | Edited docs or only one side               | `bash scripts/maint/sync-references.sh` then commit both sides |
 | `Orphan: skills/…/scripts/`           | Unexpected `scripts/` under a skill bundle | Remove it; runtime is `atry` under `~/.agent-relay`            |
 | Bootstrap `--check` fails             | `lib/bootstrap.sh` edited without sync     | `bash scripts/maint/sync-bootstrap.sh`                         |
-| shellcheck job fails                  | New error-level finding                    | Fix the script; do not lower `-S error` casually               |
+| shellcheck job fails                  | New warning-level finding                  | Fix the script; do not lower `-S warning` casually             |
 
 ## Run discovery
 

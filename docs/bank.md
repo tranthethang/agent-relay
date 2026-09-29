@@ -2,7 +2,9 @@
 
 An **opt-in** connection from one target repo to external flat folder(s) of
 typed markdown notes. After a run, `atry-distill` writes notes under
-`$RUN_DIR/distill/` and `atry bank push` copies them flat into one or two
+`$RUN_DIR/distill/`; `atry distill finalize` then runs bank check, metrics,
+push, set-status, the Bank push line, and a vault-only re-push.
+`atry bank push` copies notes flat into one or two
 vault paths by note `scope:` — **project** lane (`BANK_PATH` /
 `BANK_PROJECT_NAME`) vs **atry self-improve** lane (`BANK_ATRY_PATH` /
 `BANK_ATRY_NAME`). This is project-level configuration — one bank config per
@@ -233,9 +235,32 @@ usable sink failed during transfer (or a note failed validation before any
 write).
 
 `--vault-only` skips agentmemory for **both** vault lanes (project and atry);
-used by `atry-distill` for its second push after the Bank push line.
+used by `atry distill finalize` for its second push after the Bank push line.
 Re-push overwrites the same vault filenames; agentmemory creates a new
-memory per call when not skipped.
+memory per call when not skipped by the local sent ledger (below).
+
+**Agentmemory POST failures.** A failed `remember` does **not** stop the
+loop: remaining eligible notes are still attempted. Failed basenames are
+listed on the `bank-push: agentmemory: failed (...)` stderr line, and the
+agentmemory sink counts as failed for that push (exit `1` only when every
+usable sink failed). Temp body / auth-header files are removed by a `trap`
+(including on interrupt).
+
+**Local sent ledger.** Successful agentmemory POSTs append one row to
+`.agent-relay/bank-agentmemory-sent.tsv` (next to `bank-status.md`):
+
+```text
+url<TAB>project<TAB>filename<TAB>sha256-of-posted-body
+```
+
+On a later push, a note whose exact row (same server URL, project, filename
+and body hash) is already present is skipped (stderr: `already in sent
+ledger`). Changed note content produces a new body hash and is posted again
+(a new memory — documented, not server-side deduped); pointing
+`BANK_AGENTMEMORY_URL` at another server posts every note to that server.
+The ledger lives in the target repo's `.agent-relay/` directory: if you
+commit `.agent-relay/`, the ledger is committed with it; if you ignore it,
+the ledger stays local.
 
 Advisory (exit `0`): orphan notes in each vault path that share the pushed
 run's `{YMD}-{RUN_ID}-` prefix but were not in this push (reported per path
@@ -285,17 +310,31 @@ Checked against agentmemory `@0.9.29` (`src/triggers/api.ts` /
 | Method | Path                    | Role in atry                                                                      |
 | ------ | ----------------------- | --------------------------------------------------------------------------------- |
 | `GET`  | `/agentmemory/health`   | `atry bank check` reachability probe (HTTP 200 unless health is `critical` → 503) |
-| `POST` | `/agentmemory/remember` | `atry bank push` — one call per note                                              |
+| `POST` | `/agentmemory/remember` | `atry bank push` — one call per eligible note                                     |
 
 `POST /agentmemory/remember` body fields atry sends:
 
-- `content` (required) — full note file (frontmatter + body)
+- `content` (required) — recall-oriented projection: `<type>: <key>` opener,
+  blank line, then the markdown body (YAML frontmatter stripped). Vault and
+  `$RUN_DIR/distill/` copies remain full notes.
 - `project` — from the note's lane: `project_name:` for project /
   `module:*` notes, `atry_name:` for `scope: atry` notes (when non-empty)
-- `type`, `key`, `status`, `tags` — from note frontmatter (as metadata;
-  unknown top-level keys are dropped by the server whitelist; durable copy
-  stays in `content`)
-- `concepts` — note tags plus `key:…`, `status:…`, `note-type:…` for search
+- `type` — mapped to agentmemory's enum: `decision→architecture`,
+  `convention→pattern`, `pitfall→bug`, `process→workflow`, `open-item→fact`
+- `concepts` — from note `tags` (dropping `project/<name>` when `project` is
+  set), plus `key:<slug>`, `status:<value>`, and `module:<slug>` when `scope`
+  is `module:*`. Does not include `note-type:…`.
+- `key`, `status`, `tags` are **not** sent as top-level fields.
+
+**Eligibility.** Push skips notes for the agentmemory sink when:
+
+- `type: run` — per-run metrics; not durable lessons
+- `status` is not `active` or `open` (terminal: `superseded`, `deprecated`,
+  `resolved`; empty or unknown status also skips)
+- atry-lane note without `atry_name` set
+
+Intentional skips are not failures; push still exits `0` when every note was
+skipped.
 
 Server-side, remember's own `type` enum is
 `pattern|preference|architecture|bug|workflow|fact`; values outside that set
@@ -313,10 +352,17 @@ then send the header from a 0600 temp file (`curl -H @file`), so the secret
 never appears in `bank.conf`, `bank-status.md`, or the process list. Do not
 put it in `bank.conf` — that file may be committed.
 
-**No dedupe.** `remember` always creates a new memory. `atry bank push
---vault-only` skips agentmemory; `atry-distill` uses it for its second push
-(after writing the `Bank push:` line). Re-running distill for the same run,
-or pushing the same notes by hand, still adds duplicate memories.
+**No server-side dedupe.** `remember` always creates a new memory. atry's
+local ledger (`.agent-relay/bank-agentmemory-sent.tsv`) skips an exact
+server URL + `project` + filename + posted-body hash row on retry so a partial failure
+can be re-run without re-posting successes. What still duplicates:
+
+- Changed note content (new body hash) → posted again as a new memory
+- `atry bank push --vault-only` skips agentmemory entirely; `atry distill finalize`'s
+  second push uses that flag after the Bank push line (vault overwrite only)
+- Deleting or editing the ledger by hand, or pushing from a different
+  checkout without that ledger file
+- Any remember outside atry (MCP, other clients)
 
 There is **no** status-by-key REST update: `/agentmemory/evolve` requires
 `memoryId` + `newContent`. `atry bank set-status` therefore edits only the
@@ -404,13 +450,13 @@ No `.base` files are shipped with this repo.
 
 Same honesty standard as [security.md](security.md):
 
-| Surface                               | What you get                                                                                | What you do not get                                                                           |
-| ------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `bank.conf` line parser               | Refuses obvious RCE shapes and non-`BANK_KEY=value` lines before ever writing a status file | A proof that the declared path/endpoint is itself safe, or that pushed content is sound       |
-| `bank-status.md`                      | A point-in-time reachability probe (+ advisory warnings)                                    | A guarantee the bank stays reachable until the push actually runs                             |
-| `atry bank push` obsidian-vault write | Plain markdown files on disk at deterministic flat paths (per lane)                         | Confirmation your notes app indexed them, or that the notes are any good                      |
-| `atry bank push` agentmemory remember | One REST POST per note with full content + lane project metadata                            | Proof the memory was indexed, dedupe across pushes, or status-by-key sync                     |
-| `atry bank set-status`                | Lifecycle fields updated in place on the vault file (either lane)                           | Edits to the run-dir snapshot, agentmemory status forward, or validation of note body quality |
+| Surface                               | What you get                                                                                                                                                                          | What you do not get                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `bank.conf` line parser               | Refuses obvious RCE shapes and non-`BANK_KEY=value` lines before ever writing a status file                                                                                           | A proof that the declared path/endpoint is itself safe, or that pushed content is sound       |
+| `bank-status.md`                      | A point-in-time reachability probe (+ advisory warnings)                                                                                                                              | A guarantee the bank stays reachable until the push actually runs                             |
+| `atry bank push` obsidian-vault write | Plain markdown files on disk at deterministic flat paths (per lane)                                                                                                                   | Confirmation your notes app indexed them, or that the notes are any good                      |
+| `atry bank push` agentmemory remember | One REST POST per eligible note with projected content + lane `project` + mapped `type` / lean `concepts`; local sent ledger skips exact url/project/filename/body-hash rows on retry | Proof the memory was indexed, server-side dedupe, or status-by-key sync                       |
+| `atry bank set-status`                | Lifecycle fields updated in place on the vault file (either lane)                                                                                                                     | Edits to the run-dir snapshot, agentmemory status forward, or validation of note body quality |
 
 ## Adding another backend later
 

@@ -3,7 +3,7 @@
 #   ./tests/smoke.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT"
 INSTALL="$ROOT/bin/install.sh"
 UNINSTALL="$ROOT/bin/uninstall.sh"
@@ -17,7 +17,24 @@ fail() {
 }
 
 T="$(mktemp -d "${TMPDIR:-/tmp}/ar-smoke.XXXXXX")"
-cleanup() { rm -rf "$T"; }
+GIT_STATUS_BEFORE=""
+if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_STATUS_BEFORE="$(git -C "$ROOT" status --porcelain)"
+fi
+cleanup() {
+  local rc=$?
+  rm -rf "$T"
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local after
+    after="$(git -C "$ROOT" status --porcelain)"
+    if [[ "$after" != "$GIT_STATUS_BEFORE" ]]; then
+      echo "FAIL: suite mutated git working tree under $ROOT" >&2
+      printf 'before:\n%s\nafter:\n%s\n' "$GIT_STATUS_BEFORE" "$after" >&2
+      rc=1
+    fi
+  fi
+  exit "$rc"
+}
 trap cleanup EXIT
 
 # Isolate installs under a fake HOME so we never touch the real machine.
@@ -75,7 +92,59 @@ check_frontmatter "$HOME/.kiro/skills" "kiro"
 # that files exist), so export the installed shim's directory before calling
 # it -- same as an agent's shell would need to.
 export PATH="$HOME/.local/bin:$PATH"
+VERIFY_MATCH_OUT="$("$VERIFY" 2>&1)" || true
+if echo "$VERIFY_MATCH_OUT" | grep -q '\[OK\] installed ~/.agent-relay matches this clone'; then
+  pass "verify reports clone matches installed"
+else
+  fail "verify reports clone matches installed (got: $VERIFY_MATCH_OUT)"
+fi
 if "$VERIFY" >/dev/null 2>&1; then pass "verify after install"; else fail "verify after install"; fi
+
+# Stale install is [WARN] only — mutate installed helper, expect WARN + still exit 0
+cp "$HOME/.agent-relay/lib/run-history.sh" "$T/run-history.sh.bak"
+printf '\n# smoke stale marker\n' >>"$HOME/.agent-relay/lib/run-history.sh"
+set +e
+VERIFY_STALE_OUT="$("$VERIFY" 2>&1)"
+verify_stale_rc=$?
+set -e
+if [[ "$verify_stale_rc" -eq 0 ]] &&
+  echo "$VERIFY_STALE_OUT" | grep -q '\[WARN\] installed lib/run-history.sh differs' &&
+  echo "$VERIFY_STALE_OUT" | grep -q './bin/install.sh'; then
+  pass "verify warns on stale install helper (exit 0)"
+else
+  fail "verify warns on stale install helper (rc=$verify_stale_rc out=$VERIFY_STALE_OUT)"
+fi
+mv "$T/run-history.sh.bak" "$HOME/.agent-relay/lib/run-history.sh"
+printf '0.0.0-stale\n' >"$HOME/.agent-relay/VERSION"
+set +e
+VERIFY_VER_OUT="$("$VERIFY" 2>&1)"
+verify_ver_rc=$?
+set -e
+if [[ "$verify_ver_rc" -eq 0 ]] &&
+  echo "$VERIFY_VER_OUT" | grep -q '\[WARN\] installed VERSION differs' &&
+  echo "$VERIFY_VER_OUT" | grep -q './bin/install.sh'; then
+  pass "verify warns on VERSION mismatch (exit 0)"
+else
+  fail "verify warns on VERSION mismatch (rc=$verify_ver_rc out=$VERIFY_VER_OUT)"
+fi
+cp "$ROOT/VERSION" "$HOME/.agent-relay/VERSION"
+# Missing helper and drifted dispatcher are stale too (not just differing helpers)
+mv "$HOME/.agent-relay/lib/run-metrics.sh" "$T/run-metrics.sh.bak"
+cp "$HOME/.agent-relay/bin/atry" "$T/atry.bak"
+printf '\n# smoke stale marker\n' >>"$HOME/.agent-relay/bin/atry"
+set +e
+VERIFY_MISS_OUT="$("$VERIFY" 2>&1)"
+verify_miss_rc=$?
+set -e
+if [[ "$verify_miss_rc" -eq 0 ]] &&
+  echo "$VERIFY_MISS_OUT" | grep -q '\[WARN\] installed lib/run-metrics.sh is missing' &&
+  echo "$VERIFY_MISS_OUT" | grep -q '\[WARN\] installed bin/atry differs'; then
+  pass "verify warns on missing helper and stale dispatcher (exit 0)"
+else
+  fail "verify warns on missing helper and stale dispatcher (rc=$verify_miss_rc out=$VERIFY_MISS_OUT)"
+fi
+mv "$T/run-metrics.sh.bak" "$HOME/.agent-relay/lib/run-metrics.sh"
+cp "$T/atry.bak" "$HOME/.agent-relay/bin/atry"
 
 # Without any atry on PATH, verify must fail and name the fix. Use a minimal
 # PATH rather than stripping only $HOME/.local/bin: the inherited PATH may
@@ -146,6 +215,86 @@ echo "$rel_out" | grep -q '^lib=' && pass "atry relative-symlink chain" || fail 
   pass "atry-cross-review review-report-template" || fail "atry-cross-review review-report-template"
 [[ -f "$HOME/.cursor/skills/atry-cross-review/references/review-walkthrough-template.md" ]] &&
   pass "atry-cross-review review-walkthrough-template" || fail "atry-cross-review review-walkthrough-template"
+
+# Every references/<file>.md named in an installed SKILL.md must exist in that bundle.
+# Also: preflight block between markers must match docs/partials/preflight.md.
+PF_CANON="$ROOT/docs/partials/preflight.md"
+pf_canon_hash="$(
+  awk 'NF{p=1} p' "$PF_CANON" | awk '
+    BEGIN { n = 0 }
+    { lines[++n] = $0 }
+    END {
+      while (n > 0 && lines[n] == "") n--
+      for (i = 1; i <= n; i++) print lines[i]
+    }
+  ' | shasum -a 256 | awk '{print $1}'
+)"
+for skill_dir in "$HOME"/.cursor/skills/atry-*/; do
+  [[ -d "$skill_dir" ]] || continue
+  skill_name="$(basename "$skill_dir")"
+  skill_md="${skill_dir}SKILL.md"
+  [[ -f "$skill_md" ]] || {
+    fail "$skill_name: SKILL.md missing"
+    continue
+  }
+  # Extract references/foo.md mentions (backtick-wrapped or bare)
+  missing=0
+  while IFS= read -r ref; do
+    [[ -n "$ref" ]] || continue
+    # Skip template placeholders like note-<type>-template.md
+    case "$ref" in
+    *'<'* | *'>'* | *'{'* | *'}'*) continue ;;
+    esac
+    base="$(basename "$ref")"
+    if [[ ! -f "${skill_dir}references/$base" ]]; then
+      echo "  missing in $skill_name: references/$base (from SKILL.md)" >&2
+      missing=1
+    fi
+  done < <(grep -oE 'references/[A-Za-z0-9._<>-]+\.md' "$skill_md" | sort -u)
+  if [[ "$missing" -eq 0 ]]; then
+    pass "$skill_name: named references exist"
+  else
+    fail "$skill_name: named references exist"
+  fi
+  # Preflight markers + body match
+  if grep -q '<!-- BEGIN PREFLIGHT -->' "$skill_md" && grep -q '<!-- END PREFLIGHT -->' "$skill_md"; then
+    pf_hash="$(
+      awk '
+        /<!-- BEGIN PREFLIGHT -->/ { in_block=1; next }
+        /<!-- END PREFLIGHT -->/ { in_block=0; next }
+        in_block { print }
+      ' "$skill_md" | awk 'NF{p=1} p' | awk '
+        BEGIN { n = 0 }
+        { lines[++n] = $0 }
+        END {
+          while (n > 0 && lines[n] == "") n--
+          for (i = 1; i <= n; i++) print lines[i]
+        }
+      ' | shasum -a 256 | awk '{print $1}'
+    )"
+    if [[ "$pf_hash" == "$pf_canon_hash" ]]; then
+      pass "$skill_name: preflight matches partial"
+    else
+      fail "$skill_name: preflight matches partial"
+    fi
+  else
+    fail "$skill_name: preflight markers present"
+  fi
+done
+
+# distill finalize helper installed with runtime
+[[ -f "$HOME/.agent-relay/lib/distill-finalize.sh" ]] &&
+  pass "distill-finalize.sh installed" || fail "distill-finalize.sh installed"
+
+# Word-count snapshot (informational; thresholds gated in implement report / CHANGELOG)
+echo "WORD_COUNTS:"
+for skill_dir in "$HOME"/.cursor/skills/atry-*/; do
+  [[ -d "$skill_dir" ]] || continue
+  skill_name="$(basename "$skill_dir")"
+  sw="$(wc -w <"${skill_dir}SKILL.md" | tr -d ' ')"
+  rw="$(wc -w "${skill_dir}references"/*.md 2>/dev/null | tail -1 | awk '{print $1}')"
+  echo "  $skill_name skill=$sw refs=$rw"
+done
 
 "$INSTALL" --dry-run --only CURSOR >/dev/null
 pass "--only CURSOR"

@@ -22,33 +22,57 @@ empty.
 
 ## Keys and sources
 
-| Key                                                                                   | Source                                                                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dur_implement_min`, `dur_self_review_min`, `dur_cross_review_min`, `dur_distill_min` | Sum over rounds of (`completed` − `started`) from `history.log` for that stage; floor minutes. Empty when the stage has no complete pair. Gaps between stages are never counted. `plan` has no duration (only `created`). |
-| `tool_implement`, `tool_self_review`, `tool_cross_review`, `tool_distill`             | Distinct `tool=` values from that stage's `history.log` lines, comma-separated in first-seen order.                                                                                                                       |
-| `model_implement`, `model_self_review`, `model_cross_review`, `model_distill`         | Distinct `model=` values from `<!-- relay: stage=… -->` provenance comments in run artifacts (plan / implement report / review report / distill notes).                                                                   |
-| `model_source`                                                                        | Always `self-reported`.                                                                                                                                                                                                   |
-| `diff_base`                                                                           | The ref the change size is measured from: the `head=` that `atry history append … implement started` records automatically (first implement round), else `base:` from `plan.md` / `meta.md`.                              |
-| `files_changed`, `lines_added`, `lines_deleted`                                       | `GIT_OPTIONAL_LOCKS=0 git diff --numstat <diff_base>` against the working tree, excluding `.agent-relay/`.                                                                                                                |
-| `tasks_planned`                                                                       | Numbered (or checkbox) items under `## Tasks` in `plan.md`.                                                                                                                                                               |
-| `tasks_implemented`                                                                   | Task count in `implement-plan/` (`*.status`) when that directory exists; otherwise checkbox lines in `implement-plan.md`.                                                                                                 |
-| `review_findings`                                                                     | Bullet items under every `### Issues found` in `review-report.md` (placeholder `- none` skipped).                                                                                                                         |
-| `review_rounds`                                                                       | Count of `self-review` / `cross-review` `completed` events that close a `started` one in `history.log` (a repeated `completed` is not a new round).                                                                       |
-| `tokens`, `cost`                                                                      | Always empty (never estimated).                                                                                                                                                                                           |
+| Key                                                                                   | Source                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dur_implement_min`, `dur_self_review_min`, `dur_cross_review_min`, `dur_distill_min` | Sum over rounds of (`completed` − `started`) from `history.log` for that stage; floor minutes. Empty when the stage has no complete pair. Gaps between stages are never counted. `plan` has no duration (only `created`).                           |
+| `tool_implement`, `tool_self_review`, `tool_cross_review`, `tool_distill`             | Distinct `tool=` values from that stage's `history.log` lines (excluding `action=attested`), comma-separated in first-seen order — **unless** a later `action=attested` exists for the stage, in which case the latest attested `tool=` wins alone. |
+| `model_implement`, `model_self_review`, `model_cross_review`, `model_distill`         | Distinct `model=` values from `<!-- relay: stage=… -->` provenance comments in run artifacts — **unless** a later `action=attested` exists for the stage, in which case the latest attested `model=` wins alone.                                    |
+| `model_source`                                                                        | `human-attested` when every measured stage (non-empty tool or model) has an attestation; `mixed` when some do; otherwise `self-reported`.                                                                                                           |
+| `diff_base`                                                                           | The ref the change size is measured from: the `head=` that `atry history append … implement started` records automatically (first implement round), else `base:` from `plan.md` / `meta.md`.                                                        |
+| `diff_end`                                                                            | How the size was measured: `snapshot` (last `size=` recorded at a stage `completed`), the END sha (commit range), `worktree`, or empty when size is unknowable. See Caveats.                                                                        |
+| `files_changed`, `lines_added`, `lines_deleted`                                       | From `GIT_OPTIONAL_LOCKS=0 git diff --numstat` between `diff_base` and END (or the working tree), excluding `.agent-relay/`. Empty when size is unknowable (case 3).                                                                                |
+| `tasks_planned`                                                                       | Numbered (or checkbox) items under `## Tasks` in `plan.md`.                                                                                                                                                                                         |
+| `tasks_implemented`                                                                   | Task count in `implement-plan/` (`*.status`) when that directory exists; otherwise checkbox lines in `implement-plan.md`.                                                                                                                           |
+| `review_findings`                                                                     | Bullet items under every `### Issues found` in `review-report.md` (placeholder `- none` skipped).                                                                                                                                                   |
+| `review_rounds`                                                                       | Count of `self-review` / `cross-review` `completed` events that close a `started` one in `history.log` (a repeated `completed` is not a new round).                                                                                                 |
+| `tokens`, `cost`                                                                      | Always empty (never estimated).                                                                                                                                                                                                                     |
 
 ## Caveats
 
+- **Change size snapshot (preferred).** On `implement` / `self-review` /
+  `cross-review` `completed`, `atry history append` also records
+  `size_base=<sha> size=<files>/<added>/<deleted>`: the working tree against
+  the diff base at that moment (explicit `size=` / `size_base=` wins).
+  `atry metrics` uses the last snapshot whose `size_base` equals `diff_base`
+  and sets `diff_end: snapshot`. The size then no longer depends on when the
+  work is committed, and uncommitted review fixes are counted. Untracked
+  files are not counted (`git diff` does not see them); `git add` new files
+  before a stage completes if they should count.
+- **Change size and END (fallback when no snapshot).** `atry history append`
+  records `head=` on `implement` / `self-review` / `cross-review`
+  `completed` (explicit `head=` wins). `atry metrics` takes END = that last
+  completed `head=`, then:
+
+  1. END present and END ≠ `diff_base` → commit-range
+     `git diff --numstat <diff_base> <END>` (later commits excluded).
+     `diff_end` is the END sha.
+  2. END present, END = `diff_base`, and current `HEAD` = END → the change was
+     never committed: working-tree diff. `diff_end` is `worktree`.
+  3. END present, END = `diff_base`, but `HEAD` has moved → size unknowable:
+     `files_changed` / `lines_*` empty, one warning on stderr, exit 0.
+     `diff_end` empty.
+  4. No END (older runs) → working-tree diff as before, plus a warning that
+     size is measured to the current tree. `diff_end` is `worktree`.
+
+  Using the implement-start `head=` as `diff_base` keeps chained plans that
+  share one `base:` from counting each other's changes.
 - **Self-reported models.** Provenance `model=` / `tool=` claims are recorded
-  as written. Nothing verifies which runtime actually ran.
+  as written. Nothing verifies which runtime actually ran. Prefer
+  `atry stamp` when a human knows the real tool/model; metrics then set
+  `model_source` to `human-attested` or `mixed`.
 - **Wall-clock inside stages only.** Durations are sums of complete
   started→completed pairs for that stage. Idle time between stages, and
   unfinished pairs, are excluded. Minutes are integer floor of total seconds.
-- **Working-tree diff.** Change-size metrics include uncommitted edits relative
-  to `diff_base`, not only the commits that landed during the run. Using the
-  implement-start `head=` keeps chained plans that share one `base:` from
-  counting each other's changes; commits made _after_ this run (another run
-  committed before you compute metrics) are still included, so run
-  `atry metrics` at distill time, before the next run lands.
 - **`dur_distill_min` is usually empty.** Distill runs `atry metrics` before
   it records `distill completed`, so its own duration has no closed pair yet.
 - **No “plan too large” warning.** These fields exist so an author can build a

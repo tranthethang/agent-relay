@@ -145,7 +145,7 @@ wikilinks. Provenance to the originating run is a plain `run_id:` string
 Run notes also reserve metric field names (left empty in the template until
 `atry metrics` fills them): `dur_implement_min`, `dur_self_review_min`,
 `dur_cross_review_min`, `dur_distill_min`, `tool_*` / `model_*` for those
-stages, `model_source`, `diff_base`, `files_changed`, `lines_added`, `lines_deleted`,
+stages, `model_source`, `diff_base`, `diff_end`, `files_changed`, `lines_added`, `lines_deleted`,
 `tasks_planned`, `tasks_implemented`, `review_findings`, `review_rounds`,
 `tokens`, `cost`. Exact names may grow; do not invent values here.
 

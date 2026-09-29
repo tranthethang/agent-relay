@@ -30,11 +30,11 @@ make test              # local smoke + tasks + remote smoke
 Requires bash ≥ 3.2. All three scripts are offline. Remote smoke stubs
 `curl` and uses `tests/fixtures/`.
 
-CI also runs `shellcheck -S error` on `bin/*.sh`, `scripts/atry`,
+CI also runs `shellcheck -S warning` on `bin/*.sh`, `scripts/atry`,
 `scripts/runtime/*.sh`, `scripts/maint/*.sh`, `lib/*.sh`, and `tests/*.sh`.
-The floor is **error**, not warning: warning-level findings still exist and
-would drown the signal. The commitment is to clear warnings and raise the
-floor to `-S warning`, then style, over time — not to disable the job.
+The floor is **warning** (clean across all in-scope paths). The commitment
+is to keep warnings clear and tighten toward style over time — not to
+disable or loosen the job.
 
 CI runs `scripts/maint/sync-references.sh --check` so
 `skills/*/references/file-conventions.md` cannot drift from
@@ -81,7 +81,7 @@ Include:
 - Artifact names: [`docs/file-conventions.md`](docs/file-conventions.md)
 - Empty outlines (not a sample run): each skill's
   `skills/<name>/references/*-template.md`
-- Release version: [`VERSION`](VERSION) (must match the `v*` tag)
+- Release version: [`VERSION`](VERSION) (`YY.MM.DD` UTC CalVer; must match the `v*` tag)
 
 Install support for a tool is not the same as having used the stages in that
 tool. This repo does not keep a log of either.

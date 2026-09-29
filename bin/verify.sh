@@ -205,7 +205,7 @@ download_and_extract_repo() {
     return 1
   fi
 
-  SRC_DIR="$found_dir"
+  export SRC_DIR="$found_dir"
   echo "$found_dir"
 }
 
@@ -483,6 +483,55 @@ else
   FAILED=1
 fi
 echo "Note: an agent's shell may load a different profile than the terminal that ran this verifier -- if atry works here but not for the agent, check which profile file the agent's shell reads."
+
+# When run from a clone (scripts/runtime/ next to this verifier), warn if the
+# installed ~/.agent-relay copy is stale vs this tree. Never [FAIL] — install
+# may intentionally lag; fix is ./bin/install.sh.
+if [[ -n "${REPO_ROOT:-}" && -d "$REPO_ROOT/scripts/runtime" ]]; then
+  stale_install=0
+  if [[ -f "$REPO_ROOT/VERSION" ]]; then
+    if [[ -f "$HOME/.agent-relay/VERSION" ]]; then
+      if ! cmp -s "$REPO_ROOT/VERSION" "$HOME/.agent-relay/VERSION"; then
+        echo "[WARN] installed VERSION differs from this clone"
+        echo "       clone:     $(tr -d '[:space:]' <"$REPO_ROOT/VERSION")"
+        echo "       installed: $(tr -d '[:space:]' <"$HOME/.agent-relay/VERSION")"
+        stale_install=1
+      fi
+    else
+      echo "[WARN] clone has VERSION but \$HOME/.agent-relay/VERSION is missing"
+      stale_install=1
+    fi
+  fi
+  shopt -s nullglob
+  for helper in "$REPO_ROOT"/scripts/runtime/*; do
+    [[ -f "$helper" ]] || continue
+    name="$(basename "$helper")"
+    installed="$HOME/.agent-relay/lib/$name"
+    if [[ ! -f "$installed" ]]; then
+      echo "[WARN] installed lib/$name is missing (clone has scripts/runtime/$name)"
+      stale_install=1
+    elif ! cmp -s "$helper" "$installed"; then
+      echo "[WARN] installed lib/$name differs from clone scripts/runtime/$name"
+      stale_install=1
+    fi
+  done
+  shopt -u nullglob
+  # The dispatcher decides which verbs exist; a stale one hides new helpers.
+  if [[ -f "$REPO_ROOT/scripts/atry" ]]; then
+    if [[ ! -f "$HOME/.agent-relay/bin/atry" ]]; then
+      echo "[WARN] installed bin/atry is missing (clone has scripts/atry)"
+      stale_install=1
+    elif ! cmp -s "$REPO_ROOT/scripts/atry" "$HOME/.agent-relay/bin/atry"; then
+      echo "[WARN] installed bin/atry differs from clone scripts/atry"
+      stale_install=1
+    fi
+  fi
+  if [[ "$stale_install" -eq 0 ]]; then
+    echo "[OK] installed ~/.agent-relay matches this clone (VERSION + scripts/atry + scripts/runtime/)"
+  else
+    echo "       Fix: ./bin/install.sh"
+  fi
+fi
 
 for tool in "${TOOLS[@]}"; do
   tool_selected "$tool" || continue

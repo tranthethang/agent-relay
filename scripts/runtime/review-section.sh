@@ -87,6 +87,10 @@ fi
 # is not actually a second opinion from a different tool -- the whole point
 # of cross-review per the skill docs. This cannot be enforced (nothing here
 # can verify which tool is really calling it), so it only warns.
+#
+# Separately, warn when the Cross-Review tool equals the tool that
+# implemented the change (history.log implement started, else implement-report
+# provenance). Compare tool only; skip when either side is empty or unknown.
 if [[ "$KIND" == "Cross-Review" ]]; then
   new_prov="$(grep -m 1 -E '<!-- relay: stage=cross-review ' "$BODY_TMP" 2>/dev/null || true)"
   if [[ -n "$new_prov" ]]; then
@@ -155,6 +159,40 @@ if [[ "$KIND" == "Cross-Review" ]]; then
           printf 'review-section: warning: Cross-Review provenance (tool=%s model=%s) matches the most recent Self-Review in %s -- this is not a genuine second opinion from a different tool/model.\n' \
             "$new_tool" "$new_model" "$FILE" >&2
         fi
+      fi
+    fi
+
+    # Author-vs-reviewer: Cross-Review tool vs implement author tool.
+    if [[ -n "$new_tool" && "$new_tool" != "unknown" ]]; then
+      author_tool=""
+      run_dir="$(dirname "$FILE")"
+      hist="$run_dir/history.log"
+      if [[ -f "$hist" ]]; then
+        # Latest implement started tool= (last match wins).
+        while IFS= read -r hline || [[ -n "$hline" ]]; do
+          case "$hline" in
+          *" stage=implement action=started "* | *" stage=implement action=started")
+            for tok in $hline; do
+              case "$tok" in
+              tool=*) author_tool="${tok#tool=}" ;;
+              esac
+            done
+            ;;
+          esac
+        done <"$hist"
+      fi
+      if [[ -z "$author_tool" || "$author_tool" == "unknown" ]]; then
+        impl_report="$run_dir/implement-report.md"
+        if [[ -f "$impl_report" ]]; then
+          impl_prov="$(grep -m 1 -E '<!-- relay: stage=implement ' "$impl_report" 2>/dev/null || true)"
+          if [[ -n "$impl_prov" ]]; then
+            author_tool="$(printf '%s' "$impl_prov" | sed -n 's/.* tool=\([^ ]*\).*/\1/p')"
+          fi
+        fi
+      fi
+      if [[ -n "$author_tool" && "$author_tool" != "unknown" && "$new_tool" == "$author_tool" ]]; then
+        printf 'review-section: warning: Cross-Review tool=%s matches the implement author tool=%s -- prefer a different tool for a genuine second opinion.\n' \
+          "$new_tool" "$author_tool" >&2
       fi
     fi
   fi

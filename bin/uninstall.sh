@@ -209,7 +209,7 @@ download_and_extract_repo() {
     return 1
   fi
 
-  SRC_DIR="$found_dir"
+  export SRC_DIR="$found_dir"
   echo "$found_dir"
 }
 

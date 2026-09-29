@@ -273,6 +273,18 @@ write_status_warnings() {
   rm -f "$tmp"
 }
 
+# Temp body / auth-header files for agentmemory POSTs — cleaned on EXIT/INT/TERM.
+AM_BODY=""
+AM_HDR=""
+am_cleanup_temps() {
+  rm -f "${AM_BODY:-}" "${AM_HDR:-}"
+  AM_BODY=""
+  AM_HDR=""
+}
+trap am_cleanup_temps EXIT
+trap 'am_cleanup_temps; exit 130' INT
+trap 'am_cleanup_temps; exit 143' TERM
+
 am_auth_header_file() {
   local f
   [[ -n "${AGENTMEMORY_SECRET:-}" ]] || return 1
@@ -280,6 +292,38 @@ am_auth_header_file() {
   chmod 600 "$f"
   printf 'Authorization: Bearer %s\n' "$AGENTMEMORY_SECRET" >"$f"
   printf '%s' "$f"
+}
+
+am_sha256_file() {
+  local f="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$f" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$f" | awk '{print $1}'
+  else
+    echo "Error: neither shasum nor sha256sum found (needed for agentmemory sent ledger)" >&2
+    return 1
+  fi
+}
+
+# Ledger: url<TAB>project<TAB>filename<TAB>sha256-of-posted-body (skip exact rows on
+# retry). The server URL is part of the key so pointing BANK_AGENTMEMORY_URL at a
+# different server posts every note there instead of silently skipping it.
+AM_LEDGER="$AGENT_RELAY_DIR/bank-agentmemory-sent.tsv"
+
+am_ledger_has() {
+  local url="$1" project="$2" filename="$3" hash="$4" line want
+  [[ -f "$AM_LEDGER" ]] || return 1
+  want="$(printf '%s\t%s\t%s\t%s' "$url" "$project" "$filename" "$hash")"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == "$want" ]] && return 0
+  done <"$AM_LEDGER"
+  return 1
+}
+
+am_ledger_append() {
+  local url="$1" project="$2" filename="$3" hash="$4"
+  printf '%s\t%s\t%s\t%s\n' "$url" "$project" "$filename" "$hash" >>"$AM_LEDGER"
 }
 
 build_remember_body() {
@@ -290,59 +334,68 @@ build_remember_body() {
   fi
   NOTE_FILE="$note_file" PROJECT="$project" OUT_FILE="$out_file" python3 <<'PY'
 import json, os, re
-
 path = os.environ["NOTE_FILE"]
 project = os.environ["PROJECT"]
 out = os.environ["OUT_FILE"]
-
 with open(path, "r", encoding="utf-8") as f:
-    content = f.read()
-
+    raw_content = f.read()
+# Parse frontmatter
 fm = {}
-if content.startswith("---"):
-    parts = content.split("---", 2)
+body_text = raw_content
+if raw_content.startswith("---"):
+    parts = raw_content.split("---", 2)
     if len(parts) >= 3:
         for line in parts[1].splitlines():
             if ":" not in line:
                 continue
             k, v = line.split(":", 1)
             fm[k.strip()] = v.strip()
-
+        body_text = parts[2]
 note_type = fm.get("type", "")
 key = fm.get("key", "")
 status = fm.get("status", "")
+scope = fm.get("scope", "")
 tags_raw = fm.get("tags", "")
 tags = []
 m = re.match(r"^\[(.*)\]$", tags_raw)
 if m:
     tags = [t.strip() for t in m.group(1).split(",") if t.strip()]
-
-concepts = list(tags)
+# AM type map
+type_map = {
+    "decision": "architecture",
+    "convention": "pattern",
+    "pitfall": "bug",
+    "process": "workflow",
+    "open-item": "fact",
+}
+am_type = type_map.get(note_type, "fact")
+# Build lean concepts from note tags, applying filtering rules
+concepts = []
+for tag in tags:
+    # Drop project/<name> tags when top-level project is set
+    if project and tag.startswith("project/"):
+        continue
+    concepts.append(tag)
 if key:
     concepts.append("key:" + key)
 if status:
     concepts.append("status:" + status)
-if note_type:
-    concepts.append("note-type:" + note_type)
-
+# Add module:<slug> from scope when scope is module:*
+if scope.startswith("module:"):
+    mod_tag = scope  # scope is already "module:<slug>"
+    if mod_tag not in concepts:
+        concepts.append(mod_tag)
+# Build projected content: <type>: <key> opener, blank line, stripped body
+body_lines = body_text.lstrip("\n")
+opener = note_type + ": " + key if key else note_type
+projected_content = opener + "\n\n" + body_lines
 body = {
-    "content": content,
-    "project": project,
-    "type": note_type,
-    "key": key,
-    "status": status,
-    "tags": tags,
+    "content": projected_content,
+    "type": am_type,
     "concepts": concepts,
 }
-if not body["project"]:
-    del body["project"]
-if not body["type"]:
-    del body["type"]
-if not body["key"]:
-    del body["key"]
-if not body["status"]:
-    del body["status"]
-
+if project:
+    body["project"] = project
 with open(out, "w", encoding="utf-8") as f:
     json.dump(body, f, ensure_ascii=False)
 PY
@@ -455,8 +508,6 @@ for f in "${NOTE_FILES[@]}"; do
   fi
 done
 
-PROJ_VAULT_OK=0
-ATRY_VAULT_OK=0
 AM_OK=0
 ANY_VAULT_OK=0
 
@@ -486,8 +537,6 @@ if [[ "$SAME_VAULT_PATH" -eq 1 && ("$PROJ_VAULT_USABLE" -eq 1 || "$ATRY_VAULT_US
     done
     if [[ "$vault_failed" -eq 0 ]]; then
       ANY_VAULT_OK=1
-      PROJ_VAULT_OK=1
-      ATRY_VAULT_OK=1
       scan_orphans "$dest_dir" "$PUSHED_NAMES" "vault"
       if [[ ${#PROJ_NOTES[@]} -gt 0 ]]; then
         warn_foreign_for_notes "$PROJECT_NAME" "${PROJ_NOTES[@]}"
@@ -505,7 +554,6 @@ else
   if [[ "$PROJ_VAULT_USABLE" -eq 1 ]]; then
     if [[ ${#PROJ_NOTES[@]} -eq 0 ]]; then
       echo "bank-push: vault(project): no project-lane notes in this push"
-      PROJ_VAULT_OK=1
       # Atry-lane-only push with atry vault unset is an intentional
       # local-distill skip, not "all usable sinks failed". When atry vault
       # is usable, leave ANY_VAULT_OK to the atry copy result.
@@ -533,7 +581,6 @@ else
         fi
       done
       if [[ "$vault_failed" -eq 0 ]]; then
-        PROJ_VAULT_OK=1
         ANY_VAULT_OK=1
         scan_orphans "$BANK_PATH" "$PUSHED_NAMES" "vault(project)"
         warn_foreign_for_notes "$PROJECT_NAME" "${PROJ_NOTES[@]}"
@@ -547,7 +594,6 @@ else
   if [[ "$ATRY_VAULT_USABLE" -eq 1 ]]; then
     if [[ ${#ATRY_NOTES[@]} -eq 0 ]]; then
       echo "bank-push: vault(atry): no atry-lane notes in this push"
-      ATRY_VAULT_OK=1
     elif [[ -z "$ATRY_PATH" || ! -d "$ATRY_PATH" ]]; then
       echo "bank-push: vault(atry): BANK_ATRY_PATH '$ATRY_PATH' is not a directory" >&2
     elif [[ ! -w "$ATRY_PATH" ]]; then
@@ -569,7 +615,6 @@ else
         fi
       done
       if [[ "$vault_failed" -eq 0 ]]; then
-        ATRY_VAULT_OK=1
         ANY_VAULT_OK=1
         scan_orphans "$ATRY_PATH" "$PUSHED_NAMES" "vault(atry)"
         warn_foreign_for_notes "$ATRY_NAME" "${ATRY_NOTES[@]}"
@@ -584,54 +629,108 @@ else
 fi
 
 # --- agentmemory sink ---
-# Atry-lane notes need atry_name (docs/bank.md): path/name unset → local
-# distill/ only; name-only still posts to AM when reachable.
+# Eligibility: skip type:run, skip terminal statuses (not active/open),
+# skip atry-lane without atry_name. Intentional skips are not failures.
+# POST failure: do not break — continue remaining notes, list failures;
+# sink still counts as failed. Local ledger skips exact url/project/filename/
+# body-hash rows already posted (changed content or another server posts again).
 if [[ "$AM_USABLE" -eq 1 ]]; then
   am_failed=0
   am_posted=0
+  am_skipped=0
+  am_ledger_skipped=0
+  am_failed_names=""
   for f in "${NOTE_FILES[@]}"; do
     base="$(basename "$f")"
+    note_type="$(frontmatter_field "$f" type)"
+    note_status="$(frontmatter_field "$f" status)"
     scope="$(frontmatter_field "$f" scope)"
     lane="$(note_lane "$scope")"
+    # Skip run notes — per-run index/metrics; not shared durable lessons
+    if [[ "$note_type" == "run" ]]; then
+      echo "bank-push: agentmemory: skipped $base — type:run not remembered" >&2
+      am_skipped=$((am_skipped + 1))
+      continue
+    fi
+    # Skip terminal statuses; empty/unknown status → skip
+    case "$note_status" in
+    active | open) ;;
+    *)
+      echo "bank-push: agentmemory: skipped $base — status '$note_status' not active/open" >&2
+      am_skipped=$((am_skipped + 1))
+      continue
+      ;;
+    esac
     am_project=""
     if [[ "$lane" == "atry" ]]; then
       if [[ -z "$ATRY_NAME" ]]; then
         echo "bank-push: agentmemory: skipped $base — atry_name not set (atry-lane notes need BANK_ATRY_NAME)" >&2
+        am_skipped=$((am_skipped + 1))
         continue
       fi
       am_project="$ATRY_NAME"
     else
       am_project="$PROJECT_NAME"
     fi
-    body="$(mktemp "${TMPDIR:-/tmp}/ar-am-body.XXXXXX")"
-    if ! build_remember_body "$f" "$am_project" "$body"; then
+    am_cleanup_temps
+    AM_BODY="$(mktemp "${TMPDIR:-/tmp}/ar-am-body.XXXXXX")"
+    if ! build_remember_body "$f" "$am_project" "$AM_BODY"; then
       echo "bank-push: agentmemory: failed to build body for $base" >&2
-      rm -f "$body"
+      am_cleanup_temps
       am_failed=1
-      break
+      if [[ -z "$am_failed_names" ]]; then
+        am_failed_names="$base"
+      else
+        am_failed_names="$am_failed_names $base"
+      fi
+      continue
+    fi
+    body_hash="$(am_sha256_file "$AM_BODY")" || {
+      echo "bank-push: agentmemory: failed to hash body for $base" >&2
+      am_cleanup_temps
+      am_failed=1
+      if [[ -z "$am_failed_names" ]]; then
+        am_failed_names="$base"
+      else
+        am_failed_names="$am_failed_names $base"
+      fi
+      continue
+    }
+    if am_ledger_has "$AM_URL" "$am_project" "$base" "$body_hash"; then
+      echo "bank-push: agentmemory: skipped $base — already in sent ledger" >&2
+      am_cleanup_temps
+      am_ledger_skipped=$((am_ledger_skipped + 1))
+      continue
     fi
     set +e
+    AM_HDR=""
     if hdr="$(am_auth_header_file)"; then
+      AM_HDR="$hdr"
       curl_out="$(curl -fsS --connect-timeout 2 --max-time 30 \
-        -H 'Content-Type: application/json' -H @"$hdr" \
-        --data-binary @"$body" \
+        -H 'Content-Type: application/json' -H @"$AM_HDR" \
+        --data-binary @"$AM_BODY" \
         "${AM_URL}/agentmemory/remember" 2>&1)"
       curl_rc=$?
-      rm -f "$hdr"
     else
       curl_out="$(curl -fsS --connect-timeout 2 --max-time 30 \
         -H 'Content-Type: application/json' \
-        --data-binary @"$body" \
+        --data-binary @"$AM_BODY" \
         "${AM_URL}/agentmemory/remember" 2>&1)"
       curl_rc=$?
     fi
     set -e
-    rm -f "$body"
+    am_cleanup_temps
     if [[ "$curl_rc" -ne 0 ]]; then
       echo "bank-push: agentmemory: remember failed for $base (curl exit $curl_rc): $(printf '%s' "$curl_out" | tr '\n' ' ')" >&2
       am_failed=1
-      break
+      if [[ -z "$am_failed_names" ]]; then
+        am_failed_names="$base"
+      else
+        am_failed_names="$am_failed_names $base"
+      fi
+      continue
     fi
+    am_ledger_append "$AM_URL" "$am_project" "$base" "$body_hash"
     am_posted=$((am_posted + 1))
     echo "bank-push: agentmemory: remembered $base (project=${am_project:-none})"
   done
@@ -639,12 +738,11 @@ if [[ "$AM_USABLE" -eq 1 ]]; then
     AM_OK=1
     echo "bank-push: agentmemory: ok ($am_posted note(s))"
   elif [[ "$am_failed" -eq 0 ]]; then
-    # Every note was ineligible (typically atry-lane without atry_name) —
-    # intentional skip, not a transfer failure.
-    echo "bank-push: agentmemory: skipped — no notes eligible (atry-lane needs atry_name)" >&2
+    # Every note was intentionally skipped (eligibility and/or ledger) — not a transfer failure.
+    echo "bank-push: agentmemory: skipped — no notes eligible ($am_skipped skipped, $am_ledger_skipped already sent)" >&2
     AM_OK=1
   else
-    echo "bank-push: agentmemory: failed" >&2
+    echo "bank-push: agentmemory: failed ($am_failed_names)" >&2
   fi
 fi
 

@@ -21,7 +21,8 @@ docs for end users — see [`README.md`](README.md).
   clearly safe (then document it as advisory or a hard refuse, accurately).
 - Do not claim CI proves skills work end-to-end. CI covers installer smoke
   (`tests/smoke.sh`), task-helper smoke (`tests/tasks.sh`), remote-download
-  smoke (`tests/smoke-remote.sh`), shellcheck (`-S error`),
+  smoke (`tests/smoke-remote.sh`), human cockpit (`tests/status.sh`),
+  shellcheck (`-S warning`),
   `scripts/maint/sync-references.sh --check`, and
   `scripts/maint/sync-bootstrap.sh --check`.
 - Sole-maintainer repo: changes need not support or migrate older versions or
@@ -30,27 +31,29 @@ docs for end users — see [`README.md`](README.md).
 
 ## Layout
 
-| Path                       | Role                                                            |
-| -------------------------- | --------------------------------------------------------------- |
-| `bin/`                     | `install.sh`, `uninstall.sh`, `verify.sh`                       |
-| `lib/bootstrap.sh`         | Shared download / checksum / `targets.conf` validation          |
-| `targets.conf`             | Install destinations (`source`d after allowlist validation)     |
-| `skills/<name>/`           | Skill bundles (`SKILL.md` + `references/`; no `scripts/`)       |
-| `docs/`                    | Maintainer docs — start at [`docs/INDEX.md`](docs/INDEX.md)     |
-| `docs/file-conventions.md` | Source of truth for `.agent-relay/` names (synced into bundles) |
-| `scripts/atry`             | CLI entrypoint (installed to `~/.agent-relay/bin/atry`)         |
-| `scripts/runtime/`         | Helpers behind `atry` (installed to `~/.agent-relay/lib/`)      |
-| `scripts/maint/`           | Maintainer sync/release scripts (not installed for agents)      |
-| `tests/`                   | Offline smoke / tasks / remote-smoke stubs                      |
-| `VERSION`                  | Release version; must match the `v*` git tag                    |
+| Path                       | Role                                                                       |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `bin/`                     | `install.sh`, `uninstall.sh`, `verify.sh`                                  |
+| `lib/bootstrap.sh`         | Shared download / checksum / `targets.conf` validation                     |
+| `targets.conf`             | Install destinations (`source`d after allowlist validation)                |
+| `skills/<name>/`           | Skill bundles (`SKILL.md` + `references/`; no `scripts/`)                  |
+| `docs/`                    | Maintainer docs — start at [`docs/INDEX.md`](docs/INDEX.md)                |
+| `docs/file-conventions.md` | Generated full conventions (from `docs/conventions/`; synced into bundles) |
+| `scripts/atry`             | CLI entrypoint (installed to `~/.agent-relay/bin/atry`)                    |
+| `scripts/runtime/`         | Helpers behind `atry` (installed to `~/.agent-relay/lib/`)                 |
+| `scripts/maint/`           | Maintainer sync/release scripts (not installed for agents)                 |
+| `tests/`                   | Offline smoke / tasks / remote-smoke stubs                                 |
+| `VERSION`                  | Release version; must match the `v*` git tag                               |
 
 ## Editing skills and docs
 
-1. Edit `docs/file-conventions.md` (not the per-skill copies) for run-id /
-   artifact rules.
+1. Edit parts under `docs/conventions/` (not `docs/file-conventions.md` and
+   not the per-skill copies) for run-id / artifact rules. Edit
+   `docs/partials/preflight.md` for the shared Preflight paragraph.
 2. Run `bash scripts/maint/sync-references.sh` so
-   `skills/*/references/file-conventions.md` match the source. CI fails on
-   drift (`--check`). Skill bundles must **not** contain `scripts/`.
+   `docs/file-conventions.md`, `skills/*/references/file-conventions.md`, and
+   the Preflight markers in each `SKILL.md` match. CI fails on drift
+   (`--check`). Skill bundles must **not** contain `scripts/`.
 3. After changing skill files or `scripts/runtime/`, re-run `./bin/install.sh`
    to refresh user skill dirs and `~/.agent-relay` if you dogfood from this
    clone.
@@ -87,7 +90,15 @@ bash scripts/maint/sync-bootstrap.sh --check   # required after any lib/bootstra
 bash -n bin/*.sh lib/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh tests/*.sh
 ```
 
-`shellcheck -S error` runs in CI; warning-level findings still exist.
+`shellcheck -S warning` runs in CI; warning-clean across in-scope files.
+
+## Versioning
+
+- Calendar version `YY.MM.DD` (UTC day of the release; zero-padded), no `v`
+  in [`VERSION`](VERSION); git tag is `v` + that string (e.g. `26.09.28` →
+  `v26.09.28`).
+- One release per UTC calendar day; do not cut a second tag the same UTC day.
+- Full release steps: [`docs/release.md`](docs/release.md).
 
 ## Release checklist (humans)
 
@@ -97,7 +108,7 @@ builds `dist/` from the tagged commit; it does not rewrite README.
 
 1. Bump [`VERSION`](VERSION) and [`CHANGELOG.md`](CHANGELOG.md) together.
 2. Update [`README.md`](README.md) so user-facing pins match that version:
-   - Release-install `REF="vX.Y.Z"` must equal `v` + contents of `VERSION`.
+   - Release-install `REF="vYY.MM.DD"` must equal `v` + contents of `VERSION`.
    - If install/upgrade behavior changed (ownership marker, `uninstall --force`,
      unsupported layouts), refresh the README upgrade section and
      [`docs/installer.md`](docs/installer.md) in the same commit.
