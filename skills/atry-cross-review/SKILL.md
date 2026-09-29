@@ -146,16 +146,29 @@ implementer when you can.
    Before writing the body files, read
    `references/review-report-template.md` and
    `references/review-walkthrough-template.md` and use them as the
-   copy-and-fill outlines:
+   copy-and-fill outlines.
+
+   **Workspace hygiene:** Never write review intermediates (such as body files,
+   walk bodies, diff dumps/patches, or ad-hoc scratch directories) under the
+   repository workspace or under `$RUN_DIR` for staging. Always write bodies to
+   system temporary files using `mktemp "${TMPDIR:-/tmp}/ar-*.XXXXXX"` and
+   register cleanup with `trap 'rm -f …' EXIT` before populating them, so
+   intermediate files are cleaned up even if the stage aborts early:
 
    ```bash
    TODAY="$(date +%F)"
+   body_tmp="$(mktemp "${TMPDIR:-/tmp}/ar-cross-body.XXXXXX")"
+   walk_tmp="$(mktemp "${TMPDIR:-/tmp}/ar-cross-walk.XXXXXX")"
+   trap 'rm -f "$body_tmp" "$walk_tmp"' EXIT
+
+   # Populate $body_tmp and $walk_tmp; each file must start with the provenance
+   # HTML comment, then the section body.
    atry review upsert \
      "$RUN_DIR/review-report.md" \
-     Cross-Review "$TODAY" body.md
+     Cross-Review "$TODAY" "$body_tmp"
    atry review upsert \
      "$RUN_DIR/review-walkthrough.md" \
-     Cross-Review "$TODAY" walk-body.md
+     Cross-Review "$TODAY" "$walk_tmp"
    ```
 
    Keep prior `## Self-Review — ...` sections intact. Inside the body file, use

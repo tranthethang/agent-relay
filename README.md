@@ -108,7 +108,8 @@ atry history append "$RUN_DIR" implement started tool=cursor
 atry task-init "$RUN_DIR"
 atry list "$RUN_DIR"
 atry claim "$RUN_DIR" T1 session-a
-atry review upsert "$RUN_DIR/review-report.md" Self-Review "$(date +%F)" body.md
+body_tmp="$(mktemp "${TMPDIR:-/tmp}/ar-body.XXXXXX")"
+atry review upsert "$RUN_DIR/review-report.md" Self-Review "$(date +%F)" "$body_tmp"
 atry bank init --path /abs/vault/folder   # once per repo, optional
 atry bank check "$RUN_DIR"
 ```

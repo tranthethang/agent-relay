@@ -150,17 +150,29 @@ cross-review is skipped.
    hand-edit other sections). Before writing the body files, read
    `references/review-report-template.md` and
    `references/review-walkthrough-template.md` and use them as the
-   copy-and-fill outlines:
+   copy-and-fill outlines.
+
+   **Workspace hygiene:** Never write review intermediates (such as body files,
+   walk bodies, diff dumps/patches, or ad-hoc scratch directories) under the
+   repository workspace or under `$RUN_DIR` for staging. Always write bodies to
+   system temporary files using `mktemp "${TMPDIR:-/tmp}/ar-*.XXXXXX"` and
+   register cleanup with `trap 'rm -f …' EXIT` before populating them, so
+   intermediate files are cleaned up even if the stage aborts early:
 
    ```bash
    TODAY="$(date +%F)"
-   # body file must start with the provenance HTML comment, then the section body
+   body_tmp="$(mktemp "${TMPDIR:-/tmp}/ar-self-body.XXXXXX")"
+   walk_tmp="$(mktemp "${TMPDIR:-/tmp}/ar-self-walk.XXXXXX")"
+   trap 'rm -f "$body_tmp" "$walk_tmp"' EXIT
+
+   # Populate $body_tmp and $walk_tmp; each file must start with the provenance
+   # HTML comment, then the section body.
    atry review upsert \
      "$RUN_DIR/review-report.md" \
-     Self-Review "$TODAY" body.md
+     Self-Review "$TODAY" "$body_tmp"
    atry review upsert \
      "$RUN_DIR/review-walkthrough.md" \
-     Self-Review "$TODAY" walk-body.md
+     Self-Review "$TODAY" "$walk_tmp"
    ```
 
    Never remove `## Cross-Review` sections or Self-Review sections from other
