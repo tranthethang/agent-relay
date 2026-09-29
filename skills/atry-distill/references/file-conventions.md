@@ -175,6 +175,7 @@ should be a real ref in that repo (`HEAD` before the work, or the branch tip).
 Do not invent one. The plan skill's `references/plan-template.md` also outlines
 `## Non-goals`, the optional `## Decisions` and `## Flow` sections, and
 numbered tasks that may list `(deps: T1 T2)`. Helpers parse only `## Tasks`.
+
 ## Knowledge bank (optional, project-level)
 
 `.agent-relay/bank.conf`, `.agent-relay/bank-status.md`, and (when the
@@ -190,6 +191,7 @@ dual-path lookup, unset-atry skip, path-equal dedupe, `--vault-only`, and
 what "reachable" does and does not mean. `atry-distill` is the only skill
 that reads/writes these files. Note schema (including `run_id:` and lane
 `scope:`): `skills/atry-distill/references/note-schema.md`.
+
 ## Notes
 
 - Put each run at `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`.

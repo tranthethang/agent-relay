@@ -175,6 +175,7 @@ should be a real ref in that repo (`HEAD` before the work, or the branch tip).
 Do not invent one. The plan skill's `references/plan-template.md` also outlines
 `## Non-goals`, the optional `## Decisions` and `## Flow` sections, and
 numbered tasks that may list `(deps: T1 T2)`. Helpers parse only `## Tasks`.
+
 ## Review headings
 
 Self-review creates or replaces that day's section in each review file:
@@ -216,6 +217,7 @@ tend to recur silently across runs otherwise:
   `MISMATCH` means the rollup `.md` was hand-edited outside the claim
   protocol and the per-task `.status`/report files are stale — call this out
   in the review rather than treating the rollup `.md` as ground truth.
+
 ## Parallel task implementation (optional)
 
 Default implement/review skills use one shared markdown file for the plan
@@ -336,6 +338,7 @@ The claim protocol serializes **task status**, not file contents:
 | Multiple sub-agents, same `<RUN_ID>`, different tasks, via `atry` | Yes (for status/report; see isolation above for files) |
 | Multiple sub-agents, same `<RUN_ID>`, same task                   | No — second claim fails loudly                         |
 | Hand-editing `implement-plan.md` while parallel mode is active    | No — it's generated, gets overwritten                  |
+
 ## Knowledge bank (optional, project-level)
 
 `.agent-relay/bank.conf`, `.agent-relay/bank-status.md`, and (when the
@@ -351,6 +354,7 @@ dual-path lookup, unset-atry skip, path-equal dedupe, `--vault-only`, and
 what "reachable" does and does not mean. `atry-distill` is the only skill
 that reads/writes these files. Note schema (including `run_id:` and lane
 `scope:`): `skills/atry-distill/references/note-schema.md`.
+
 ## Notes
 
 - Put each run at `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`.

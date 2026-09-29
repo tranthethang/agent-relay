@@ -99,9 +99,9 @@ concat_parts() {
     if [[ "$first" -eq 1 ]]; then
       first=0
     else
-      # Ensure a blank line between parts when the previous file lacks a
-      # trailing newline (parts are expected to end with \n already).
-      :
+      # Parts end with a single trailing newline; emit one more so adjacent
+      # ## headings are separated by a blank line (dprint / CommonMark).
+      printf '\n'
     fi
     cat "$CONV_DIR/$part.md"
   done
