@@ -232,7 +232,6 @@ if [[ ${#RUN_NOTES[@]} -gt 1 ]]; then
   exit 1
 fi
 RUN_NOTE="${RUN_NOTES[0]}"
-RUN_NOTE_BASE="$(basename "$RUN_NOTE")"
 
 # ---- bank check ----
 CHECK_RC=0
@@ -430,6 +429,6 @@ if [[ ${#HISTORY_KV[@]} -gt 0 ]]; then
 else
   bash "$RUN_HISTORY" append "$RUN_DIR" distill completed
 fi
-bash "$RUN_HISTORY" append "$RUN_DIR" done completed
+bash "$RUN_HISTORY" append "$RUN_DIR" "done" completed
 
 exit 0

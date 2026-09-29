@@ -120,7 +120,7 @@ last_history_ts() {
 scan_history() {
   local run_dir="$1"
   local hist="$run_dir/history.log"
-  local line rest tok sk
+  local line rest tok
   local hstage haction htool hmodel
   STATE="planned"
   APPROVED=0
@@ -312,7 +312,7 @@ extract_model_prov() {
         model=""
         for tok in $line; do
           case "$tok" in
-          model=* | model=*/ | model=*--\>)
+          model=*)
             model="${tok#model=}"
             model="${model%%-->*}"
             model="${model%%\"*}"
@@ -336,7 +336,7 @@ extract_model_prov() {
           model=""
           for tok in $line; do
             case "$tok" in
-            model=* | model=*/ | model=*--\>)
+            model=*)
               model="${tok#model=}"
               model="${model%%-->*}"
               ;;

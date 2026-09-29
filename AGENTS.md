@@ -22,7 +22,7 @@ docs for end users — see [`README.md`](README.md).
 - Do not claim CI proves skills work end-to-end. CI covers installer smoke
   (`tests/smoke.sh`), task-helper smoke (`tests/tasks.sh`), remote-download
   smoke (`tests/smoke-remote.sh`), human cockpit (`tests/status.sh`),
-  shellcheck (`-S error`),
+  shellcheck (`-S warning`),
   `scripts/maint/sync-references.sh --check`, and
   `scripts/maint/sync-bootstrap.sh --check`.
 - Sole-maintainer repo: changes need not support or migrate older versions or
@@ -90,7 +90,7 @@ bash scripts/maint/sync-bootstrap.sh --check   # required after any lib/bootstra
 bash -n bin/*.sh lib/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh tests/*.sh
 ```
 
-`shellcheck -S error` runs in CI; warning-level findings still exist.
+`shellcheck -S warning` runs in CI; warning-clean across in-scope files.
 
 ## Versioning
 

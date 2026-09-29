@@ -274,7 +274,7 @@ fi
 # Rewrite only status (+ optional by-key) inside the first frontmatter block.
 # Body after the closing --- is copied byte-for-byte.
 tmp="$(mktemp "${TMPDIR:-/tmp}/ar-bank-note.XXXXXX")"
-NOTE_PATH="$NOTE_PATH" NEW_STATUS="$NEW_STATUS" BY_KEY="$BY_KEY" BY_FILE="$BY_LINK" awk '
+env NOTE_PATH="$NOTE_PATH" NEW_STATUS="$NEW_STATUS" BY_KEY="$BY_KEY" BY_FILE="$BY_LINK" awk '
   BEGIN {
     note = ENVIRON["NOTE_PATH"]
     new_status = ENVIRON["NEW_STATUS"]

@@ -9,7 +9,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 ATRY="$ROOT/scripts/atry"
 COCKPIT_SH="$ROOT/scripts/runtime/run-cockpit.sh"
 STATUS_SH="$ROOT/scripts/runtime/run-status.sh"
-HISTORY_SH="$ROOT/scripts/runtime/run-history.sh"
 
 FAIL=0
 pass() { echo "PASS: $1"; }

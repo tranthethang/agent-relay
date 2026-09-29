@@ -159,10 +159,10 @@ close)
       exit 1
       ;;
     esac
-    append_history "$RUN_DIR" done abandoned by=human "reason=$reason_tok"
+    append_history "$RUN_DIR" "done" abandoned by=human "reason=$reason_tok"
     echo "close: abandoned $(basename "$RUN_DIR") reason=$reason_tok"
   else
-    append_history "$RUN_DIR" done completed by=human
+    append_history "$RUN_DIR" "done" completed by=human
     echo "close: completed $(basename "$RUN_DIR")"
   fi
   ;;

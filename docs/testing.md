@@ -34,12 +34,12 @@ CI (`.github/workflows/ci.yml`):
 
 - Matrix: `ubuntu-latest`, `macos-latest` — both sync checks + all three test
   scripts
-- `shellcheck -S error` on `bin/`, `scripts/atry`, `scripts/runtime/`,
+- `shellcheck -S warning` on `bin/`, `scripts/atry`, `scripts/runtime/`,
   `scripts/maint/`, `lib/`, `tests/`
 - `dprint check` (shell via exec→shfmt, plus markdown/yaml)
 
-Severity floor is **error**, not warning: warning-level findings still exist
-on purpose until cleaned up (see `CONTRIBUTING.md`).
+Severity floor is **warning** (warning-clean across in-scope files; see
+`CONTRIBUTING.md`).
 
 ## What each suite covers
 

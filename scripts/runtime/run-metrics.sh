@@ -339,7 +339,7 @@ extract_models_from_file() {
       # Normalize: take content after stage=...
       for tok in $line; do
         case "$tok" in
-        model=* | model=*/ | model=*--\>)
+        model=*)
           model="${tok#model=}"
           model="${model%%-->*}"
           model="${model%%\"*}"
@@ -640,7 +640,7 @@ for k in $METRIC_KEYS; do
 done
 
 tmp="$(mktemp "${TMPDIR:-/tmp}/ar-metrics-note.XXXXXX")"
-WRITE_NOTE="$WRITE_NOTE" KV_FILE="$KV_FILE" KEYS_FILE="$KEYS_FILE" awk '
+env WRITE_NOTE="$WRITE_NOTE" KV_FILE="$KV_FILE" KEYS_FILE="$KEYS_FILE" awk '
   BEGIN {
     note = ENVIRON["WRITE_NOTE"]
     kv = ENVIRON["KV_FILE"]
