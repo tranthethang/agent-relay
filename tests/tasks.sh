@@ -96,14 +96,14 @@ grep -q -- "- \[in-progress\] T1:" "$HAPPY_DIR/implement-plan.md" && pass "claim
 grep -q "status: in-progress" "$HAPPY_DIR/implement-plan/T1.status" && pass "claim sets in-progress" || fail "claim sets in-progress"
 
 # Update with wrong session-tag should fail
-if "$TASK_CLAIM" update happy T1 wrong-agent done >/dev/null 2>&1; then
+if "$TASK_CLAIM" update happy T1 wrong-agent "done" >/dev/null 2>&1; then
   fail "update with wrong session-tag should fail"
 else
   pass "update with wrong session-tag fails"
 fi
 
 # Update with correct session-tag
-"$TASK_CLAIM" update happy T1 agent-1 done >/dev/null
+"$TASK_CLAIM" update happy T1 agent-1 "done" >/dev/null
 grep -q "status: done" "$HAPPY_DIR/implement-plan/T1.status" && pass "update sets done" || fail "update sets done"
 grep -q -- "- \[done\] T1:" "$HAPPY_DIR/implement-plan.md" && pass "update updates rollup" || fail "update updates rollup"
 
@@ -466,7 +466,7 @@ else
 fi
 # Finish T1
 "$TASK_CLAIM" claim deps T1 worker >/dev/null
-"$TASK_CLAIM" update deps T1 worker done >/dev/null
+"$TASK_CLAIM" update deps T1 worker "done" >/dev/null
 # Claim T2 -> should succeed
 if "$TASK_CLAIM" claim deps T2 worker >/dev/null; then
   pass "claim T2 succeeds when T1 is done"
@@ -632,7 +632,7 @@ id: 1700000013
 EOF
 "$TASK_INIT" sess >/dev/null
 "$TASK_CLAIM" claim sess T1 tagA >/dev/null
-if "$TASK_CLAIM" update --session tagA sess T1 done >/dev/null; then
+if "$TASK_CLAIM" update --session tagA sess T1 "done" >/dev/null; then
   pass "update --session after subcommand works"
 else
   fail "update --session after subcommand works"
@@ -673,7 +673,7 @@ else
 fi
 after="$(cat "$SESS_DIR/implement-plan/T1.status")"
 [[ "$before" == "$after" ]] && pass "bogus status leaves file unchanged" || fail "bogus status leaves file unchanged"
-if "$TASK_CLAIM" update sess T1 agentA done "extra reason" >/dev/null 2>&1; then
+if "$TASK_CLAIM" update sess T1 agentA "done" "extra reason" >/dev/null 2>&1; then
   fail "done rejects extra reason"
 else
   pass "done rejects extra reason"
@@ -763,7 +763,7 @@ else
   pass "steal respects unmet deps"
 fi
 "$TASK_CLAIM" claim stealdep T1 owner1 >/dev/null
-"$TASK_CLAIM" update stealdep T1 owner1 done >/dev/null
+"$TASK_CLAIM" update stealdep T1 owner1 "done" >/dev/null
 if "$TASK_CLAIM" steal stealdep T2 taker >/dev/null 2>&1; then
   pass "steal ok when deps satisfied"
 else
@@ -1415,7 +1415,7 @@ while [[ $i -le $CROSS_N ]]; do
   HOLD="$T/mutex-hold-update-steal-$i"
   rm -f "$HOLD" "$HOLD.ready"
   touch "$HOLD"
-  AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" update crossop T1 owner-u done >/dev/null 2>&1 &
+  AGENT_RELAY_TEST_MUTEX_HOLD="$HOLD" "$TASK_CLAIM" update crossop T1 owner-u "done" >/dev/null 2>&1 &
   pid_up=$!
   waits=0
   while [[ ! -f "$HOLD.ready" && $waits -lt 200 ]]; do
@@ -1470,7 +1470,9 @@ rm -rf "$CROSS_DIR"
 # --- CR-2: skill bundle references must not drift; no skill scripts/ ---
 # Drift/orphan probes mutate a temp copy via --root — never $ROOT.
 SYNC_COPY="$T/sync-root"
-mkdir -p "$SYNC_COPY/docs"
+mkdir -p "$SYNC_COPY/docs" "$SYNC_COPY/docs/conventions" "$SYNC_COPY/docs/partials"
+cp -R "$ROOT/docs/conventions/." "$SYNC_COPY/docs/conventions/"
+cp -R "$ROOT/docs/partials/." "$SYNC_COPY/docs/partials/"
 cp "$ROOT/docs/file-conventions.md" "$SYNC_COPY/docs/"
 cp -R "$ROOT/skills" "$SYNC_COPY/skills"
 if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check; then
@@ -1497,6 +1499,15 @@ else
   pass "sync --check detects orphan skill scripts/"
 fi
 rm -rf "$SYNC_COPY/skills/atry-implement/scripts"
+
+# Preflight partial drift must fail --check
+printf '\n<!-- pf-drift -->\n' >>"$SYNC_COPY/docs/partials/preflight.md"
+if bash "$ROOT/scripts/maint/sync-references.sh" --root "$SYNC_COPY" --check >/dev/null 2>&1; then
+  fail "sync --check detects preflight partial drift"
+else
+  pass "sync --check detects preflight partial drift"
+fi
+cp "$ROOT/docs/partials/preflight.md" "$SYNC_COPY/docs/partials/preflight.md"
 
 if [[ "$FAIL" -eq 0 ]]; then
   echo "ALL TASK TESTS PASSED"

@@ -9,7 +9,7 @@ run; this repo’s `skills/` tree is the source.
 skills/<name>/
   SKILL.md              # required — front matter + instructions
   references/           # optional but every current skill ships file-conventions.md
-    file-conventions.md # MUST match docs/file-conventions.md (sync script)
+    file-conventions.md # generated per-skill subset of docs/conventions/ (sync script)
     *-template.md       # empty outlines for artifacts that skill writes
 ```
 
@@ -63,22 +63,29 @@ description: Use when <concrete trigger condition>, not a summary of the workflo
 
 ## Sync workflow
 
-| Source                                                    | Copy                                                                                  |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `docs/file-conventions.md`                                | `skills/*/references/file-conventions.md`                                             |
-| `skills/atry-self-review/references/review-*-template.md` | `skills/atry-cross-review/references/review-*-template.md` (must stay byte-identical) |
-| `skills/atry-self-review/references/reviewer-conduct.md`  | `skills/atry-cross-review/references/reviewer-conduct.md` (must stay byte-identical)  |
+Convention parts live under `docs/conventions/` (`core`, `review-headings`,
+`parallel`, `bank`, `notes`). `sync-references.sh` concatenates them into:
+
+| Source                                                    | Generated copy                                                                   |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `docs/conventions/*.md` (manifest per skill)              | `skills/<name>/references/file-conventions.md`                                   |
+| all parts in fixed order                                  | `docs/file-conventions.md` (human full view)                                     |
+| `docs/partials/preflight.md`                              | between `<!-- BEGIN PREFLIGHT -->` / `<!-- END PREFLIGHT -->` in each `SKILL.md` |
+| `skills/atry-self-review/references/review-*-template.md` | `skills/atry-cross-review/…` (byte-identical)                                    |
+| `skills/atry-self-review/references/reviewer-conduct.md`  | same                                                                             |
 
 ```bash
-# after editing docs/file-conventions.md, review templates, or reviewer-conduct.md
+# after editing docs/conventions/, docs/partials/preflight.md, review templates,
+# or reviewer-conduct.md
 bash scripts/maint/sync-references.sh
 bash scripts/maint/sync-references.sh --check
 ```
 
 Hand-editing only the copy under `skills/*/references/` will be overwritten or
-fail CI `--check`. Runtime helpers: edit `scripts/runtime/` (and `scripts/atry`
-if the dispatcher changes), then re-run `./bin/install.sh` to refresh
-`~/.agent-relay`.
+fail CI `--check`. The shared Preflight paragraph is the only SKILL.md body
+synced this way; per-stage command tables stay hand-written. Runtime helpers:
+edit `scripts/runtime/` (and `scripts/atry` if the dispatcher changes), then
+re-run `./bin/install.sh` to refresh `~/.agent-relay`.
 
 Empty artifact outlines live in each skill's `references/*-template.md`.
 `SKILL.md` should tell the agent to read those files before writing the
@@ -89,8 +96,9 @@ identical.
 
 ## Adding a skill
 
-1. Create `skills/<name>/SKILL.md` with front matter.
-2. Add `references/` as needed; include `file-conventions.md` via sync.
+1. Create `skills/<name>/SKILL.md` with front matter and Preflight markers.
+2. Add a manifest entry in `scripts/maint/sync-references.sh` (`skill_parts`)
+   and run sync so `references/file-conventions.md` is generated.
 3. Document `atry` commands the agent should run.
 4. Extend `tests/smoke.sh` if the new skill should be installed in smoke.
 5. Document the stage in the root README table if it is part of the public

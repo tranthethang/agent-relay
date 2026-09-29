@@ -108,13 +108,35 @@ atry history append "$RUN_DIR" implement started tool=cursor
 atry task-init "$RUN_DIR"
 atry list "$RUN_DIR"
 atry claim "$RUN_DIR" T1 session-a
-atry review upsert "$RUN_DIR/review-report.md" Self-Review "$(date +%F)" body.md
+body_tmp="$(mktemp "${TMPDIR:-/tmp}/ar-body.XXXXXX")"
+atry review upsert "$RUN_DIR/review-report.md" Self-Review "$(date +%F)" "$body_tmp"
 atry bank init --path /abs/vault/folder   # once per repo, optional
 atry bank check "$RUN_DIR"
 ```
 
 Canonical sources: `scripts/atry` + `scripts/runtime/`. Maintainer-only scripts
 live under `scripts/maint/`.
+
+## Human cockpit
+
+One-shot commands for the person coordinating stages. They record; they do
+not block agents or prove who typed them (`by=human` is a record, like
+provenance).
+
+```bash
+atry status                         # list runs when several exist
+atry status <run>                   # detail + next step (read-only)
+atry approve <run> plan             # record plan approval
+atry stamp <run> <stage> tool=… model=…   # attest real tool/model (rejects unknown)
+atry decide <run> <id> "resolution" # append decisions.md + history
+atry close <run>                    # done completed by=human
+atry close <run> --abandon "reason" # abandoned
+```
+
+`atry status` never writes. Skills tell agents not to run `approve` /
+`decide` / `stamp` / `close` unless you asked for that exact command.
+`implement started` warns on stderr when there is no plan approval, then
+continues. Coverage: `tests/status.sh`.
 
 ## Knowledge bank (optional)
 
@@ -269,6 +291,10 @@ missing). Details: [`docs/installer.md`](docs/installer.md).
   (fence-aware; `unknown` is ignored), and when the Cross-Review `tool=`
   matches the implement author tool from `history.log` (else
   `implement-report.md`).
+- Human cockpit commands (`approve` / `decide` / `stamp` / `close`) are the
+  same: records with `by=human`, not proof of who typed them. Plan approval
+  is a warning on `implement started`, not a hard gate. Skills tell agents
+  not to run those verbs unless you asked; the CLI does not enforce that.
 - Parallel claim does not protect overlapping source-file edits.
 - Antigravity’s skills path has moved before; install can “succeed” while the
   app ignores the files.

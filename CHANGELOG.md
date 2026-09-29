@@ -10,6 +10,23 @@ Versions use calendar versioning `YY.MM.DD` (UTC day of release); see
 
 ### Added
 
+- `atry distill finalize <run>` (`scripts/runtime/distill-finalize.sh`):
+  deterministic distill tail — bank check, metrics `--write`, push,
+  set-status for `supersedes`/`resolves`, one `Bank push:` line, vault-only
+  re-push, then `distill completed` + `done completed`. Exit `1` only for
+  validation (missing/duplicate run note); bank/metrics failures stay exit
+  `0`. Coverage: `tests/distill-finalize.sh` / `make distill-finalize`.
+- Convention parts under `docs/conventions/` (`core`, `review-headings`,
+  `parallel`, `bank`, `notes`); `sync-references.sh` generates
+  `docs/file-conventions.md` and a per-skill subset. Shared Preflight
+  paragraph from `docs/partials/preflight.md` synced between markers in all
+  six `SKILL.md` files (with `--check`).
+- Human cockpit commands: `atry status`, `atry approve <run> plan`,
+  `atry stamp <run> <stage> tool=… model=…`, `atry decide <run> <id> "…"`,
+  and `atry close` / `atry close --abandon` (`scripts/runtime/run-status.sh`,
+  `run-cockpit.sh`). Records only (`by=human`); no enforcement.
+  `$RUN_DIR/decisions.md` is append-only from `decide`. Coverage:
+  `tests/status.sh` / `make status` (also in `make smoke` and CI).
 - `sync-references.sh --root DIR` (and `AGENT_RELAY_SYNC_ROOT`) so drift/orphan
   checks can run against a temp copy; test suites assert
   `git status --porcelain` is unchanged under the real repo.
@@ -22,6 +39,19 @@ Versions use calendar versioning `YY.MM.DD` (UTC day of release); see
 
 ### Changed
 
+- `atry-distill` judgment-only: agents classify and write notes, then call
+  `atry distill finalize` once. SKILL.md ~1,826 → ~958 words.
+- Per-skill `references/file-conventions.md` word counts (`wc -w` on
+  installed-bundle refs, before → after): brainstorm 2,233 → 1,203;
+  plan 2,381 → 1,351; implement 2,310 → 1,280; self/cross-review 3,034 →
+  3,109 (still carry review+parallel parts); distill 4,278 → 3,362.
+- `atry history append … implement started` prints a stderr warning when the
+  run has no `stage=plan action=approved` event, then still appends (exit 0).
+- `atry metrics` prefers the latest `action=attested` tool/model per stage;
+  `model_source` is `human-attested`, `mixed`, or `self-reported`.
+- Skill text: agents must not run `approve` / `decide` / `stamp` / `close`
+  unless the user asked; `atry-implement` relays `atry status` / approval
+  warnings; distill reads `decisions.md`; review skills mention `atry decide`.
 - `atry bank push` agentmemory sink now sends a recall-oriented projection
   instead of the full note file. `content` starts with a `<type>: <key>`
   opener, then the markdown body (frontmatter stripped). `type` is mapped to
@@ -55,6 +85,12 @@ Versions use calendar versioning `YY.MM.DD` (UTC day of release); see
 - Test suites no longer mutate the source tree for sync-references
   drift/orphan probes (temp `--root` copy + porcelain identity guard).
 - Untracked `.DS_Store`; `.gitignore` ignores it at any depth.
+- `atry status` detail: use the latest non-attested `tool=` per stage (and
+  latest provenance `model=`) so a restarted stage does not keep the first
+  tool; also fill plan tool/model from history/provenance when not attested.
+- `atry-distill` SKILL.md: add the human-cockpit prohibition
+  (`approve` / `decide` / `stamp` / `close`) that the other five skills
+  already stated (plan T8).
 
 ## [26.09.28] — 2026-09-28
 

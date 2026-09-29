@@ -508,8 +508,6 @@ for f in "${NOTE_FILES[@]}"; do
   fi
 done
 
-PROJ_VAULT_OK=0
-ATRY_VAULT_OK=0
 AM_OK=0
 ANY_VAULT_OK=0
 
@@ -539,8 +537,6 @@ if [[ "$SAME_VAULT_PATH" -eq 1 && ("$PROJ_VAULT_USABLE" -eq 1 || "$ATRY_VAULT_US
     done
     if [[ "$vault_failed" -eq 0 ]]; then
       ANY_VAULT_OK=1
-      PROJ_VAULT_OK=1
-      ATRY_VAULT_OK=1
       scan_orphans "$dest_dir" "$PUSHED_NAMES" "vault"
       if [[ ${#PROJ_NOTES[@]} -gt 0 ]]; then
         warn_foreign_for_notes "$PROJECT_NAME" "${PROJ_NOTES[@]}"
@@ -558,7 +554,6 @@ else
   if [[ "$PROJ_VAULT_USABLE" -eq 1 ]]; then
     if [[ ${#PROJ_NOTES[@]} -eq 0 ]]; then
       echo "bank-push: vault(project): no project-lane notes in this push"
-      PROJ_VAULT_OK=1
       # Atry-lane-only push with atry vault unset is an intentional
       # local-distill skip, not "all usable sinks failed". When atry vault
       # is usable, leave ANY_VAULT_OK to the atry copy result.
@@ -586,7 +581,6 @@ else
         fi
       done
       if [[ "$vault_failed" -eq 0 ]]; then
-        PROJ_VAULT_OK=1
         ANY_VAULT_OK=1
         scan_orphans "$BANK_PATH" "$PUSHED_NAMES" "vault(project)"
         warn_foreign_for_notes "$PROJECT_NAME" "${PROJ_NOTES[@]}"
@@ -600,7 +594,6 @@ else
   if [[ "$ATRY_VAULT_USABLE" -eq 1 ]]; then
     if [[ ${#ATRY_NOTES[@]} -eq 0 ]]; then
       echo "bank-push: vault(atry): no atry-lane notes in this push"
-      ATRY_VAULT_OK=1
     elif [[ -z "$ATRY_PATH" || ! -d "$ATRY_PATH" ]]; then
       echo "bank-push: vault(atry): BANK_ATRY_PATH '$ATRY_PATH' is not a directory" >&2
     elif [[ ! -w "$ATRY_PATH" ]]; then
@@ -622,7 +615,6 @@ else
         fi
       done
       if [[ "$vault_failed" -eq 0 ]]; then
-        ATRY_VAULT_OK=1
         ANY_VAULT_OK=1
         scan_orphans "$ATRY_PATH" "$PUSHED_NAMES" "vault(atry)"
         warn_foreign_for_notes "$ATRY_NAME" "${ATRY_NOTES[@]}"

@@ -79,7 +79,8 @@ resolve_paths() {
     ROLLUP_FILE="$RUN_DIR/implement-plan.md"
     REPORT_DIR="$RUN_DIR/implement-report"
     REPORT_ROLLUP_FILE="$RUN_DIR/implement-report.md"
-    local bname="$(basename "$RUN_DIR")"
+    local bname
+    bname="$(basename "$RUN_DIR")"
     if [[ "$bname" =~ ^[0-9]{8}-([0-9]{10,11})-[a-z]+(-[a-z]+)*$ ]]; then
       ID="${BASH_REMATCH[1]}"
     else

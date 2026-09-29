@@ -179,6 +179,9 @@ for _s in implement self_review cross_review distill; do
   eval "STAGE_SECS_${_s}=0"
   eval "STAGE_HADPAIR_${_s}=0"
   eval "STAGE_TOOLS_${_s}="
+  eval "STAGE_ATTESTED_TOOL_${_s}="
+  eval "STAGE_ATTESTED_MODEL_${_s}="
+  eval "STAGE_HAD_ATTEST_${_s}=0"
 done
 
 REVIEW_ROUNDS=0
@@ -203,6 +206,7 @@ if [[ -f "$HISTORY" ]]; then
     stage=""
     action=""
     tool=""
+    model=""
     head=""
     size=""
     size_base=""
@@ -211,6 +215,7 @@ if [[ -f "$HISTORY" ]]; then
       stage=*) stage="${tok#stage=}" ;;
       action=*) action="${tok#action=}" ;;
       tool=*) tool="${tok#tool=}" ;;
+      model=*) model="${tok#model=}" ;;
       head=*) head="${tok#head=}" ;;
       size=*) size="${tok#size=}" ;;
       size_base=*) size_base="${tok#size_base=}" ;;
@@ -236,9 +241,22 @@ if [[ -f "$HISTORY" ]]; then
     fi
 
     sk=""
-    sk="$(stage_to_key "$stage")" || continue
+    sk="$(stage_to_key "$stage")" || true
 
-    if [[ -n "$tool" ]]; then
+    # Latest human attestation wins for tool/model when present.
+    if [[ "$action" == "attested" && -n "$sk" ]]; then
+      eval "STAGE_HAD_ATTEST_${sk}=1"
+      if [[ -n "$tool" ]]; then
+        printf -v "STAGE_ATTESTED_TOOL_${sk}" '%s' "$tool"
+      fi
+      if [[ -n "$model" ]]; then
+        printf -v "STAGE_ATTESTED_MODEL_${sk}" '%s' "$model"
+      fi
+    fi
+
+    [[ -n "$sk" ]] || continue
+
+    if [[ -n "$tool" && "$action" != "attested" ]]; then
       cur=""
       eval "cur=\"\$STAGE_TOOLS_${sk}\""
       cur="$(csv_append_unique "$cur" "$tool")"
@@ -290,7 +308,13 @@ for sk in implement self_review cross_review distill; do
     metric_set "dur_${sk}_min" ""
   fi
   tools=""
-  eval "tools=\"\$STAGE_TOOLS_${sk}\""
+  attested=0
+  eval "attested=\"\$STAGE_HAD_ATTEST_${sk}\""
+  if [[ "$attested" -eq 1 ]]; then
+    eval "tools=\"\$STAGE_ATTESTED_TOOL_${sk}\""
+  else
+    eval "tools=\"\$STAGE_TOOLS_${sk}\""
+  fi
   metric_set "tool_${sk}" "$tools"
 done
 
@@ -315,7 +339,7 @@ extract_models_from_file() {
       # Normalize: take content after stage=...
       for tok in $line; do
         case "$tok" in
-        model=* | model=*/ | model=*--\>)
+        model=*)
           model="${tok#model=}"
           model="${model%%-->*}"
           model="${model%%\"*}"
@@ -384,6 +408,38 @@ metric_set model_implement "$(collect_model implement)"
 metric_set model_self_review "$(collect_model self-review)"
 metric_set model_cross_review "$(collect_model cross-review)"
 metric_set model_distill "$(collect_model distill)"
+
+# Prefer latest attested model= over provenance self-report when present.
+ATTESTED_MEASURED=0
+MEASURED_STAGES=0
+for sk in implement self_review cross_review distill; do
+  attested=0
+  eval "attested=\"\$STAGE_HAD_ATTEST_${sk}\""
+  if [[ "$attested" -eq 1 ]]; then
+    amodel=""
+    eval "amodel=\"\$STAGE_ATTESTED_MODEL_${sk}\""
+    if [[ -n "$amodel" ]]; then
+      metric_set "model_${sk}" "$amodel"
+    fi
+  fi
+  # A stage "counts" toward model_source when it has a tool or model value.
+  tval="$(metric_get "tool_${sk}")"
+  mval="$(metric_get "model_${sk}")"
+  if [[ -n "$tval" || -n "$mval" ]]; then
+    MEASURED_STAGES=$((MEASURED_STAGES + 1))
+    if [[ "$attested" -eq 1 ]]; then
+      ATTESTED_MEASURED=$((ATTESTED_MEASURED + 1))
+    fi
+  fi
+done
+
+if [[ "$MEASURED_STAGES" -eq 0 || "$ATTESTED_MEASURED" -eq 0 ]]; then
+  metric_set model_source "self-reported"
+elif [[ "$ATTESTED_MEASURED" -eq "$MEASURED_STAGES" ]]; then
+  metric_set model_source "human-attested"
+else
+  metric_set model_source "mixed"
+fi
 
 # ---- git change size ----
 BASE_REF=""
@@ -584,7 +640,7 @@ for k in $METRIC_KEYS; do
 done
 
 tmp="$(mktemp "${TMPDIR:-/tmp}/ar-metrics-note.XXXXXX")"
-WRITE_NOTE="$WRITE_NOTE" KV_FILE="$KV_FILE" KEYS_FILE="$KEYS_FILE" awk '
+env WRITE_NOTE="$WRITE_NOTE" KV_FILE="$KV_FILE" KEYS_FILE="$KEYS_FILE" awk '
   BEGIN {
     note = ENVIRON["WRITE_NOTE"]
     kv = ENVIRON["KV_FILE"]

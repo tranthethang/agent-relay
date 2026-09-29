@@ -175,12 +175,3 @@ should be a real ref in that repo (`HEAD` before the work, or the branch tip).
 Do not invent one. The plan skill's `references/plan-template.md` also outlines
 `## Non-goals`, the optional `## Decisions` and `## Flow` sections, and
 numbered tasks that may list `(deps: T1 T2)`. Helpers parse only `## Tasks`.
-
-## Notes
-
-- Put each run at `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`.
-- Commit `.agent-relay/` if you want the notes on the branch. Otherwise add
-  the directory to `.gitignore`. This repo does not choose for you.
-  `bin/install.sh` prints that reminder.
-- Id generation: `RUN_ID` is generated offline via `date +%s` (Unix epoch
-  seconds). No npm or network required.

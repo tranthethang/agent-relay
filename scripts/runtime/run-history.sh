@@ -44,6 +44,30 @@ append)
     exit 1
   fi
 
+  # Advisory only: implement may start without a human plan approval.
+  if [[ "$STAGE" == "implement" && "$ACTION" == "started" ]]; then
+    approved=0
+    if [[ -f "$RUN_DIR/history.log" ]]; then
+      while IFS= read -r _hline || [[ -n "$_hline" ]]; do
+        _hstage=""
+        _haction=""
+        for _tok in ${_hline#* }; do
+          case "$_tok" in
+          stage=*) _hstage="${_tok#stage=}" ;;
+          action=*) _haction="${_tok#action=}" ;;
+          esac
+        done
+        if [[ "$_hstage" == "plan" && "$_haction" == "approved" ]]; then
+          approved=1
+          break
+        fi
+      done <"$RUN_DIR/history.log"
+    fi
+    if [[ "$approved" -eq 0 ]]; then
+      echo "run-history: warning: plan not approved (no stage=plan action=approved); continuing anyway" >&2
+    fi
+  fi
+
   NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   line="$NOW_ISO stage=$STAGE action=$ACTION"
   HAS_HEAD=0
@@ -92,13 +116,20 @@ append)
 
   printf '%s\n' "$line" >>"$RUN_DIR/history.log"
 
-  # Update meta.md stage/status if meta.md exists
+  # Update meta.md stage/status if meta.md exists. Skip record-only actions
+  # (approved / attested / resolved) so approve/stamp/decide do not rewind stage.
   if [[ -f "$RUN_DIR/meta.md" ]]; then
-    case "$STAGE" in
-    plan | implement | self-review | cross-review | distill | done)
-      sed -e "s/^stage:.*/stage: $STAGE/" "$RUN_DIR/meta.md" >"$RUN_DIR/meta.md.tmp" && mv "$RUN_DIR/meta.md.tmp" "$RUN_DIR/meta.md"
-      ;;
+    update_stage=0
+    case "$ACTION" in
+    created | started | completed | abandoned) update_stage=1 ;;
     esac
+    if [[ "$update_stage" -eq 1 ]]; then
+      case "$STAGE" in
+      plan | implement | self-review | cross-review | distill | done)
+        sed -e "s/^stage:.*/stage: $STAGE/" "$RUN_DIR/meta.md" >"$RUN_DIR/meta.md.tmp" && mv "$RUN_DIR/meta.md.tmp" "$RUN_DIR/meta.md"
+        ;;
+      esac
+    fi
     if [[ "$ACTION" == "completed" && "$STAGE" == "done" ]]; then
       sed -e "s/^status:.*/status: done/" "$RUN_DIR/meta.md" >"$RUN_DIR/meta.md.tmp" && mv "$RUN_DIR/meta.md.tmp" "$RUN_DIR/meta.md"
     elif [[ "$ACTION" == "abandoned" ]]; then

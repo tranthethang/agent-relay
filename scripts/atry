@@ -13,6 +13,11 @@ Usage:
   atry run-init <RUN_ID> --slug <slug> [--title <title>] [--base <base-ref>] [--tool <tool>]
   atry history append <run-dir-or-id> <stage> <action> [k=v ...]
   atry history show <run-dir-or-id>
+  atry status [<run-dir-or-id>]
+  atry approve <run-dir-or-id> plan [note=<token>]
+  atry close <run-dir-or-id> [--abandon <reason>]
+  atry stamp <run-dir-or-id> <stage> tool=<t> model=<m>
+  atry decide <run-dir-or-id> <id> <resolution>
   atry task-init <id-or-path>
   atry [--session <tag>] [--allow-skipped-deps] claim|steal|update|release|list|rollup|check|report-write|report-list|report-rollup ...
   atry review upsert <file> <"Self-Review"|"Cross-Review"> <YYYY-MM-DD> <body-file|->
@@ -21,6 +26,7 @@ Usage:
   atry bank push [--vault-only] <start-dir> <notes-dir>
   atry bank set-status <start-dir> <filename> <status> [--by <filename>]
   atry metrics <run-dir-or-id> [--write <run-note>]
+  atry distill finalize <run-dir-or-id> [k=v ...]
 
 Task helpers map 1:1 to scripts/runtime/task-claim.sh subcommands, flattened:
   atry list <id>
@@ -142,6 +148,20 @@ history)
   [[ $# -ge 1 ]] || usage
   run_helper run-history.sh "$@"
   ;;
+status)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for status" >&2
+    exit 1
+  }
+  run_helper run-status.sh "$@"
+  ;;
+approve | close | stamp | decide)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for $cmd" >&2
+    exit 1
+  }
+  run_helper run-cockpit.sh "$cmd" "$@"
+  ;;
 task-init)
   [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
     echo "Error: global flags not valid for task-init" >&2
@@ -189,6 +209,22 @@ metrics)
     exit 1
   }
   run_helper run-metrics.sh "$@"
+  ;;
+distill)
+  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
+    echo "Error: global flags not valid for distill" >&2
+    exit 1
+  }
+  [[ $# -ge 1 ]] || usage
+  sub="$1"
+  shift
+  case "$sub" in
+  finalize) run_helper distill-finalize.sh "$@" ;;
+  *)
+    echo "Error: unknown distill subcommand '$sub' (finalize)" >&2
+    exit 1
+    ;;
+  esac
   ;;
 *)
   echo "Error: unknown command '$cmd'" >&2
