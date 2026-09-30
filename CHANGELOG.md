@@ -8,6 +8,8 @@ Versions use calendar versioning `YY.MM.DD` (UTC day of release); see
 
 ## [Unreleased]
 
+## [26.09.30] — 2026-09-30
+
 ### Added
 
 - `atry distill <run>` (`scripts/runtime/distill-manifest.sh`): writes
