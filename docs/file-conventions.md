@@ -13,17 +13,17 @@ This file is generated from parts under `docs/conventions/` by
 the copies under `skills/*/references/`). Maintainer docs that point here
 (architecture, task-claim, skill authoring, …): [`INDEX.md`](INDEX.md).
 
-| Purpose            | Path                                                                                                   | Written by                                                                           |
-| ------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Plan               | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md`                                                       | You, or `atry-plan`.                                                                 |
-| Task list          | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-plan.md` (or `implement-plan/` in parallel mode)     | `atry-implement`                                                                     |
-| Implement notes    | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement`                                                                     |
-| Review report      | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-report.md`                                              | `atry-self-review` creates or overwrites. `atry-cross-review` appends.               |
-| Review walkthrough | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md`                                         | Same as the review report.                                                           |
-| Metadata           | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md`                                                       | `atry run-init` creates; stages update `stage:` and `status:`.                       |
-| History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log`                                                   | `atry history` / stages append events.                                               |
-| Decisions          | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/decisions.md`                                                  | `atry decide` (human); append-only resolutions distill can read.                     |
-| Distill (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distill/`                                                      | `atry-distill`, run after cross-review (or self-review if cross-review was skipped). |
+| Purpose            | Path                                                                                                   | Written by                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Plan               | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md`                                                       | You, or `atry-plan`.                                                   |
+| Task list          | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-plan.md` (or `implement-plan/` in parallel mode)     | `atry-implement`                                                       |
+| Implement notes    | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement`                                                       |
+| Review report      | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-report.md`                                              | `atry-self-review` creates or overwrites. `atry-cross-review` appends. |
+| Review walkthrough | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md`                                         | Same as the review report.                                             |
+| Metadata           | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md`                                                       | `atry run-init` creates; stages update `stage:` and `status:`.         |
+| History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log`                                                   | `atry history` / stages append events.                                 |
+| Decisions          | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/decisions.md`                                                  | `atry decide` (human); append-only resolutions.                        |
+| Distill (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distill/manifest`                                              | `atry distill` / `atry-distill` — export only; not a lifecycle stage.  |
 
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
 characters matching `^[a-z]+(-[a-z]+)*$`.
@@ -87,7 +87,7 @@ id: <RUN_ID>
 slug: <RUN_SLUG>
 created: <YYYY-MM-DD>
 title: <short>
-stage: plan|implement|self-review|cross-review|distill|done
+stage: plan|implement|self-review|cross-review|done
 status: active|done|abandoned
 base: <git-ref>
 ```
@@ -98,17 +98,16 @@ Field definitions:
 - `slug`: Short slug (lowercase letters and hyphens, 3–48 characters).
 - `created`: Date the run was initialized (`YYYY-MM-DD`).
 - `title`: Short summary of the run's goal.
-- `stage`: Current workflow stage (`plan`, `implement`, `self-review`, `cross-review`, `distill`, or `done`).
+- `stage`: Current workflow stage (`plan`, `implement`, `self-review`, `cross-review`, or `done`).
 - `status`: Lifecycle status (`active`, `done`, or `abandoned`).
 - `base`: Git commit ref from which the work branches or diffs.
 
 `atry history append` updates `stage:` for recognized stages on lifecycle
 actions (`created` / `started` / `completed` / `abandoned`) only — not on
 human record actions (`approved` / `attested` / `resolved`). Appending
-`done completed` also sets `status: done` (distill’s final step, or
-`atry close`). Appending an `abandoned` action sets `status: abandoned`
-(`atry close --abandon`). Runs that skip distill are closed by a human
-command, not automatically.
+`done completed` also sets `status: done` (`atry close`). Appending an
+`abandoned` action sets `status: abandoned` (`atry close --abandon`).
+Distill does not change `meta.md`; close the run with `atry close`.
 
 ## `history.log` (Append-Only Event Log)
 
@@ -128,10 +127,10 @@ Example:
 Timestamp must be ISO8601 UTC. Use `atry history` to safely append to
 this file. On `implement started` and on `implement` / `self-review` /
 `cross-review` `completed`, `atry history append` records `head=` (current
-`HEAD`) automatically unless `head=` was passed explicitly — used by
-`atry metrics` as the change-size base and END. On those `completed` events it
-also records `size_base=<sha> size=<files>/<added>/<deleted>` (working tree
-vs the diff base at that moment), which `atry metrics` prefers.
+`HEAD`) automatically unless `head=` was passed explicitly — raw data for
+downstream readers. On those `completed` events it also records
+`size_base=<sha> size=<files>/<added>/<deleted>` (working tree vs the diff
+base at that moment).
 
 Human cockpit writers (`atry approve` / `stamp` / `decide` / `close`) also
 append through this path with `by=human`:
@@ -156,8 +155,7 @@ Append-only file written by `atry decide`. Each line:
 ```
 
 `<id>` follows the run-slug rules (`^[a-z]+(-[a-z]+)*$`, length 3–48). Free
-text lives here; the history event only carries `id=<slug>`. Distill reads
-this file when present.
+text lives here; the history event only carries `id=<slug>`.
 
 ## Plan header
 
@@ -339,21 +337,46 @@ The claim protocol serializes **task status**, not file contents:
 | Multiple sub-agents, same `<RUN_ID>`, same task                   | No — second claim fails loudly                         |
 | Hand-editing `implement-plan.md` while parallel mode is active    | No — it's generated, gets overwritten                  |
 
-## Knowledge bank (optional, project-level)
+## Distill manifest (optional export)
 
-`.agent-relay/bank.conf`, `.agent-relay/bank-status.md`, and (when the
-agentmemory sink has posted) `.agent-relay/bank-agentmemory-sent.tsv` live
-at the `.agent-relay/` root, **not** inside a per-run directory — a bank
-connection is a property of the target repo, not of one run. `bank.conf` is
-parsed line-by-line (never sourced/eval'd) by `atry bank check`; see
-[bank.md](bank.md) for the format, supported `BANK_TYPE` values, dual vault
-lanes (`BANK_PATH`/`BANK_PROJECT_NAME` vs `BANK_ATRY_PATH`/`BANK_ATRY_NAME`),
-status fields (`reachable` / `atry_reachable`, …), push partitioning by
-`scope:`, the agentmemory sent ledger / retry behaviour, set-status
-dual-path lookup, unset-atry skip, path-equal dedupe, `--vault-only`, and
-what "reachable" does and does not mean. `atry-distill` is the only skill
-that reads/writes these files. Note schema (including `run_id:` and lane
-`scope:`): `skills/atry-distill/references/note-schema.md`.
+`atry distill <run>` writes `$RUN_DIR/distill/manifest` — a flat `key: value`
+file that a separate local tool (for example agent-relay-hub) can read when it
+scans `.agent-relay/`. Distill is an **export, not a lifecycle stage**: it
+appends no history event, never edits `meta.md`, and never closes the run.
+Runs are closed with `atry close`. A run without a manifest is still a valid
+run. Readers must not write into `.agent-relay/`.
+
+### Run directory layout (contract)
+
+Each run lives at:
+
+```text
+.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/
+```
+
+`{YMD}` is the creation date (`date +%Y%m%d`), `{RUN_ID}` is Unix seconds
+(`date +%s`, 10–11 digits), and `{RUN_SLUG}` is lowercase `a-z` and hyphens
+(length 3–48). The directory basename is the `run_id` value in the manifest.
+
+### Manifest format (`schema: 1`)
+
+```text
+schema: 1
+run_id: <run directory basename>
+distilled_at: <UTC, YYYY-MM-DDTHH:MM:SSZ>
+state: <value of the lifecycle: line from atry status <run>>
+file.<relpath>: <sha256 hex>
+```
+
+One `file.` line per regular file under `$RUN_DIR`, with `relpath` relative to
+`$RUN_DIR`, sorted with `LC_ALL=C`. Skip `distill/` and any path with a
+segment that starts with `.` or ends in `.tmp` / `.lock`. Hash with
+`shasum -a 256` or `sha256sum`. Write is atomic (temp under `distill/`, then
+`mv`). Re-running overwrites; only `distilled_at` (and changed hashes /
+`state`) typically differ. Works in every run state, including `abandoned` /
+`done`.
+
+Bump `schema` on any incompatible change to this format.
 
 ## Notes
 

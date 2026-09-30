@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help test smoke tasks bank metrics status distill-finalize fmt fmt-check
+.PHONY: help test smoke tasks distill status fmt fmt-check
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -9,25 +9,17 @@ help: ## Show available commands
 tasks: ## Run parallel tasks test suite
 	bash ./tests/tasks.sh
 
-bank: ## Run knowledge-bank helper test suite
-	bash ./tests/bank.sh
-
-metrics: ## Run atry metrics helper test suite
-	bash ./tests/metrics.sh
+distill: ## Run atry distill (manifest export) test suite
+	bash ./tests/distill.sh
 
 status: ## Run human cockpit (status/approve/stamp/decide/close) test suite
 	bash ./tests/status.sh
 
-distill-finalize: ## Run atry distill finalize test suite
-	bash ./tests/distill-finalize.sh
-
-smoke: ## Run local smoke, tasks, bank, metrics, status, distill-finalize, and remote smoke
+smoke: ## Run local smoke, tasks, distill, status, and remote smoke
 	bash ./tests/smoke.sh
 	bash ./tests/tasks.sh
-	bash ./tests/bank.sh
-	bash ./tests/metrics.sh
+	bash ./tests/distill.sh
 	bash ./tests/status.sh
-	bash ./tests/distill-finalize.sh
 	bash ./tests/smoke-remote.sh
 
 test: smoke ## Run all tests
@@ -41,4 +33,3 @@ fmt-check: ## Check formatting without writing (requires dprint + shfmt on PATH)
 	bash scripts/maint/sync-bootstrap.sh --check
 	bash scripts/maint/sync-references.sh --check
 	dprint check
-

@@ -60,10 +60,9 @@ call agents, pick models, or watch project `.agent-relay/` run dirs.
    escalate tradeoffs per `reviewer-conduct.md`
 5. **cross-review** → upsert Cross-Review with inverted-question framing
    (skill asks for a different tool; nothing enforces it)
-6. **distill** → write atomic typed notes under `$RUN_DIR/distill/`; then
-   `atry distill finalize` runs bank check, metrics, push, set-status, the
-   Bank push line, vault-only re-push, and closes the run
-7. **close** (human, when distill is skipped) → `atry close` / `--abandon`
+6. **distill** (optional export) → `atry distill` writes
+   `$RUN_DIR/distill/manifest`; does not append history or close the run
+7. **close** (human) → `atry close` / `--abandon`
 
 `atry status` is the read-only cockpit for “where is this run / what next”.
 `atry stamp` / `atry decide` record tool/model attestation and decision
@@ -89,7 +88,8 @@ CI runs both with `--check`.
 - No message bus, orchestrator, or agent runtime
 - No cryptographic proof of which tool/model wrote a provenance line
 - No protection of overlapping source-file edits in parallel mode (only task **status** / report files)
-- No automatic prompt enrichment from the knowledge bank (bank is an external, write-only sink in this MVP)
+- No built-in knowledge vault, external memory sink, or typed-note distillation
+  (downstream tools may read `distill/manifest`)
 
 For trust detail see [security.md](security.md). For install mechanics see
 [installer.md](installer.md).

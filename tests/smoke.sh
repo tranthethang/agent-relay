@@ -129,7 +129,7 @@ else
 fi
 cp "$ROOT/VERSION" "$HOME/.agent-relay/VERSION"
 # Missing helper and drifted dispatcher are stale too (not just differing helpers)
-mv "$HOME/.agent-relay/lib/run-metrics.sh" "$T/run-metrics.sh.bak"
+mv "$HOME/.agent-relay/lib/run-status.sh" "$T/run-status.sh.bak"
 cp "$HOME/.agent-relay/bin/atry" "$T/atry.bak"
 printf '\n# smoke stale marker\n' >>"$HOME/.agent-relay/bin/atry"
 set +e
@@ -137,13 +137,13 @@ VERIFY_MISS_OUT="$("$VERIFY" 2>&1)"
 verify_miss_rc=$?
 set -e
 if [[ "$verify_miss_rc" -eq 0 ]] &&
-  echo "$VERIFY_MISS_OUT" | grep -q '\[WARN\] installed lib/run-metrics.sh is missing' &&
+  echo "$VERIFY_MISS_OUT" | grep -q '\[WARN\] installed lib/run-status.sh is missing' &&
   echo "$VERIFY_MISS_OUT" | grep -q '\[WARN\] installed bin/atry differs'; then
   pass "verify warns on missing helper and stale dispatcher (exit 0)"
 else
   fail "verify warns on missing helper and stale dispatcher (rc=$verify_miss_rc out=$VERIFY_MISS_OUT)"
 fi
-mv "$T/run-metrics.sh.bak" "$HOME/.agent-relay/lib/run-metrics.sh"
+mv "$T/run-status.sh.bak" "$HOME/.agent-relay/lib/run-status.sh"
 cp "$T/atry.bak" "$HOME/.agent-relay/bin/atry"
 
 # Without any atry on PATH, verify must fail and name the fix. Use a minimal
@@ -282,9 +282,9 @@ for skill_dir in "$HOME"/.cursor/skills/atry-*/; do
   fi
 done
 
-# distill finalize helper installed with runtime
-[[ -f "$HOME/.agent-relay/lib/distill-finalize.sh" ]] &&
-  pass "distill-finalize.sh installed" || fail "distill-finalize.sh installed"
+# distill-manifest helper installed with runtime
+[[ -f "$HOME/.agent-relay/lib/distill-manifest.sh" ]] &&
+  pass "distill-manifest.sh installed" || fail "distill-manifest.sh installed"
 
 # Word-count snapshot (informational; thresholds gated in implement report / CHANGELOG)
 echo "WORD_COUNTS:"

@@ -78,9 +78,9 @@ append)
     shift
   done
 
-  # Record HEAD for metrics: implement-start is the diff base; completed on
-  # implement / self-review / cross-review is the run's END. Explicit head= wins.
-  # Read-only git (GIT_OPTIONAL_LOCKS=0).
+  # Record HEAD as raw data for downstream readers: implement-start is the
+  # diff base; completed on implement / self-review / cross-review is the
+  # run's END. Explicit head= wins. Read-only git (GIT_OPTIONAL_LOCKS=0).
   if [[ "$HAS_HEAD" -eq 0 ]]; then
     should_head=0
     if [[ "$STAGE" == "implement" && "$ACTION" == "started" ]]; then
@@ -97,11 +97,10 @@ append)
     fi
   fi
 
-  # Snapshot the change size when a stage completes, so `atry metrics` does
-  # not depend on when (or whether) the work is committed afterwards:
-  # size_base=<diff base sha> size=<files>/<added>/<deleted>, working tree vs
-  # the diff base (see diff-size.sh). Explicit size=/size_base= wins; any git
-  # failure just skips the snapshot.
+  # Snapshot the change size when a stage completes (raw data for downstream
+  # readers): size_base=<diff base sha> size=<files>/<added>/<deleted>,
+  # working tree vs the diff base (see diff-size.sh). Explicit size=/size_base=
+  # wins; any git failure just skips the snapshot.
   if [[ "$ACTION" == "completed" && "$HAS_SIZE" -eq 0 ]]; then
     case "$STAGE" in
     implement | self-review | cross-review)
@@ -125,7 +124,7 @@ append)
     esac
     if [[ "$update_stage" -eq 1 ]]; then
       case "$STAGE" in
-      plan | implement | self-review | cross-review | distill | done)
+      plan | implement | self-review | cross-review | done)
         sed -e "s/^stage:.*/stage: $STAGE/" "$RUN_DIR/meta.md" >"$RUN_DIR/meta.md.tmp" && mv "$RUN_DIR/meta.md.tmp" "$RUN_DIR/meta.md"
         ;;
       esac

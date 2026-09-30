@@ -368,7 +368,7 @@ if printf '%s\n' "$IND_OUT" | grep -q 'self-review tool+model == cross-review'; 
 else
   fail "missing self-review/cross-review warning"
 fi
-if printf '%s\n' "$IND_OUT" | grep -q 'next: atry-distill or atry close'; then
+if printf '%s\n' "$IND_OUT" | grep -q 'next: atry close (optionally atry distill first)'; then
   pass "status next step after cross-review"
 else
   fail "wrong next step after cross-review: $IND_OUT"
@@ -411,74 +411,6 @@ if printf '%s\n' "$LATEST_OUT" | grep -q 'model=latest-sr-model'; then
   pass "status shows latest self-review provenance model"
 else
   fail "status missing latest sr model: $LATEST_OUT"
-fi
-
-# ---------- attested metrics ----------
-RUN_M="$(new_run 1790888008 cockpit-metrics)"
-cat >"$RUN_M/plan.md" <<EOF
-base: $BASE
-id: 1790888008
-
-# Metrics stamp fixture
-
-## Tasks
-
-1. One (deps: )
-EOF
-cat >"$RUN_M/history.log" <<EOF
-2026-09-29T10:00:00Z stage=plan action=created tool=cursor
-2026-09-29T10:01:00Z stage=implement action=started tool=cursor
-2026-09-29T10:30:00Z stage=implement action=completed tool=cursor
-2026-09-29T10:31:00Z stage=implement action=attested by=human tool=human-tool model=human-model
-2026-09-29T10:32:00Z stage=self-review action=started tool=cursor
-2026-09-29T10:40:00Z stage=self-review action=completed tool=cursor
-EOF
-cat >"$RUN_M/implement-report.md" <<'EOF'
-<!-- relay: stage=implement tool=cursor model=self-model base=x date=2026-09-29 -->
-EOF
-cat >"$RUN_M/review-report.md" <<'EOF'
-## Self-Review — 2026-09-29
-
-<!-- relay: stage=self-review tool=cursor model=sr-model base=x date=2026-09-29 -->
-EOF
-
-MET_OUT="$(
-  cd "$REPO"
-  "$ATRY" metrics "$RUN_M" 2>/dev/null
-)"
-tool_i="$(printf '%s\n' "$MET_OUT" | sed -n 's/^tool_implement:[[:space:]]*//p' | head -1)"
-model_i="$(printf '%s\n' "$MET_OUT" | sed -n 's/^model_implement:[[:space:]]*//p' | head -1)"
-msrc="$(printf '%s\n' "$MET_OUT" | sed -n 's/^model_source:[[:space:]]*//p' | head -1)"
-if [[ "$tool_i" == "human-tool" ]]; then
-  pass "metrics prefers attested tool_implement"
-else
-  fail "tool_implement=$tool_i want human-tool"
-fi
-if [[ "$model_i" == "human-model" ]]; then
-  pass "metrics prefers attested model_implement"
-else
-  fail "model_implement=$model_i want human-model"
-fi
-if [[ "$msrc" == "mixed" ]]; then
-  pass "metrics model_source=mixed when some stages attested"
-else
-  fail "model_source=$msrc want mixed"
-fi
-
-# All measured stages attested → human-attested
-(
-  cd "$REPO"
-  "$ATRY" stamp "$RUN_M" self-review tool=human-sr model=human-sr-model
-) >/dev/null
-MET2="$(
-  cd "$REPO"
-  "$ATRY" metrics "$RUN_M" 2>/dev/null
-)"
-msrc2="$(printf '%s\n' "$MET2" | sed -n 's/^model_source:[[:space:]]*//p' | head -1)"
-if [[ "$msrc2" == "human-attested" ]]; then
-  pass "metrics model_source=human-attested when all measured attested"
-else
-  fail "model_source=$msrc2 want human-attested"
 fi
 
 # ---------- dispatcher ----------

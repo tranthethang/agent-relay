@@ -127,15 +127,12 @@ scan_history() {
   IMPL_TOOL=""
   SR_TOOL=""
   CR_TOOL=""
-  DIST_TOOL=""
   IMPL_MODEL=""
   SR_MODEL=""
   CR_MODEL=""
-  DIST_MODEL=""
   IMPL_ATTESTED=0
   SR_ATTESTED=0
   CR_ATTESTED=0
-  DIST_ATTESTED=0
   PLAN_TOOL=""
   PLAN_MODEL=""
   PLAN_ATTESTED=0
@@ -146,7 +143,6 @@ scan_history() {
   IMPL_TOOL_SR=""
   SR_TOOL_SR=""
   CR_TOOL_SR=""
-  DIST_TOOL_SR=""
 
   [[ -f "$hist" ]] || return 0
 
@@ -194,11 +190,7 @@ scan_history() {
         [[ -n "$htool" ]] && CR_TOOL="$htool"
         [[ -n "$hmodel" ]] && CR_MODEL="$hmodel"
         ;;
-      distill)
-        DIST_ATTESTED=1
-        [[ -n "$htool" ]] && DIST_TOOL="$htool"
-        [[ -n "$hmodel" ]] && DIST_MODEL="$hmodel"
-        ;;
+      # Old stage=distill attested lines: ignore (fall through).
       esac
       ;;
     approved)
@@ -222,7 +214,7 @@ scan_history() {
       implement) STATE="implementing" ;;
       self-review) STATE="self_reviewing" ;;
       cross-review) STATE="cross_reviewing" ;;
-      distill) STATE="distilling" ;;
+      # Old stage=distill started: ignore (fall through).
       esac
       ;;
     completed)
@@ -236,7 +228,7 @@ scan_history() {
       implement) STATE="implemented" ;;
       self-review) STATE="self_reviewed" ;;
       cross-review) STATE="cross_reviewed" ;;
-      distill) STATE="distilled" ;;
+      # Old stage=distill completed: ignore (fall through).
       done) STATE="done" ;;
       esac
       ;;
@@ -254,7 +246,6 @@ scan_history() {
       implement) IMPL_TOOL_SR="$htool" ;;
       self-review) SR_TOOL_SR="$htool" ;;
       cross-review) CR_TOOL_SR="$htool" ;;
-      distill) DIST_TOOL_SR="$htool" ;;
       esac
       case ",$USED_TOOLS," in
       *",$htool,"*) ;;
@@ -274,7 +265,6 @@ scan_history() {
   if [[ "$IMPL_ATTESTED" -eq 0 ]]; then IMPL_TOOL="$IMPL_TOOL_SR"; fi
   if [[ "$SR_ATTESTED" -eq 0 ]]; then SR_TOOL="$SR_TOOL_SR"; fi
   if [[ "$CR_ATTESTED" -eq 0 ]]; then CR_TOOL="$CR_TOOL_SR"; fi
-  if [[ "$DIST_ATTESTED" -eq 0 ]]; then DIST_TOOL="$DIST_TOOL_SR"; fi
 
   # Models from provenance when not attested (latest match for that stage).
   if [[ "$PLAN_ATTESTED" -eq 0 ]]; then
@@ -288,9 +278,6 @@ scan_history() {
   fi
   if [[ "$CR_ATTESTED" -eq 0 ]]; then
     CR_MODEL="$(extract_model_prov "$run_dir" cross-review)"
-  fi
-  if [[ "$DIST_ATTESTED" -eq 0 ]]; then
-    DIST_MODEL="$(extract_model_prov "$run_dir" distill)"
   fi
 
   # Re-apply approve if we saw it (plan created after approve is rare).
@@ -327,29 +314,6 @@ extract_model_prov() {
       esac
     done <"$f"
   done
-  if [[ -d "$run_dir/distill" ]]; then
-    for f in "$run_dir/distill"/*.md; do
-      [[ -f "$f" ]] || continue
-      while IFS= read -r line || [[ -n "$line" ]]; do
-        case "$line" in
-        *"relay: stage=${want}"*)
-          model=""
-          for tok in $line; do
-            case "$tok" in
-            model=*)
-              model="${tok#model=}"
-              model="${model%%-->*}"
-              ;;
-            esac
-          done
-          if [[ -n "$model" ]]; then
-            models="$model"
-          fi
-          ;;
-        esac
-      done <"$f"
-    done
-  fi
   printf '%s\n' "$models"
 }
 
@@ -363,15 +327,13 @@ next_step_for() {
   self_reviewing) printf 'self-review in progress\n' ;;
   self_reviewed)
     if [[ -n "$USED_TOOLS" ]]; then
-      printf 'atry-cross-review (different tool; already used: %s) or atry close\n' "$USED_TOOLS"
+      printf 'atry-cross-review (different tool; already used: %s) or atry close (optionally atry distill first)\n' "$USED_TOOLS"
     else
-      printf 'atry-cross-review (different tool) or atry close\n'
+      printf 'atry-cross-review (different tool) or atry close (optionally atry distill first)\n'
     fi
     ;;
   cross_reviewing) printf 'cross-review in progress\n' ;;
-  cross_reviewed) printf 'atry-distill or atry close\n' ;;
-  distilling) printf 'distill in progress\n' ;;
-  distilled) printf 'none (awaiting done completed)\n' ;;
+  cross_reviewed) printf 'atry close (optionally atry distill first)\n' ;;
   done | abandoned) printf 'none\n' ;;
   *) printf 'unknown\n' ;;
   esac
@@ -521,7 +483,6 @@ print_detail() {
   fmt_stage_line "implement" "$IMPL_TOOL" "$IMPL_MODEL" "$IMPL_ATTESTED"
   fmt_stage_line "self-review" "$SR_TOOL" "$SR_MODEL" "$SR_ATTESTED"
   fmt_stage_line "cross-review" "$CR_TOOL" "$CR_MODEL" "$CR_ATTESTED"
-  fmt_stage_line "distill" "$DIST_TOOL" "$DIST_MODEL" "$DIST_ATTESTED"
 
   # Independence warnings
   if [[ -n "$IMPL_TOOL" && -n "$CR_TOOL" && "$IMPL_TOOL" == "$CR_TOOL" ]]; then

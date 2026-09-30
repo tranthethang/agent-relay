@@ -64,7 +64,7 @@ description: Use when <concrete trigger condition>, not a summary of the workflo
 ## Sync workflow
 
 Convention parts live under `docs/conventions/` (`core`, `review-headings`,
-`parallel`, `bank`, `notes`). `sync-references.sh` concatenates them into:
+`parallel`, `manifest`, `notes`). `sync-references.sh` concatenates them into:
 
 | Source                                                    | Generated copy                                                                   |
 | --------------------------------------------------------- | -------------------------------------------------------------------------------- |

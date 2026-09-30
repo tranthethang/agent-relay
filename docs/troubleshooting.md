@@ -55,15 +55,6 @@ cause over disabling sync/CI checks.
 | smoke cannot mkdir under fake `HOME` | Sandbox / OS permission on temp | Run outside restrictive sandboxes; suite uses `mktemp` under `$TMPDIR` |
 | `smoke-remote` missing fixtures      | `tests/fixtures/` incomplete    | Restore fixtures from the repo; script exits with a clear message      |
 
-## Knowledge bank
-
-| Symptom                                                                        | Likely cause                                                       | What to try                                                                                                                      |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `atry bank push` exits 2 (`skipped`)                                           | Bank not configured or reachable per `bank-status.md`              | Run `atry bank check` first to probe reachability; verify path/endpoint in `.agent-relay/bank.conf`                              |
-| `atry bank push` exits 1                                                       | Missing arguments or `bank-status.md` missing                      | Run `atry bank check` before pushing, and supply all four required arguments                                                     |
-| `atry bank check` exits 1                                                      | Malformed `.agent-relay/bank.conf`                                 | Check `bank.conf`: lines must strictly match `BANK_KEY=value` with no shell metacharacters                                       |
-| `atry bank check` / `atry bank push` exits 2 with "no .agent-relay/ ... found" | No `.agent-relay/` and no git repo above the given start directory | Treat as "not configured" (same as no `bank.conf`) — this is not a crash; run from inside the target repo if a bank was expected |
-
 ## Still stuck
 
 Collect OS, `bash --version`, exact command, and relevant stderr (see
