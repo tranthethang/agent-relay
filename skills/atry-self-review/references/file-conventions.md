@@ -13,17 +13,17 @@ This file is generated from parts under `docs/conventions/` by
 the copies under `skills/*/references/`). Maintainer docs that point here
 (architecture, task-claim, skill authoring, …): [`INDEX.md`](INDEX.md).
 
-| Purpose            | Path                                                                                                   | Written by                                                                           |
-| ------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Plan               | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md`                                                       | You, or `atry-plan`.                                                                 |
-| Task list          | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-plan.md` (or `implement-plan/` in parallel mode)     | `atry-implement`                                                                     |
-| Implement notes    | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement`                                                                     |
-| Review report      | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-report.md`                                              | `atry-self-review` creates or overwrites. `atry-cross-review` appends.               |
-| Review walkthrough | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md`                                         | Same as the review report.                                                           |
-| Metadata           | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md`                                                       | `atry run-init` creates; stages update `stage:` and `status:`.                       |
-| History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log`                                                   | `atry history` / stages append events.                                               |
-| Decisions          | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/decisions.md`                                                  | `atry decide` (human); append-only resolutions distill can read.                     |
-| Distill (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distill/`                                                      | `atry-distill`, run after cross-review (or self-review if cross-review was skipped). |
+| Purpose            | Path                                                                                                   | Written by                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Plan               | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/plan.md`                                                       | You, or `atry-plan`.                                                   |
+| Task list          | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-plan.md` (or `implement-plan/` in parallel mode)     | `atry-implement`                                                       |
+| Implement notes    | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/implement-report.md` (or `implement-report/` in parallel mode) | `atry-implement`                                                       |
+| Review report      | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-report.md`                                              | `atry-self-review` creates or overwrites. `atry-cross-review` appends. |
+| Review walkthrough | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/review-walkthrough.md`                                         | Same as the review report.                                             |
+| Metadata           | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/meta.md`                                                       | `atry run-init` creates; stages update `stage:` and `status:`.         |
+| History (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/history.log`                                                   | `atry history` / stages append events.                                 |
+| Decisions          | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/decisions.md`                                                  | `atry decide` (human); append-only resolutions.                        |
+| Distill (optional) | `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/distill/manifest`                                              | `atry distill` / `atry-distill` — export only; not a lifecycle stage.  |
 
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
 characters matching `^[a-z]+(-[a-z]+)*$`.
@@ -87,7 +87,7 @@ id: <RUN_ID>
 slug: <RUN_SLUG>
 created: <YYYY-MM-DD>
 title: <short>
-stage: plan|implement|self-review|cross-review|distill|done
+stage: plan|implement|self-review|cross-review|done
 status: active|done|abandoned
 base: <git-ref>
 ```
@@ -98,17 +98,16 @@ Field definitions:
 - `slug`: Short slug (lowercase letters and hyphens, 3–48 characters).
 - `created`: Date the run was initialized (`YYYY-MM-DD`).
 - `title`: Short summary of the run's goal.
-- `stage`: Current workflow stage (`plan`, `implement`, `self-review`, `cross-review`, `distill`, or `done`).
+- `stage`: Current workflow stage (`plan`, `implement`, `self-review`, `cross-review`, or `done`).
 - `status`: Lifecycle status (`active`, `done`, or `abandoned`).
 - `base`: Git commit ref from which the work branches or diffs.
 
 `atry history append` updates `stage:` for recognized stages on lifecycle
 actions (`created` / `started` / `completed` / `abandoned`) only — not on
 human record actions (`approved` / `attested` / `resolved`). Appending
-`done completed` also sets `status: done` (distill’s final step, or
-`atry close`). Appending an `abandoned` action sets `status: abandoned`
-(`atry close --abandon`). Runs that skip distill are closed by a human
-command, not automatically.
+`done completed` also sets `status: done` (`atry close`). Appending an
+`abandoned` action sets `status: abandoned` (`atry close --abandon`).
+Distill does not change `meta.md`; close the run with `atry close`.
 
 ## `history.log` (Append-Only Event Log)
 
@@ -128,10 +127,10 @@ Example:
 Timestamp must be ISO8601 UTC. Use `atry history` to safely append to
 this file. On `implement started` and on `implement` / `self-review` /
 `cross-review` `completed`, `atry history append` records `head=` (current
-`HEAD`) automatically unless `head=` was passed explicitly — used by
-`atry metrics` as the change-size base and END. On those `completed` events it
-also records `size_base=<sha> size=<files>/<added>/<deleted>` (working tree
-vs the diff base at that moment), which `atry metrics` prefers.
+`HEAD`) automatically unless `head=` was passed explicitly — raw data for
+downstream readers. On those `completed` events it also records
+`size_base=<sha> size=<files>/<added>/<deleted>` (working tree vs the diff
+base at that moment).
 
 Human cockpit writers (`atry approve` / `stamp` / `decide` / `close`) also
 append through this path with `by=human`:
@@ -156,8 +155,7 @@ Append-only file written by `atry decide`. Each line:
 ```
 
 `<id>` follows the run-slug rules (`^[a-z]+(-[a-z]+)*$`, length 3–48). Free
-text lives here; the history event only carries `id=<slug>`. Distill reads
-this file when present.
+text lives here; the history event only carries `id=<slug>`.
 
 ## Plan header
 

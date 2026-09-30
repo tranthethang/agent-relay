@@ -19,13 +19,6 @@ id: <id>
 
 - <choice already made that implement must not reopen>
 
-## Context used
-
-<!-- optional; delete when none. List note keys / agentmemory memory ids that
-     influenced this plan (local distill notes and/or MCP recall). -->
-
-- <key-or-memory-id>: <one-line why it mattered>
-
 ## Flow
 
 <!-- optional; delete unless this change alters a runtime flow, state machine,

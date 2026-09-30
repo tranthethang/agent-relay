@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/runtime/diff-size.sh
 # Shared change-size helpers for run-history.sh (size= snapshots on
-# `completed`) and run-metrics.sh. Sourced, not executed. Read-only git
+# `completed`). Sourced, not executed. Read-only git
 # (GIT_OPTIONAL_LOCKS=0). Bash 3.2+ compatible, POSIX tools only.
 
 # diff_size_git_root <dir> -> nearest directory above <dir> with .git

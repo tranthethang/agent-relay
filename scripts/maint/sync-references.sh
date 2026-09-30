@@ -65,7 +65,7 @@ skill_parts() {
   atry-implement) echo "core notes" ;;
   atry-self-review) echo "core review-headings parallel notes" ;;
   atry-cross-review) echo "core review-headings parallel notes" ;;
-  atry-distill) echo "core bank notes" ;;
+  atry-distill) echo "core manifest notes" ;;
   *)
     echo "Error: no conventions manifest entry for skill '$1'" >&2
     return 1
@@ -74,7 +74,7 @@ skill_parts() {
 }
 
 # All parts, in the order used for docs/file-conventions.md.
-ALL_PARTS="core review-headings parallel bank notes"
+ALL_PARTS="core review-headings parallel manifest notes"
 
 [[ -d "$CONV_DIR" ]] || {
   echo "Error: $CONV_DIR not found" >&2

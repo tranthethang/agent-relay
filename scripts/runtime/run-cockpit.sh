@@ -173,9 +173,9 @@ stamp)
   STAGE="$2"
   shift 2
   case "$STAGE" in
-  plan | implement | self-review | cross-review | distill) ;;
+  plan | implement | self-review | cross-review) ;;
   *)
-    echo "Error: stamp stage must be plan|implement|self-review|cross-review|distill (got '$STAGE')" >&2
+    echo "Error: stamp stage must be plan|implement|self-review|cross-review (got '$STAGE')" >&2
     exit 1
     ;;
   esac

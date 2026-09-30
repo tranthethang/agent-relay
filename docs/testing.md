@@ -6,11 +6,11 @@ app loaded an installed bundle.
 ## Commands
 
 ```bash
-make test                 # smoke + tasks + bank + metrics + status + remote smoke
+make test                 # smoke + tasks + distill + status + remote smoke
 make smoke                # same as test today
 ./tests/smoke.sh          # install / uninstall / verify under fake HOME
 ./tests/tasks.sh          # atry task-init / claim / review helpers
-./tests/metrics.sh        # atry metrics
+./tests/distill.sh        # atry distill (manifest export)
 ./tests/status.sh         # human cockpit (status/approve/stamp/decide/close)
 ./tests/smoke-remote.sh   # --ref path with stubbed curl + fixtures
 ```

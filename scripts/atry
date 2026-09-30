@@ -21,12 +21,7 @@ Usage:
   atry task-init <id-or-path>
   atry [--session <tag>] [--allow-skipped-deps] claim|steal|update|release|list|rollup|check|report-write|report-list|report-rollup ...
   atry review upsert <file> <"Self-Review"|"Cross-Review"> <YYYY-MM-DD> <body-file|->
-  atry bank init [<start-dir>] [--path <dir>] [--project <slug>] [--atry-path <dir>] [--atry-name <slug>] [--agentmemory-url <url>]
-  atry bank check [<start-dir>]
-  atry bank push [--vault-only] <start-dir> <notes-dir>
-  atry bank set-status <start-dir> <filename> <status> [--by <filename>]
-  atry metrics <run-dir-or-id> [--write <run-note>]
-  atry distill finalize <run-dir-or-id> [k=v ...]
+  atry distill <run-dir-or-id>
 
 Task helpers map 1:1 to scripts/runtime/task-claim.sh subcommands, flattened:
   atry list <id>
@@ -184,47 +179,13 @@ review)
   [[ $# -ge 1 ]] || usage
   run_helper review-section.sh "$@"
   ;;
-bank)
-  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
-    echo "Error: global flags not valid for bank" >&2
-    exit 1
-  }
-  [[ $# -ge 1 ]] || usage
-  sub="$1"
-  shift
-  case "$sub" in
-  init) run_helper bank-init.sh "$@" ;;
-  check) run_helper bank-check.sh "$@" ;;
-  push) run_helper bank-push.sh "$@" ;;
-  set-status) run_helper bank-set-status.sh "$@" ;;
-  *)
-    echo "Error: unknown bank subcommand '$sub' (init|check|push|set-status)" >&2
-    exit 1
-    ;;
-  esac
-  ;;
-metrics)
-  [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
-    echo "Error: global flags not valid for metrics" >&2
-    exit 1
-  }
-  run_helper run-metrics.sh "$@"
-  ;;
 distill)
   [[ ${#TASK_GLOBALS[@]} -eq 0 ]] || {
     echo "Error: global flags not valid for distill" >&2
     exit 1
   }
   [[ $# -ge 1 ]] || usage
-  sub="$1"
-  shift
-  case "$sub" in
-  finalize) run_helper distill-finalize.sh "$@" ;;
-  *)
-    echo "Error: unknown distill subcommand '$sub' (finalize)" >&2
-    exit 1
-    ;;
-  esac
+  run_helper distill-manifest.sh "$@"
   ;;
 *)
   echo "Error: unknown command '$cmd'" >&2
