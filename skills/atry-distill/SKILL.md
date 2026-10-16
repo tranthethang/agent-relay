@@ -7,23 +7,24 @@ description: Use when the user wants to export a run's manifest, at any run stat
 
 ## Overview
 
-Exports a deterministic `$RUN_DIR/distill/manifest` via `atry distill`. Distill
-is an export, not a lifecycle stage: it does not append history, edit
-`meta.md`, or close the run. Manifest contract:
+This skill exports a deterministic `$RUN_DIR/distill/manifest` with
+`atry distill`. Distill is an export. It is not a stage. It does not append to
+the history, edit `meta.md`, or close the run. The manifest contract is in
 `references/file-conventions.md` ("Distill manifest").
 
 ## Preflight
 
 <!-- BEGIN PREFLIGHT -->
 
-Run `atry version` before anything else in this stage. If it fails, stop —
-do not search the filesystem for helpers and do not fall back to running
-`scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
-Tell the user to run `verify.sh` and fix what it reports (most often
-`$HOME/.local/bin` missing from `PATH`). Run `atry` from the repo root, and
-confirm each `atry resolve` / `atry run-init` call below prints `atry: using
-<path>` on stderr. Full rule: `references/file-conventions.md` ("atry
-preflight").
+Run `atry version` before anything else in this skill. If it fails, stop.
+Do not search the filesystem for helpers. Do not run `scripts/atry`,
+`scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
+
+Tell the user to run `verify.sh` and fix what it reports. The most common
+cause is `$HOME/.local/bin` missing from `PATH`. Run `atry` from the repo
+root. Confirm that each `atry resolve` and `atry run-init` call below prints
+`atry: using <path>` on stderr. Full rule: `references/file-conventions.md`
+("atry preflight").
 
 <!-- END PREFLIGHT -->
 
@@ -45,10 +46,11 @@ preflight").
    ```bash
    atry distill "$RUN_DIR"
    ```
-3. Report the path and file count from stderr (`distill: wrote <path> (<N> files)`).
+3. Report the path and the file count from stderr (`distill: wrote <path> (<N> files)`).
 
 ## Non-goals
 
-- Do not write typed notes, summaries, or legacy vault/metrics content.
-- Do not append `history.log` or run `atry close`.
-- Do not invent lessons or parse plan/review markdown into structured records.
+- Do not write typed notes, summaries, or legacy vault or metrics content.
+- Do not append to `history.log`. Do not run `atry close`.
+- Do not invent lessons. Do not parse plan or review markdown into structured
+  records.

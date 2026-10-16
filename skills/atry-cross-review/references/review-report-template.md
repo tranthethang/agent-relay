@@ -17,9 +17,9 @@
 
 ### Open decisions
 
-Optional. Use when a genuine tradeoff was escalated and left unresolved
-(especially the possibly-unattended path in `reviewer-conduct.md`). Stay under
-this `###` heading — do not invent a new `##` section kind.
+Optional. Use this subsection for a genuine tradeoff that is still open. One
+example is the possibly-unattended path in `reviewer-conduct.md`. Stay under
+this `###` heading. Do not invent a new `##` section kind.
 
 Use the question card from `writing.md`. Write `Need:` instead of options when
 the evidence does not support two real options.
@@ -48,8 +48,8 @@ the evidence does not support two real options.
 
 ### Open decisions
 
-Optional. Same convention as Self-Review: escalated-but-unresolved tradeoffs
-only; omit the subsection when there are none.
+Optional. Use the same convention as Self-Review: list only escalated
+tradeoffs that are still open. Omit the subsection when there are none.
 
 Use the question card from `writing.md`. Write `Need:` instead of options when
 the evidence does not support two real options.

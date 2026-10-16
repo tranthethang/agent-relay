@@ -1,10 +1,21 @@
 ## Language
 
-Store one language tag, such as `en`, in `~/.agent-relay/lang`. Use that language when the file contains a tag. A missing or empty file means English (`en`). A language the user names in the session applies to that session only. Do not create or edit the language file unless the user asks.
+Store one language tag, such as `en`, in `~/.agent-relay/lang`. Use that language when the file contains a tag. A missing or empty file means English (`en`). A language the user names in the session applies to that session only. If the user does not ask, do not create or edit the language file.
 
 ## Sentences
 
-Put one idea in each sentence. Use an imperative sentence for each task step. Use one term for one concept. Do not use idioms. Do not use a synonym for a glossary term. These rules follow the spirit of ASD-STE100. They do not claim ASD-STE100 compliance. Do not copy the ASD-STE100 word list.
+These rules apply to `en` only. They apply to `SKILL.md` text and to stage output.
+
+- Put one idea in each sentence.
+- Use an imperative sentence for each procedure step.
+- A procedure sentence has 20 words or fewer. A description sentence has 25 words or fewer.
+- Use active voice.
+- Put a condition before its action.
+- A paragraph has 6 sentences or fewer and one topic.
+- Use one term for one concept. Do not use a synonym for a glossary term.
+- Do not use idioms.
+
+These rules follow the spirit of ASD-STE100. They do not state ASD-STE100 compliance. Do not copy the ASD-STE100 word list.
 
 ## Glossary
 
@@ -12,7 +23,9 @@ Use these terms only for these meanings:
 
 - `plan`: the `plan.md` for one run.
 - `run`: one `.agent-relay/{YMD}-{id}-{slug}/` directory.
+- `stage`: plan, implement, self-review, or cross-review for one run.
 - `task`: one numbered item under `## Tasks`.
+- `task breakdown`: `implement-plan.md` (or `implement-plan/`).
 - `claim`: the `atry claim` lock on a task.
 - `review`: self-review or cross-review of a run.
 - `distill`: the `atry distill` manifest export.

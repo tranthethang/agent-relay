@@ -1,6 +1,6 @@
 ---
 name: atry-cross-review
-description: Use when the user asks for a second opinion, cross-check, or independent review of an agent-relay change that already has a Self-Review -- ideally from a different tool or model than whoever implemented and self-reviewed it.
+description: Use when the user asks for a second opinion, a cross-check, or an independent review of an agent-relay change. The change already has a Self-Review. When you can, use a different tool or model than the implement and self-review authors.
 ---
 
 # Cross-Review
@@ -9,33 +9,34 @@ Before writing review-report prose, read `references/writing.md`.
 
 ## Overview
 
-Gives a second-opinion review of the change using artifacts in the run
-directory and the prior Self-Review sections, and appends dated Cross-Review
-sections.
+This stage gives a second-opinion review of the change. It uses the artifacts
+in the run directory and the earlier Self-Review sections. It appends dated
+Cross-Review sections.
 
-You are the _second_ reviewer, running in a different tool than whoever
-implemented and self-reviewed this change. Your job is not to repeat the
-previous review — it's to catch what a same-family model/tool is likely to miss.
+You are the _second_ reviewer. You run in a different tool than the tool that
+implemented and self-reviewed the change. Do not repeat the earlier review.
+Find the errors that a model or tool of the same family is likely to miss.
 
 ## Preflight
 
 <!-- BEGIN PREFLIGHT -->
 
-Run `atry version` before anything else in this stage. If it fails, stop —
-do not search the filesystem for helpers and do not fall back to running
-`scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
-Tell the user to run `verify.sh` and fix what it reports (most often
-`$HOME/.local/bin` missing from `PATH`). Run `atry` from the repo root, and
-confirm each `atry resolve` / `atry run-init` call below prints `atry: using
-<path>` on stderr. Full rule: `references/file-conventions.md` ("atry
-preflight").
+Run `atry version` before anything else in this skill. If it fails, stop.
+Do not search the filesystem for helpers. Do not run `scripts/atry`,
+`scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
+
+Tell the user to run `verify.sh` and fix what it reports. The most common
+cause is `$HOME/.local/bin` missing from `PATH`. Run `atry` from the repo
+root. Confirm that each `atry resolve` and `atry run-init` call below prints
+`atry: using <path>` on stderr. Full rule: `references/file-conventions.md`
+("atry preflight").
 
 <!-- END PREFLIGHT -->
 
-Do **not** run `atry approve`, `atry decide`, `atry stamp`, or `atry close`
-unless the user explicitly asked for that exact command in this conversation.
-Those verbs are for the human cockpit; skill text states the rule, nothing in
-the CLI enforces it.
+The user must explicitly ask for the exact command in this conversation.
+Otherwise, do not run `atry approve`, `atry decide`, `atry stamp`, or
+`atry close`. A human runs these verbs in the cockpit. This text states the
+rule. The CLI does not enforce it.
 
 ### Commands used in this stage
 
@@ -55,37 +56,38 @@ Resolve the run directory before reading or writing artifacts:
 RUN_DIR="$(atry resolve [RUN_ID or path])"
 ```
 
-If the user passed a `RUN_ID` or a path under a run directory, pass it to
-`atry resolve`. If no argument is passed and exactly one run directory exists,
-it resolves automatically. If it exits non-zero (ambiguous or not found), ask
-the user for the `RUN_ID` or path.
+If the user passes a `RUN_ID` or a path under a run directory, pass it to
+`atry resolve`. If the user passes no argument and one run directory exists,
+`atry resolve` selects it. If the command exits non-zero (ambiguous or not
+found), ask the user for the `RUN_ID` or path.
 
 ## Inputs
 
 - Plan file: `$RUN_DIR/plan.md`
-- Implementation plan / report (prefer directory layout + helpers when present)
-- Prior review report: `$RUN_DIR/review-report.md`
-- Prior review walkthrough: `$RUN_DIR/review-walkthrough.md`
-- Full diff from the plan's `base:` git ref to the current tree
-- Project rules (same precedence as implement)
+- Task breakdown and implementation report. When the directory layout exists,
+  use the directory and the `atry` helpers.
+- Earlier review report: `$RUN_DIR/review-report.md`
+- Earlier review walkthrough: `$RUN_DIR/review-walkthrough.md`
+- The full diff from the `base:` git ref of the plan to the current tree
+- Project rules, in the same order as implement
 
 ## Provenance
 
-Today's date: run `date +%F`. Open each Cross-Review section with:
+Get today's date from `date +%F`. Open each Cross-Review section with:
 
 ```html
 <!-- relay: stage=cross-review tool=<tool> model=<id-or-unknown> base=<ref> date=<YYYY-MM-DD> -->
 ```
 
-Use `unknown` when you cannot know the tool or model. This is a record, not
-enforcement — nothing here can verify which tool is running you.
+When you do not know the tool or model, write `unknown`. This is a record. It
+does not enforce anything, and nothing here can verify which tool runs you.
 
-`atry review upsert` also prints a **non-blocking** warning when the
-Cross-Review `tool=` equals the implement author tool (from the latest
-`implement started` line in `history.log`, else the first
-`<!-- relay: stage=implement ` line in `implement-report.md`). Empty or
-`unknown` on either side skips the check. Prefer a different tool than the
-implementer when you can.
+`atry review upsert` prints a **non-blocking** warning when the Cross-Review
+`tool=` equals the tool of the implement author. The author tool comes from the
+latest `implement started` line in `history.log`. If that line is missing, it
+comes from the first `<!-- relay: stage=implement ` line in
+`implement-report.md`. If either side is empty or `unknown`, the check is
+skipped. When you can, use a different tool than the implementer.
 
 ## Instructions
 
@@ -93,42 +95,44 @@ implementer when you can.
    ```bash
    atry history append "$RUN_DIR" cross-review started tool=<tool>
    ```
-   Read `references/reviewer-conduct.md` before reviewing. Then read the full
-   chain (plan → implement → prior review).
+   Before you review, read `references/reviewer-conduct.md`. Then read the
+   full chain: plan, implement, and earlier review.
 
-1. Diff from the plan `base:` (or ask), not just uncommitted changes.
+1. Diff from the `base:` ref of the plan, or ask the user. Do not diff only the
+   uncommitted changes.
 
-1. Inverted-question framing: for each claim in the implement-report and prior
-   Self-Review, ask "where could this be wrong?" — not "does this look right?"
-   Independently re-derive evidence (re-read the actual file, diff, or
-   test/build output) before accepting the claim. List that evidence in the
-   report (paths, commands, results). A documented "no issues found" backed by
-   that checklist is a valid, non-penalized outcome — do not invent findings to
-   avoid it.
+1. Use inverted questions. For each assertion in the implementation report and
+   the earlier Self-Review, ask where it can be wrong. Do not ask whether it
+   looks right. Before you accept an assertion, derive the evidence again.
+   Re-read the file, the diff, or the test or build output.
 
-1. Prioritize differently from the self-review step:
+   List that evidence in the report. Include paths, commands, and results.
+   A result of "no issues found" is valid when that evidence is present.
+   Do not invent findings to fill the report.
 
-   - architecture- and intent-level issues over line-level style
-   - verify the prior reviewer's fixes are actually correct
-   - check consistency with the rest of the codebase
-   - re-check anything the prior review left open
+1. Use different priorities than the self-review stage:
 
-1. If tests or a build step exist, re-run them and report pass/fail.
+   - architecture and intent issues before line-level style
+   - the fixes of the earlier reviewer: verify that they are correct
+   - consistency with the rest of the codebase
+   - each item that the earlier review left open
 
-1. Fix / escalate rules (three branches — keep all three):
+1. If the project has tests or a build, run them again and report pass or fail.
 
-   - Fix confirmed bugs/rule violations directly.
-   - Note pure style disagreements without changing code.
-   - For a genuine tradeoff/decision point (not a bug, not style, not already
-     resolved by the plan), escalate per `reviewer-conduct.md` — ask the
-     developer if interactive; otherwise record under `### Open decisions`
-     and leave the code as-is. When the human settles an open item, they
-     record it with `atry decide <run> <id> "<resolution>"` (writes
-     `decisions.md`); do not run that command yourself unless they asked.
-   - If you override a prior decision, state why.
+1. Fix and escalate rules (keep all three branches):
 
-1. If the plan itself was ambiguous or wrong and the implementation correctly
-   deferred or adjusted, append a plan amendment (do not rewrite history):
+   - Fix confirmed bugs and rule violations directly.
+   - For a pure style disagreement, write a note. Do not change the code.
+   - For a genuine tradeoff (not a bug, not style, and not settled by the
+     plan), escalate as `reviewer-conduct.md` says. In an interactive session,
+     ask the developer. Otherwise record it under `### Open decisions` and
+     leave the code as it is. When the human settles an open item, they record
+     it with `atry decide <run> <id> "<resolution>"`, which writes
+     `decisions.md`. If the user did not ask, do not run that command.
+   - If you override an earlier decision, state why.
+
+1. If the plan was ambiguous or wrong and the implementation correctly deferred
+   or adjusted it, append a plan amendment. Do not rewrite the history:
 
    ```markdown
    ## Plan amendment — YYYY-MM-DD
@@ -138,18 +142,17 @@ implementer when you can.
    - Why that should stick for future work
    ```
 
-1. Upsert today's Cross-Review section with `atry review`.
-   Before writing the body files, read
-   `references/review-report-template.md` and
-   `references/review-walkthrough-template.md` and use them as the
-   copy-and-fill outlines.
+1. Upsert today's Cross-Review section with `atry review`. Before you write
+   the body files, read `references/review-report-template.md` and
+   `references/review-walkthrough-template.md`. Copy the templates and fill
+   them in.
 
-   **Workspace hygiene:** Never write review intermediates (such as body files,
-   walk bodies, diff dumps/patches, or ad-hoc scratch directories) under the
-   repository workspace or under `$RUN_DIR` for staging. Always write bodies to
-   system temporary files using `mktemp "${TMPDIR:-/tmp}/ar-*.XXXXXX"` and
-   register cleanup with `trap 'rm -f …' EXIT` before populating them, so
-   intermediate files are cleaned up even if the stage aborts early:
+   **Workspace hygiene:** Do not write review intermediates under the
+   repository workspace or under `$RUN_DIR`. Intermediates include body files,
+   walk bodies, diff dumps, patches, and scratch directories. Write each body
+   to a system temporary file with `mktemp "${TMPDIR:-/tmp}/ar-*.XXXXXX"`.
+   Before you fill the files, register cleanup with `trap 'rm -f …' EXIT`.
+   The cleanup removes the files even when the stage stops early:
 
    ```bash
    TODAY="$(date +%F)"
@@ -167,11 +170,11 @@ implementer when you can.
      Cross-Review "$TODAY" "$walk_tmp"
    ```
 
-   Keep prior `## Self-Review — ...` sections intact. Inside the body file, use
-   `###` (not bare `##`) for subsections — unfenced `## ` is a section boundary
-   for `atry review`, so a same-day re-upsert would truncate.
+   Keep the earlier `## Self-Review — ...` sections intact. In the body file,
+   use `###` for subsections, not `##`. An unfenced `## ` starts a new section
+   for `atry review`, so a same-day re-upsert truncates the body.
 
-1. Once cross-review is complete, record completion in `history.log`:
+1. When cross-review is complete, record the completion in `history.log`:
    ```bash
    atry history append "$RUN_DIR" cross-review completed tool=<tool>
    ```

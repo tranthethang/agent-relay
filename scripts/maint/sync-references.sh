@@ -174,13 +174,13 @@ for d in "${skill_dirs[@]}"; do
   fi
 done
 
-# --- shared writing partial for planning and review skills ---
+# --- shared writing partial for planning, implement, and review skills ---
 WRITING_PARTIAL="$ROOT_DIR/docs/partials/writing.md"
 [[ -f "$WRITING_PARTIAL" ]] || {
   echo "Error: $WRITING_PARTIAL not found" >&2
   exit 1
 }
-for skill in atry-brainstorm atry-plan atry-self-review atry-cross-review; do
+for skill in atry-brainstorm atry-plan atry-implement atry-self-review atry-cross-review; do
   dest="$ROOT_DIR/skills/$skill/references/writing.md"
   if [[ "$CHECK_ONLY" -eq 1 ]]; then
     if [[ ! -f "$dest" ]]; then
@@ -282,8 +282,11 @@ for d in "${skill_dirs[@]}"; do
       in_block=0
       while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" == *"<!-- BEGIN PREFLIGHT -->"* ]]; then
+          # Blank lines around the body match what dprint fmt writes.
           echo "$line"
+          echo
           cat "$tmp_preflight"
+          echo
           in_block=1
         elif [[ "$line" == *"<!-- END PREFLIGHT -->"* ]]; then
           in_block=0

@@ -1,6 +1,6 @@
 ---
 name: atry-plan
-description: Use when the user asks to plan work in this repo before implementing -- starting a new agent-relay run, or writing/updating a plan.md that has not yet been broken into steps.
+description: Use when the user asks to plan work in this repo before implementing. Start a new run, or write or update a plan.md before the task breakdown.
 ---
 
 # Plan
@@ -9,32 +9,33 @@ Before writing plan prose, read `references/writing.md`.
 
 ## Overview
 
-Creates a new run directory under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` with
-`plan.md` and `meta.md`, ready for `atry-implement` to consume.
+This stage creates a run directory under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`
+with `plan.md` and `meta.md`. `atry-implement` reads these files.
 
-You are writing a plan that later stages (`atry-implement`, reviews) will
-consume. Do not implement. Do not call other tools' agents. Produce one plan
-file that `atry task-init` can parse without guessing.
+You write a plan that later stages (`atry-implement` and reviews) read. Do not
+implement. Do not call the agents of other tools. Write one plan file that
+`atry task-init` can parse without guessing.
 
 ## Preflight
 
 <!-- BEGIN PREFLIGHT -->
 
-Run `atry version` before anything else in this stage. If it fails, stop —
-do not search the filesystem for helpers and do not fall back to running
-`scripts/atry`, `scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
-Tell the user to run `verify.sh` and fix what it reports (most often
-`$HOME/.local/bin` missing from `PATH`). Run `atry` from the repo root, and
-confirm each `atry resolve` / `atry run-init` call below prints `atry: using
-<path>` on stderr. Full rule: `references/file-conventions.md` ("atry
-preflight").
+Run `atry version` before anything else in this skill. If it fails, stop.
+Do not search the filesystem for helpers. Do not run `scripts/atry`,
+`scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
+
+Tell the user to run `verify.sh` and fix what it reports. The most common
+cause is `$HOME/.local/bin` missing from `PATH`. Run `atry` from the repo
+root. Confirm that each `atry resolve` and `atry run-init` call below prints
+`atry: using <path>` on stderr. Full rule: `references/file-conventions.md`
+("atry preflight").
 
 <!-- END PREFLIGHT -->
 
-Do **not** run `atry approve`, `atry decide`, `atry stamp`, or `atry close`
-unless the user explicitly asked for that exact command in this conversation.
-Those verbs are for the human cockpit; skill text states the rule, nothing in
-the CLI enforces it.
+The user must explicitly ask for the exact command in this conversation.
+Otherwise, do not run `atry approve`, `atry decide`, `atry stamp`, or
+`atry close`. A human runs these verbs in the cockpit. This text states the
+rule. The CLI does not enforce it.
 
 ### Commands used in this stage
 
@@ -46,20 +47,20 @@ the CLI enforces it.
 
 ## Size gate
 
-Sketch the draft's goal and task list before creating a run directory. Before
-calling `atry run-init`, count the draft's independent goals and tasks.
-Count dependency clusters by grouping tasks that depend on one another. Print
-a size note with the independent-goal count, task count, dependency clusters,
-and a split suggestion.
+Sketch the goal and the task list of the draft before you create a run
+directory. Before you call `atry run-init`, count the independent goals and
+the tasks. Group tasks that depend on one another into dependency clusters.
+Print a size note. Include the independent-goal count, the task count, the
+dependency clusters, and a split suggestion.
 
-If there is more than one independent goal or more than eight tasks, do not
-call `atry run-init`. Ask the user to choose a split or one plan. Continue
+If the draft has more than one independent goal or more than eight tasks, do
+not call `atry run-init`. Ask the user to choose a split or one plan. Continue
 only after the user chooses.
 
 ## Run discovery
 
-Follow `references/file-conventions.md`. For a **new** plan you always create a
-new id (unless the user passed an explicit id to reuse).
+Follow `references/file-conventions.md`. For a **new** plan, create a new id.
+Reuse an id only when the user passes one.
 
 Generate an id and slug:
 
@@ -77,9 +78,9 @@ Record `base:` with a real git ref:
 git rev-parse HEAD
 ```
 
-Do not invent a ref. If git is unavailable, ask the user.
+Do not invent a ref. If git is not available, ask the user.
 
-Initialize the run directory with `atry` (on PATH after install):
+Initialize the run directory with `atry`:
 
 ```bash
 RUN_DIR="$(atry run-init "$id" --slug "$slug" --title "<short title>" --base "<base-ref>")"
@@ -87,8 +88,8 @@ RUN_DIR="$(atry run-init "$id" --slug "$slug" --title "<short title>" --base "<b
 id="$(grep -E '^id:' "$RUN_DIR/meta.md" | head -1 | sed 's/^id:[[:space:]]*//')"
 ```
 
-This creates `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`, writes `meta.md`, and starts `history.log`.
-Use the `id` read back from `meta.md` (not the pre-init `date +%s` value) when writing `plan.md`.
+This command creates `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`, writes `meta.md`, and starts `history.log`.
+Write `plan.md` with the `id` from `meta.md`, not the `date +%s` value from before init.
 
 ## Provenance
 
@@ -96,13 +97,12 @@ Use the `id` read back from `meta.md` (not the pre-init `date +%s` value) when w
 <!-- relay: stage=plan tool=<tool> model=<id-or-unknown> base=<ref> date=<YYYY-MM-DD> -->
 ```
 
-Today's date: `date +%F`. Use `unknown` for tool/model when you cannot know.
+Get today's date from `date +%F`. When you do not know the tool or model, write `unknown`.
 
 ## Plan schema
 
-Before writing `$RUN_DIR/plan.md`, read `references/plan-template.md` and use
-it as the literal copy-and-fill outline. The schema below is the explanation;
-the template file is what you fill in.
+Before you write `$RUN_DIR/plan.md`, read `references/plan-template.md`. Copy
+the template and fill it in. The schema below explains the template.
 
 Write `$RUN_DIR/plan.md`:
 
@@ -141,47 +141,42 @@ id: <RUN_ID>
 3. <short description> (deps: T1 T2)
 ```
 
-`atry run-init` also seeds `meta.md` and `history.log`; see
-`references/meta-template.md` and `references/history-log-template.md` for the
-empty outlines of those files.
+`atry run-init` also creates `meta.md` and `history.log`. The empty outlines
+are in `references/meta-template.md` and `references/history-log-template.md`.
 
 Rules for `## Tasks`:
 
-- Exactly one flat numbered list under `## Tasks` (no nested numbered lists).
-- Task ids for deps are the sequential `T1`, `T2`, … that `task-init` will
-  assign (global counter, not the markdown number if they ever diverge — keep
-  them aligned by using a single flat list).
-- Use `(deps: )` or `(deps: T1 T2)` at the end of the line.
-- Do not put numbered lists under Goal/Constraints that look like tasks.
+- Write one flat numbered list under `## Tasks`. Do not nest numbered lists.
+- Dependency ids are the sequential `T1`, `T2`, … that `task-init` assigns.
+  Keep them equal to the markdown numbers with one flat list.
+- End each line with `(deps: )` or `(deps: T1 T2)`.
+- Do not put a numbered list under Goal or Constraints that looks like tasks.
 
 Rules for the other sections:
 
-- `## Decisions`: list choices already settled (in discussion, or by you
-  with the user's agreement). If a task would otherwise say "pick one" or
-  "decide X", decide it here or ask the user -- do not defer the choice to
-  implement, which is told not to reinterpret the plan. Omit the section
-  if there is nothing to record.
-- `## Flow`: include one mermaid diagram only when the change alters a
-  runtime flow, a state machine, or calls between components -- the kind
-  of thing that is hard to follow in prose. Do not draw task order; `deps:`
-  already says that. Omit the section otherwise.
-- `## Constraints`: only what is specific to this run. Repo-wide rules
-  already in `AGENTS.md` (or tool rules / `CLAUDE.md`) are read by
-  `atry-implement` anyway; do not copy them here.
+- `## Decisions`: list the choices already settled, in discussion or with the
+  user's agreement. If a task would say "pick one", settle the choice here or
+  ask the user. Do not leave the choice to implement, because implement must
+  not reinterpret the plan. Omit the section when nothing needs a record.
+- `## Flow`: add one mermaid diagram only when the change alters a runtime
+  flow, a state machine, or calls between components. Do not draw task order,
+  because `deps:` shows it. Omit the section in other cases.
+- `## Constraints`: write only what is specific to this run. `atry-implement`
+  reads the repo-wide rules in `AGENTS.md` (or tool rules or `CLAUDE.md`).
+  Do not copy them here.
 
 ## Done check
 
-After writing the plan, optionally validate with the implement skill's helper
-if available in this environment:
+After you write the plan, you can validate it with the implement helper:
 
 ```bash
 atry task-init "$RUN_DIR"
 ```
 
-`task-init` must create exactly as many `.status` files as numbered tasks.
-If validation is not available here, still emit a schema-correct plan.
+`task-init` must create one `.status` file for each numbered task. If
+validation is not available, still write a plan that follows the schema.
 
 ## Non-goals for this skill
 
 - Do not run implement, review, or any model orchestration.
-- Do not "also start coding" after the plan.
+- Do not start to code after the plan.
