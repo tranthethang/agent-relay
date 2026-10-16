@@ -5,6 +5,8 @@ description: Use when the user asks for a second opinion, cross-check, or indepe
 
 # Cross-Review
 
+Before writing review-report prose, read `references/writing.md`.
+
 ## Overview
 
 Gives a second-opinion review of the change using artifacts in the run

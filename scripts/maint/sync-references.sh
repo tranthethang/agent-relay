@@ -174,6 +174,29 @@ for d in "${skill_dirs[@]}"; do
   fi
 done
 
+# --- shared writing partial for planning and review skills ---
+WRITING_PARTIAL="$ROOT_DIR/docs/partials/writing.md"
+[[ -f "$WRITING_PARTIAL" ]] || {
+  echo "Error: $WRITING_PARTIAL not found" >&2
+  exit 1
+}
+for skill in atry-brainstorm atry-plan atry-self-review atry-cross-review; do
+  dest="$ROOT_DIR/skills/$skill/references/writing.md"
+  if [[ "$CHECK_ONLY" -eq 1 ]]; then
+    if [[ ! -f "$dest" ]]; then
+      echo "Missing: $dest" >&2
+      drift=1
+    elif ! cmp -s "$WRITING_PARTIAL" "$dest"; then
+      echo "Drift: $dest differs from $WRITING_PARTIAL" >&2
+      drift=1
+    fi
+  else
+    mkdir -p "$(dirname "$dest")"
+    cp "$WRITING_PARTIAL" "$dest"
+    echo "synced $dest"
+  fi
+done
+
 # Review templates must stay byte-identical across self-review and cross-review.
 # Canonical copy lives under atry-self-review; sync copies it to atry-cross-review.
 for name in "${REVIEW_TEMPLATES[@]}"; do

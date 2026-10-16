@@ -5,6 +5,8 @@ description: Use when the user invokes atry-brainstorm or explicitly asks to onl
 
 # Brainstorm
 
+Before writing a brainstorm question, read `references/writing.md`.
+
 ## Overview
 
 An investigate-and-discuss mode: gather context, ask clarifying questions,
@@ -65,16 +67,19 @@ stated; ask.
 
 ## Open items
 
-Keep a short list of what is still unresolved, and show it when it changes:
+For each unresolved question, use exactly two options. Use `a` for the smaller
+change and `b` for the durable change. Do not add `c`. Use this card shape:
 
 ```markdown
-- [ ] <question or thing to verify>
-- [x] <resolved -- one-line answer>
+- [ ]1. <question>
+  - a. <smaller change>
+  - b. <durable change>
 ```
 
-This is not a `plan.md` task list (no task ids, no `deps:`). If the user
-moves on to `atry-plan`, the list feeds its Goal / Non-goals / Decisions;
-writing `plan.md` is that skill's job.
+Keep a short list of these cards and show it when it changes. The user replies
+with `1a`, `2b`, and so on. This is not a `plan.md` task list (no task ids, no
+`deps:`). If the user moves on to `atry-plan`, the list feeds its Goal /
+Non-goals / Decisions; writing `plan.md` is that skill's job.
 
 ## Handoff
 

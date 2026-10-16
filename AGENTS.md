@@ -49,7 +49,9 @@ docs for end users — see [`README.md`](README.md).
 
 1. Edit parts under `docs/conventions/` (not `docs/file-conventions.md` and
    not the per-skill copies) for run-id / artifact rules. Edit
-   `docs/partials/preflight.md` for the shared Preflight paragraph.
+   `docs/partials/preflight.md` for the shared Preflight paragraph and
+   `docs/partials/writing.md` for shared writing rules. The latter syncs to
+   four planning and review skills.
 2. Run `bash scripts/maint/sync-references.sh` so
    `docs/file-conventions.md`, `skills/*/references/file-conventions.md`, and
    the Preflight markers in each `SKILL.md` match. CI fails on drift

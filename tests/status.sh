@@ -297,7 +297,9 @@ cat >"$RUN_OD/review-report.md" <<'EOF'
 
 ### Open decisions
 
-- real-open-item should appear
+- 1. Which option should this use?
+  - a. smaller change
+  - b. durable change
 
 ```markdown
 ## Self-Review — 2099-01-01
@@ -318,10 +320,15 @@ OD_OUT="$(
   cd "$REPO"
   "$ATRY" status "$RUN_OD" 2>/dev/null
 )"
-if printf '%s\n' "$OD_OUT" | grep -q 'real-open-item should appear'; then
+if printf '%s\n' "$OD_OUT" | grep -q 'Which option should this use?'; then
   pass "status extracts unfenced open decisions"
 else
   fail "missing unfenced open decision"
+fi
+if printf '%s\n' "$OD_OUT" | grep -Eq '^  - [ab]\. (smaller change|durable change)$'; then
+  fail "status leaked indented open decision options"
+else
+  pass "status ignores indented open decision options"
 fi
 if printf '%s\n' "$OD_OUT" | grep -q 'fenced-should-not-appear'; then
   fail "status leaked fenced open decision"
