@@ -297,7 +297,7 @@ cat >"$RUN_OD/review-report.md" <<'EOF'
 
 ### Open decisions
 
-- 1. Which option should this use?
+- Q1: Which option should this use?
   - a. smaller change
   - b. durable change
 
