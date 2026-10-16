@@ -33,20 +33,7 @@ Does not:
 
 ## Stages
 
-```mermaid
-flowchart LR
-    B0["0 · optional\nbrainstorm"]
-    P1["1 · plan"]
-    I2["2 · implement"]
-    R3["3 · self-review"]
-    R4["4 · cross-review"]
-    D5["optional\ndistill (export)"]
-
-    B0 -.-> P1 --> I2 --> R3 --> R4 -.-> D5
-
-    style B0 stroke-dasharray: 5 5
-    style D5 stroke-dasharray: 5 5
-```
+![Six agent-relay skills: optional brainstorm, then plan, implement, self-review, and cross-review, with optional distill](assets/six-agent-relay-skills.webp)
 
 | Skill                                            | What it asks the agent to do                                                                       | Writes                                                                         |
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |

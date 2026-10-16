@@ -1,0 +1,1562 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "workflow",
+  "quality": "showcase",
+  "startedAt": "2026-10-16T06:57:57.386Z",
+  "specification": {
+    "path": "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/candidate.json",
+    "sha256": "8bba160b5abd10d9080d7d9af456c0c137e052ba04867a2a40dd8f48577cd922",
+    "bytes": 11332
+  },
+  "artifact": {
+    "path": "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.html",
+    "sha256": "e22a02f62fcd138c4c8ba2ec70ba5dec82f9f8932de7c195ba99eed4e8175284",
+    "bytes": 777578
+  },
+  "stages": {
+    "validate": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": null,
+      "execution": "embedded-in-deliver",
+      "command": [
+        "/Users/thangtt/.local/share/fnm/node-versions/v24.18.0/installation/bin/node",
+        "/Users/thangtt/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "workflow",
+        "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/candidate.json",
+        "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/Users/thangtt/Documents/Github/agent-relay",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "validate",
+        "specification": {
+          "sha256": "8bba160b5abd10d9080d7d9af456c0c137e052ba04867a2a40dd8f48577cd922",
+          "bytes": 11332
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        }
+      }
+    },
+    "deliver": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 394,
+      "command": [
+        "/Users/thangtt/.local/share/fnm/node-versions/v24.18.0/installation/bin/node",
+        "/Users/thangtt/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "workflow",
+        "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/candidate.json",
+        "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/Users/thangtt/Documents/Github/agent-relay",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "receiptId": "ddd42c83-a82e-422c-b0db-a6e98de30f6c",
+        "ok": true,
+        "command": "deliver",
+        "type": "workflow",
+        "input": "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/candidate.json",
+        "output": "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.html",
+        "specification": {
+          "sha256": "8bba160b5abd10d9080d7d9af456c0c137e052ba04867a2a40dd8f48577cd922",
+          "bytes": 11332
+        },
+        "artifact": {
+          "sha256": "e22a02f62fcd138c4c8ba2ec70ba5dec82f9f8932de7c195ba99eed4e8175284",
+          "bytes": 777578
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        },
+        "evidence": {
+          "verified": true,
+          "repository": "https://github.com/tranthethang/agent-relay",
+          "revision": "daa6d827fd87bdbe3d47d02cd1d41d22def35911",
+          "references": 33
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      }
+    },
+    "check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 115,
+      "command": [
+        "/Users/thangtt/.local/share/fnm/node-versions/v24.18.0/installation/bin/node",
+        "/Users/thangtt/.agents/skills/archify/bin/archify.mjs",
+        "check",
+        "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.html",
+        "--require-provenance"
+      ],
+      "receipt": {
+        "ok": true,
+        "file": "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.html",
+        "artifact": {
+          "sha256": "e22a02f62fcd138c4c8ba2ec70ba5dec82f9f8932de7c195ba99eed4e8175284",
+          "bytes": 777578
+        },
+        "checks": [
+          {
+            "name": "single_svg",
+            "ok": true,
+            "details": [
+              "found 1 <svg> block(s)"
+            ]
+          },
+          {
+            "name": "finite_svg",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "orthogonal_arrows",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "label_route_clearance",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_crossings",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_corridors",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "container_border_runs",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "route_rhythm",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "legend_clearance",
+            "ok": true,
+            "details": []
+          }
+        ],
+        "composition": {
+          "schemaVersion": 1,
+          "profile": "showcase",
+          "status": "pass",
+          "summary": {
+            "errors": 0,
+            "warnings": 0
+          },
+          "metrics": {
+            "properCrossings": 0,
+            "resolvedCrossovers": 0,
+            "ambiguousCorridors": 0,
+            "arrowheadCollisions": 0,
+            "containerBorderRuns": 0,
+            "labelRouteClearanceIssues": 0,
+            "labelCanvasOverflowIssues": 0,
+            "minLabelRouteClearance": 18,
+            "desktopReadabilityIssues": 0,
+            "viewportHeightIssues": 0,
+            "minProjectedNodeTextPx": 6.6,
+            "maxBends": 3,
+            "routesOverSuggestedBends": 3,
+            "maxStretch": 1.471,
+            "routesOverSuggestedStretch": 1,
+            "minSegmentPx": 16,
+            "minInteriorSegmentPx": 62,
+            "shortSegmentCount": 0,
+            "shortEndpointSegmentCount": 0,
+            "shortInteriorSegmentCount": 0,
+            "microSegmentCount": 0
+          },
+          "suggestedLimits": {
+            "bendsPerRelationship": 2,
+            "stretch": 1.35,
+            "segmentPx": 16,
+            "microSegmentPx": 8
+          },
+          "routeReview": {
+            "crossings": [],
+            "detours": [
+              {
+                "relationship": {
+                  "id": "call-brainstorm",
+                  "from": "caller",
+                  "to": "brainstorm",
+                  "label": "by name",
+                  "collectionIndex": 0,
+                  "artifactIndex": 1
+                },
+                "bends": 3,
+                "stretch": 1.209
+              },
+              {
+                "relationship": {
+                  "id": "note-approve",
+                  "from": "plan",
+                  "to": "approve",
+                  "label": "optional",
+                  "collectionIndex": 1,
+                  "artifactIndex": 2
+                },
+                "bends": 3,
+                "stretch": 1.221
+              },
+              {
+                "relationship": {
+                  "id": "write-plan",
+                  "from": "plan",
+                  "to": "planfile",
+                  "label": "write",
+                  "collectionIndex": 10,
+                  "artifactIndex": 11
+                },
+                "bends": 3,
+                "stretch": 1.471
+              }
+            ]
+          },
+          "leadingSpace": {
+            "measured": false,
+            "reviewSuggested": false
+          },
+          "desktopReadability": {
+            "budgetBasis": "legacy-930",
+            "readerContract": "declared-wide-v1",
+            "availableDiagramWidth": 930,
+            "actualBudgetPx": 930,
+            "limit": "legacy",
+            "requestedTargetPx": null,
+            "requestedTargetMet": null,
+            "hardFloorPx": 6,
+            "hardFloorMet": true,
+            "minimumOwner": {
+              "kind": "node",
+              "id": "crosssection"
+            },
+            "minimumSourceTextPx": 6.6,
+            "minimumProjectedTextPx": 6.6,
+            "semanticTextCount": 38
+          },
+          "issues": []
+        },
+        "provenance": "current",
+        "deliveryReceiptId": "ddd42c83-a82e-422c-b0db-a6e98de30f6c"
+      }
+    },
+    "browser-check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 1979,
+      "command": [
+        "/Users/thangtt/.local/share/fnm/node-versions/v24.18.0/installation/bin/node",
+        "/Users/thangtt/.agents/skills/archify/bin/archify.mjs",
+        "browser-check",
+        "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.html",
+        "--json",
+        "--require-provenance"
+      ],
+      "execution": "in-process",
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "browser-check",
+        "evidenceKind": "automated-browser",
+        "status": "pass",
+        "visualReview": "not-requested",
+        "provenance": "current",
+        "deliveryReceiptId": "ddd42c83-a82e-422c-b0db-a6e98de30f6c",
+        "artifact": {
+          "path": "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.html",
+          "sha256": "e22a02f62fcd138c4c8ba2ec70ba5dec82f9f8932de7c195ba99eed4e8175284",
+          "bytes": 777578
+        },
+        "state": {
+          "detail": "read",
+          "motion": "still"
+        },
+        "chrome": {
+          "status": "available",
+          "executable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        },
+        "diagnostics": [],
+        "containment": {
+          "status": "pass",
+          "policy": "fit-or-reader-declared-readable-vertical-scroll",
+          "viewports": [
+            {
+              "width": 1440,
+              "height": 900,
+              "theme": "light",
+              "innerWidth": 1440,
+              "innerHeight": 900,
+              "scrollWidth": 1440,
+              "scrollHeight": 900,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1240,
+              "diagramWidth": 1210,
+              "pageComposition": {
+                "bodyPaddingPx": 12,
+                "headerPx": 52,
+                "diagramChromePx": 78,
+                "svgPx": 746,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 157,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 94,
+                  "spaceAboveNodesPx": 56,
+                  "spaceBelowNodesPx": 7
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 146,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 94,
+                  "spaceAboveNodesPx": 47,
+                  "spaceBelowNodesPx": 6
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 146,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 72,
+                  "spaceAboveNodesPx": 58,
+                  "spaceBelowNodesPx": 17
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 54,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            },
+            {
+              "width": 1600,
+              "height": 1000,
+              "theme": "light",
+              "innerWidth": 1600,
+              "innerHeight": 1000,
+              "scrollWidth": 1600,
+              "scrollHeight": 1000,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1295,
+              "diagramWidth": 1265,
+              "pageComposition": {
+                "bodyPaddingPx": 64,
+                "headerPx": 60,
+                "diagramChromePx": 84,
+                "svgPx": 780,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 164,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 98,
+                  "spaceAboveNodesPx": 59,
+                  "spaceBelowNodesPx": 7
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 153,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 98,
+                  "spaceAboveNodesPx": 49,
+                  "spaceBelowNodesPx": 6
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 153,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 75,
+                  "spaceAboveNodesPx": 60,
+                  "spaceBelowNodesPx": 17
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 54,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            },
+            {
+              "width": 1920,
+              "height": 1080,
+              "theme": "light",
+              "innerWidth": 1920,
+              "innerHeight": 1080,
+              "scrollWidth": 1920,
+              "scrollHeight": 1080,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1425,
+              "diagramWidth": 1395,
+              "pageComposition": {
+                "bodyPaddingPx": 64,
+                "headerPx": 60,
+                "diagramChromePx": 84,
+                "svgPx": 860,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 181,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 108,
+                  "spaceAboveNodesPx": 65,
+                  "spaceBelowNodesPx": 8
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 168,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 108,
+                  "spaceAboveNodesPx": 54,
+                  "spaceBelowNodesPx": 6
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 168,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 83,
+                  "spaceAboveNodesPx": 67,
+                  "spaceBelowNodesPx": 19
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 54,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            },
+            {
+              "width": 2048,
+              "height": 1320,
+              "theme": "light",
+              "innerWidth": 2048,
+              "innerHeight": 1320,
+              "scrollWidth": 2048,
+              "scrollHeight": 1320,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1805,
+              "diagramWidth": 1755,
+              "pageComposition": {
+                "bodyPaddingPx": 64,
+                "headerPx": 68,
+                "diagramChromePx": 94,
+                "svgPx": 1082,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 228,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 136,
+                  "spaceAboveNodesPx": 82,
+                  "spaceBelowNodesPx": 10
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 212,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 136,
+                  "spaceAboveNodesPx": 68,
+                  "spaceBelowNodesPx": 8
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 212,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 84,
+                  "spaceBelowNodesPx": 24
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 44,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            }
+          ]
+        },
+        "themeStates": {
+          "status": "pass",
+          "viewports": [
+            {
+              "width": 1440,
+              "height": 900,
+              "requestedTheme": "light",
+              "resolvedTheme": "light",
+              "ok": true
+            },
+            {
+              "width": 1600,
+              "height": 1000,
+              "requestedTheme": "light",
+              "resolvedTheme": "light",
+              "ok": true
+            },
+            {
+              "width": 1920,
+              "height": 1080,
+              "requestedTheme": "light",
+              "resolvedTheme": "light",
+              "ok": true
+            },
+            {
+              "width": 2048,
+              "height": 1320,
+              "requestedTheme": "light",
+              "resolvedTheme": "light",
+              "ok": true
+            },
+            {
+              "width": 1440,
+              "height": 900,
+              "requestedTheme": "dark",
+              "resolvedTheme": "dark",
+              "ok": true
+            },
+            {
+              "width": 2048,
+              "height": 1320,
+              "requestedTheme": "dark",
+              "resolvedTheme": "dark",
+              "ok": true
+            }
+          ]
+        },
+        "readability": {
+          "status": "pass",
+          "minimumProjectedNodeTextPx": 6,
+          "viewports": [
+            {
+              "width": 1440,
+              "height": 900,
+              "theme": "light",
+              "innerWidth": 1440,
+              "innerHeight": 900,
+              "scrollWidth": 1440,
+              "scrollHeight": 900,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1240,
+              "diagramWidth": 1210,
+              "pageComposition": {
+                "bodyPaddingPx": 12,
+                "headerPx": 52,
+                "diagramChromePx": 78,
+                "svgPx": 746,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 157,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 94,
+                  "spaceAboveNodesPx": 56,
+                  "spaceBelowNodesPx": 7
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 146,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 94,
+                  "spaceAboveNodesPx": 47,
+                  "spaceBelowNodesPx": 6
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 146,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 72,
+                  "spaceAboveNodesPx": 58,
+                  "spaceBelowNodesPx": 17
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 54,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            },
+            {
+              "width": 1600,
+              "height": 1000,
+              "theme": "light",
+              "innerWidth": 1600,
+              "innerHeight": 1000,
+              "scrollWidth": 1600,
+              "scrollHeight": 1000,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1295,
+              "diagramWidth": 1265,
+              "pageComposition": {
+                "bodyPaddingPx": 64,
+                "headerPx": 60,
+                "diagramChromePx": 84,
+                "svgPx": 780,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 164,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 98,
+                  "spaceAboveNodesPx": 59,
+                  "spaceBelowNodesPx": 7
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 153,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 98,
+                  "spaceAboveNodesPx": 49,
+                  "spaceBelowNodesPx": 6
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 153,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 75,
+                  "spaceAboveNodesPx": 60,
+                  "spaceBelowNodesPx": 17
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 54,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            },
+            {
+              "width": 1920,
+              "height": 1080,
+              "theme": "light",
+              "innerWidth": 1920,
+              "innerHeight": 1080,
+              "scrollWidth": 1920,
+              "scrollHeight": 1080,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1425,
+              "diagramWidth": 1395,
+              "pageComposition": {
+                "bodyPaddingPx": 64,
+                "headerPx": 60,
+                "diagramChromePx": 84,
+                "svgPx": 860,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 181,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 108,
+                  "spaceAboveNodesPx": 65,
+                  "spaceBelowNodesPx": 8
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 168,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 108,
+                  "spaceAboveNodesPx": 54,
+                  "spaceBelowNodesPx": 6
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 168,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 83,
+                  "spaceAboveNodesPx": 67,
+                  "spaceBelowNodesPx": 19
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 54,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            },
+            {
+              "width": 2048,
+              "height": 1320,
+              "theme": "light",
+              "innerWidth": 2048,
+              "innerHeight": 1320,
+              "scrollWidth": 2048,
+              "scrollHeight": 1320,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1805,
+              "diagramWidth": 1755,
+              "pageComposition": {
+                "bodyPaddingPx": 64,
+                "headerPx": 68,
+                "diagramChromePx": 94,
+                "svgPx": 1082,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 228,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 136,
+                  "spaceAboveNodesPx": 82,
+                  "spaceBelowNodesPx": 10
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 212,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 136,
+                  "spaceAboveNodesPx": 68,
+                  "spaceBelowNodesPx": 8
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 212,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 84,
+                  "spaceBelowNodesPx": 24
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 44,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            }
+          ]
+        },
+        "viewerChrome": {
+          "status": "pass",
+          "viewports": [
+            {
+              "width": 1440,
+              "height": 900,
+              "theme": "light",
+              "innerWidth": 1440,
+              "innerHeight": 900,
+              "scrollWidth": 1440,
+              "scrollHeight": 900,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1240,
+              "diagramWidth": 1210,
+              "pageComposition": {
+                "bodyPaddingPx": 12,
+                "headerPx": 52,
+                "diagramChromePx": 78,
+                "svgPx": 746,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 157,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 94,
+                  "spaceAboveNodesPx": 56,
+                  "spaceBelowNodesPx": 7
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 146,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 94,
+                  "spaceAboveNodesPx": 47,
+                  "spaceBelowNodesPx": 6
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 146,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 72,
+                  "spaceAboveNodesPx": 58,
+                  "spaceBelowNodesPx": 17
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 54,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            },
+            {
+              "width": 1600,
+              "height": 1000,
+              "theme": "light",
+              "innerWidth": 1600,
+              "innerHeight": 1000,
+              "scrollWidth": 1600,
+              "scrollHeight": 1000,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1295,
+              "diagramWidth": 1265,
+              "pageComposition": {
+                "bodyPaddingPx": 64,
+                "headerPx": 60,
+                "diagramChromePx": 84,
+                "svgPx": 780,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 164,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 98,
+                  "spaceAboveNodesPx": 59,
+                  "spaceBelowNodesPx": 7
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 153,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 98,
+                  "spaceAboveNodesPx": 49,
+                  "spaceBelowNodesPx": 6
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 153,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 75,
+                  "spaceAboveNodesPx": 60,
+                  "spaceBelowNodesPx": 17
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 54,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            },
+            {
+              "width": 1920,
+              "height": 1080,
+              "theme": "light",
+              "innerWidth": 1920,
+              "innerHeight": 1080,
+              "scrollWidth": 1920,
+              "scrollHeight": 1080,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1425,
+              "diagramWidth": 1395,
+              "pageComposition": {
+                "bodyPaddingPx": 64,
+                "headerPx": 60,
+                "diagramChromePx": 84,
+                "svgPx": 860,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 181,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 108,
+                  "spaceAboveNodesPx": 65,
+                  "spaceBelowNodesPx": 8
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 168,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 108,
+                  "spaceAboveNodesPx": 54,
+                  "spaceBelowNodesPx": 6
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 168,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 83,
+                  "spaceAboveNodesPx": 67,
+                  "spaceBelowNodesPx": 19
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 54,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            },
+            {
+              "width": 2048,
+              "height": 1320,
+              "theme": "light",
+              "innerWidth": 2048,
+              "innerHeight": 1320,
+              "scrollWidth": 2048,
+              "scrollHeight": 1320,
+              "overflowX": false,
+              "overflowY": false,
+              "verticalScrollAccepted": false,
+              "overflowDisposition": "contained",
+              "readerLayout": "adaptive",
+              "readerOverflow": null,
+              "readerFit": null,
+              "ok": true,
+              "readerWidth": 1805,
+              "diagramWidth": 1755,
+              "pageComposition": {
+                "bodyPaddingPx": 64,
+                "headerPx": 68,
+                "diagramChromePx": 94,
+                "svgPx": 1082,
+                "cardsPx": 0,
+                "viewBoxHeight": 542
+              },
+              "viewBoxWidth": 879,
+              "workflowLanes": [
+                {
+                  "frameId": "lane-1",
+                  "heightPx": 228,
+                  "nodeCount": 6,
+                  "nodeIds": [
+                    "brainstorm",
+                    "plan",
+                    "implement",
+                    "selfreview",
+                    "crossreview",
+                    "distill"
+                  ],
+                  "nodeSpanPx": 136,
+                  "spaceAboveNodesPx": 82,
+                  "spaceBelowNodesPx": 10
+                },
+                {
+                  "frameId": "lane-0",
+                  "heightPx": 212,
+                  "nodeCount": 2,
+                  "nodeIds": [
+                    "caller",
+                    "approve"
+                  ],
+                  "nodeSpanPx": 136,
+                  "spaceAboveNodesPx": 68,
+                  "spaceBelowNodesPx": 8
+                },
+                {
+                  "frameId": "lane-2",
+                  "heightPx": 212,
+                  "nodeCount": 5,
+                  "nodeIds": [
+                    "planfile",
+                    "implfile",
+                    "selfsection",
+                    "crosssection",
+                    "manifest"
+                  ],
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 84,
+                  "spaceBelowNodesPx": 24
+                }
+              ],
+              "minimumProjectedNodeTextPx": 6.6,
+              "minimumProjectedNonEdgeTextPx": 6.6,
+              "minimumProjectedEdgeTextPx": 8,
+              "minimumProjectedNodeText": "same two review files",
+              "minimumProjectedNodeTextDetail": "context",
+              "minimumProjectedNodeTextOwner": {
+                "kind": "node",
+                "id": "crosssection"
+              },
+              "minimumRequiredNodeTextPx": 6,
+              "readabilityOk": true,
+              "hasLegend": true,
+              "hasNavigationDock": true,
+              "legendDockIntersectionArea": 0,
+              "dockStageIntersectionArea": 0,
+              "dockStageGap": 10,
+              "requiredDockStageGap": 10,
+              "viewerChromeStageOk": true,
+              "viewerChromeReserve": 44,
+              "viewerChromeActive": true,
+              "viewerChromeOk": true,
+              "resolvedTheme": "light"
+            }
+          ]
+        },
+        "captures": {
+          "status": "not-requested",
+          "screenshots": [],
+          "contactSheet": null
+        },
+        "sidecars": {
+          "receipt": "six-skills.browser-check.json",
+          "files": []
+        }
+      }
+    }
+  },
+  "diagnostics": [],
+  "evidence": {
+    "receipt": "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.finalize.json",
+    "summaryReceipt": "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.finalize-summary.json",
+    "browserCheckReceipt": "/Users/thangtt/Documents/Github/agent-relay/.archify/workflow-six-skills-20261016-135720/six-skills.browser-check.json"
+  },
+  "visualReview": "not-requested",
+  "finishedAt": "2026-10-16T06:58:00.028Z",
+  "durationMs": 2642,
+  "update": {
+    "status": "update_available",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.1.0",
+    "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.1.0",
+    "severity": "normal",
+    "checkedAt": "2026-10-16T06:47:54.491Z",
+    "source": "cache",
+    "noticeRequired": true,
+    "noticeText": "Archify update: 3.0.1 → 3.1.0. A previous check at 2026-10-16T06:47:54.491Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.1.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
+    "eventKey": "archify@sha256:ffedc53390c9da6e859f41e432c5d2d0615a23cf00a503181f07efbba88a7ce8"
+  }
+}
