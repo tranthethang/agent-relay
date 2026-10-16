@@ -8,6 +8,27 @@ Versions use calendar versioning `YY.MM.DD` (UTC day of release); see
 
 ## [Unreleased]
 
+## [26.10.16] — 2026-10-16
+
+### Added
+
+- Shared writing rules in `docs/partials/writing.md`, copied by
+  `sync-references.sh` to `references/writing.md` in `atry-brainstorm`,
+  `atry-plan`, `atry-self-review`, and `atry-cross-review`. Covers a
+  language tag in `~/.agent-relay/lang` (missing or empty means English;
+  agents do not create the file unless asked), one-term glossary entries,
+  and a two-option question card (`a` smaller change, `b` durable change).
+- `atry-plan` size gate in skill text: before `atry run-init`, count
+  independent goals, tasks, and dependency clusters and print a size note.
+  More than one independent goal or more than eight tasks stops `run-init`
+  until the user chooses a split or one plan. The CLI does not enforce this.
+
+### Changed
+
+- Brainstorm open items, both review-report templates, and reviewer conduct
+  use the question card. Indented option lines stay off column 0 so
+  `atry status` lists the question and omits the options.
+
 ## [26.09.30] — 2026-09-30
 
 ### Added

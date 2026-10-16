@@ -135,7 +135,7 @@ Flags, `targets.conf`, adding a tool: [`docs/installer.md`](docs/installer.md).
 ### Release install
 
 ```bash
-REF="v26.09.30"
+REF="v26.10.16"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
 curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
 shasum -a 256 -c SHA256SUMS
