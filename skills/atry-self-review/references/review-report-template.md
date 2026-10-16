@@ -21,7 +21,13 @@ Optional. Use when a genuine tradeoff was escalated and left unresolved
 (especially the possibly-unattended path in `reviewer-conduct.md`). Stay under
 this `###` heading — do not invent a new `##` section kind.
 
-- <question or proposal for the developer, or omit this subsection if none>
+Write each question as a card with exactly two indented options: `a` for the
+smaller change and `b` for the durable change. Do not add `c`. The developer
+replies with `1a`, `2b`, and so on.
+
+- 1. <question>
+  - a. <smaller change>
+  - b. <durable change>
 
 ## Cross-Review — YYYY-MM-DD
 
@@ -44,4 +50,10 @@ this `###` heading — do not invent a new `##` section kind.
 Optional. Same convention as Self-Review: escalated-but-unresolved tradeoffs
 only; omit the subsection when there are none.
 
-- <question or proposal for the developer, or omit this subsection if none>
+Write each question as a card with exactly two indented options: `a` for the
+smaller change and `b` for the durable change. Do not add `c`. The developer
+replies with `1a`, `2b`, and so on.
+
+- 1. <question>
+  - a. <smaller change>
+  - b. <durable change>

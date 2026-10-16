@@ -15,6 +15,16 @@ When you hit a genuine tradeoff or decision point that is:
 do **not** pick a side in code. Escalate it as a question or short proposal to
 the human developer.
 
+Write each open decision as a review-report question card with exactly two
+options. Use `a` for the smaller change and `b` for the durable change. Do not
+add `c`. Indent option lines. The developer replies with `1a`, `2b`, and so on.
+
+```markdown
+- 1. <question>
+  - a. <smaller change>
+  - b. <durable change>
+```
+
 ### Interactive path
 
 If someone appears to be watching this session (the user is present and can

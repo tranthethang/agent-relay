@@ -5,6 +5,8 @@ description: Use when the user asks to plan work in this repo before implementin
 
 # Plan
 
+Before writing plan prose, read `references/writing.md`.
+
 ## Overview
 
 Creates a new run directory under `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/` with
@@ -41,6 +43,18 @@ the CLI enforces it.
 | `atry version`                                                | atry is missing or broken on PATH -- stop, see Preflight above    |
 | `atry run-init <id> --slug <slug> [--title ...] [--base ...]` | invalid id/slug, or no `.agent-relay/` / git repo found above cwd |
 | `atry task-init "$RUN_DIR"` (optional validation)             | the plan doesn't parse (bad checkbox status or dependency id)     |
+
+## Size gate
+
+Sketch the draft's goal and task list before creating a run directory. Before
+calling `atry run-init`, count the draft's independent goals and tasks.
+Count dependency clusters by grouping tasks that depend on one another. Print
+a size note with the independent-goal count, task count, dependency clusters,
+and a split suggestion.
+
+If there is more than one independent goal or more than eight tasks, do not
+call `atry run-init`. Ask the user to choose a split or one plan. Continue
+only after the user chooses.
 
 ## Run discovery
 

@@ -64,18 +64,20 @@ description: Use when <concrete trigger condition>, not a summary of the workflo
 ## Sync workflow
 
 Convention parts live under `docs/conventions/` (`core`, `review-headings`,
-`parallel`, `manifest`, `notes`). `sync-references.sh` concatenates them into:
+`parallel`, `manifest`, `notes`). Shared writing rules live in
+`docs/partials/writing.md`. `sync-references.sh` generates:
 
 | Source                                                    | Generated copy                                                                   |
 | --------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `docs/conventions/*.md` (manifest per skill)              | `skills/<name>/references/file-conventions.md`                                   |
 | all parts in fixed order                                  | `docs/file-conventions.md` (human full view)                                     |
 | `docs/partials/preflight.md`                              | between `<!-- BEGIN PREFLIGHT -->` / `<!-- END PREFLIGHT -->` in each `SKILL.md` |
+| `docs/partials/writing.md`                                | `references/writing.md` in brainstorm, plan, self-review, and cross-review       |
 | `skills/atry-self-review/references/review-*-template.md` | `skills/atry-cross-review/…` (byte-identical)                                    |
 | `skills/atry-self-review/references/reviewer-conduct.md`  | same                                                                             |
 
 ```bash
-# after editing docs/conventions/, docs/partials/preflight.md, review templates,
+# after editing docs/conventions/, docs/partials/*.md, review templates,
 # or reviewer-conduct.md
 bash scripts/maint/sync-references.sh
 bash scripts/maint/sync-references.sh --check

@@ -5,6 +5,8 @@ description: Use right after an agent-relay implement step finishes, before any 
 
 # Self-Review
 
+Before writing review-report prose, read `references/writing.md`.
+
 ## Overview
 
 Reviews code produced from a plan using `implement-plan.md` and
