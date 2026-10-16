@@ -8,6 +8,14 @@ Versions use calendar versioning `YY.MM.DD` (UTC day of release); see
 
 ## [Unreleased]
 
+### Changed
+
+- Question card: one shape for brainstorm and review (`- Q1: <question>`),
+  with no checkbox. When the evidence does not support two real options,
+  the agent writes one `Need: <missing data>` line instead of inventing
+  `a` / `b`. Rule text lives in `docs/partials/writing.md`; brainstorm,
+  `reviewer-conduct.md`, and the review-report template point to it.
+
 ## [26.10.16] — 2026-10-16
 
 ### Added

@@ -15,15 +15,20 @@ When you hit a genuine tradeoff or decision point that is:
 do **not** pick a side in code. Escalate it as a question or short proposal to
 the human developer.
 
-Write each open decision as a review-report question card with exactly two
-options. Use `a` for the smaller change and `b` for the durable change. Do not
-add `c`. Indent option lines. The developer replies with `1a`, `2b`, and so on.
+Write each open decision as a question card (`references/writing.md`,
+"Question card"):
 
 ```markdown
-- 1. <question>
+- Q1: <question>
   - a. <smaller change>
   - b. <durable change>
+- Q2: <question>
+  - Need: <the data or check that is missing>
 ```
+
+If you do not have enough evidence for two real options, write the `Need:`
+line. Do not invent options to fill the card. The developer replies with
+`1a`, `2b`, or a free-text answer.
 
 ### Interactive path
 
