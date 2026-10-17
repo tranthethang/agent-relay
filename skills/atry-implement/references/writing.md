@@ -21,22 +21,23 @@ These rules follow the spirit of ASD-STE100. They do not state ASD-STE100 compli
 
 Use these terms only for these meanings:
 
-- `plan`: the `plan.md` for one run.
+- `plan`: the `10-plan/` stage folder for one run.
 - `run`: one `.agent-relay/{YMD}-{id}-{slug}/` directory.
 - `stage`: plan, implement, self-review, or cross-review for one run.
-- `task`: one numbered item under `## Tasks`.
-- `task breakdown`: `implement-plan.md` (or `implement-plan/`).
+- `stage folder`: `10-plan`, `20-implement`, `30-self-review`, `40-cross-review`, or `90-distill`.
+- `task`: one item in `10-plan/index.json`.
+- `task breakdown`: the files under `20-implement/`.
 - `claim`: the `atry claim` lock on a task.
-- `review`: self-review or cross-review of a run.
-- `distill`: the `atry distill` manifest export.
-- `approve`: human `atry approve` of a plan.
-- `decide`: human `atry decide` for an open decision.
-- `stamp`: human `atry stamp` of tool and model.
-- `close`: human `atry close` of a run.
+- `review`: one review pair in a review stage folder.
+- `distill`: the manifest from `atry distill`.
+- `approve`: `atry approve` of a plan.
+- `close`: `atry close` of a run.
+- `brainstorm notes`: `notes.md` in one `.agent-relay/brainstorms/{YMD}-{slug}/` directory.
+- `events`: the append-only `events.jsonl` for one run.
 
 ## Question card
 
-Write each open question as one card. The same shape is used in a brainstorm and in a review report.
+Write each open question as one card. Use the same shape in brainstorm notes and in a review file.
 
 ```markdown
 - Q1: <question>
@@ -54,3 +55,7 @@ Rules:
 - When the evidence does not support two real options, do not invent them. Write one `Need:` line instead. Say what data, file, or decision is missing.
 - Keep each option to one line. Put the reason in the question line, not in the options.
 - The user replies with `1a`, `2b`, or a free-text answer to a `Need:` line.
+- Copy each card into the scaffold `open` array.
+- A choice card uses `q`, `a`, and `b`.
+- A need card uses `q` and `need`.
+- Keep `schema` as `1`.

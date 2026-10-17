@@ -4,8 +4,8 @@
 #   - docs/conventions/*.md  -> generated docs/file-conventions.md (all parts)
 #                            -> skills/<name>/references/file-conventions.md
 #                              (per-skill subset from the manifest below)
-#   - review-*-template.md / reviewer-conduct.md
-#     -> atry-self-review (canonical) <-> atry-cross-review
+#   - reviewer-conduct.md
+#     -> atry-self-review (canonical) -> atry-cross-review
 # Runtime helpers live under scripts/runtime/ and are installed via `atry`
 # (~/.agent-relay); skill bundles must not carry scripts/.
 # Usage:
@@ -49,8 +49,6 @@ FULL_DEST="$ROOT_DIR/docs/file-conventions.md"
 SELF_REVIEW_REF="$ROOT_DIR/skills/atry-self-review/references"
 CROSS_REVIEW_REF="$ROOT_DIR/skills/atry-cross-review/references"
 REVIEW_TEMPLATES=(
-  "review-report-template.md"
-  "review-walkthrough-template.md"
   "reviewer-conduct.md"
 )
 
@@ -197,7 +195,7 @@ for skill in atry-brainstorm atry-plan atry-implement atry-self-review atry-cros
   fi
 done
 
-# Review templates must stay byte-identical across self-review and cross-review.
+# Reviewer conduct must stay byte-identical across self-review and cross-review.
 # Canonical copy lives under atry-self-review; sync copies it to atry-cross-review.
 for name in "${REVIEW_TEMPLATES[@]}"; do
   src="$SELF_REVIEW_REF/$name"

@@ -194,27 +194,21 @@ echo "$rel_out" | grep -q '^lib=' && pass "atry relative-symlink chain" || fail 
 [[ -f "$HOME/.cursor/skills/atry-plan/SKILL.md" ]] && pass "atry-plan installed" || fail "atry-plan installed"
 [[ -f "$HOME/.cursor/skills/atry-brainstorm/SKILL.md" ]] && pass "atry-brainstorm installed" || fail "atry-brainstorm installed"
 
-# Each installed skill ships its artifact empty-outline templates under references/
-[[ -f "$HOME/.cursor/skills/atry-plan/references/plan-template.md" ]] &&
-  pass "atry-plan plan-template" || fail "atry-plan plan-template"
-[[ -f "$HOME/.cursor/skills/atry-plan/references/meta-template.md" ]] &&
-  pass "atry-plan meta-template" || fail "atry-plan meta-template"
-[[ -f "$HOME/.cursor/skills/atry-plan/references/history-log-template.md" ]] &&
-  pass "atry-plan history-log-template" || fail "atry-plan history-log-template"
-[[ -f "$HOME/.cursor/skills/atry-implement/references/implement-plan-template.md" ]] &&
-  pass "atry-implement implement-plan-template" || fail "atry-implement implement-plan-template"
-[[ -f "$HOME/.cursor/skills/atry-implement/references/implement-report-template.md" ]] &&
-  pass "atry-implement implement-report-template" || fail "atry-implement implement-report-template"
-[[ -f "$HOME/.cursor/skills/atry-implement/references/task-status-template.md" ]] &&
-  pass "atry-implement task-status-template" || fail "atry-implement task-status-template"
-[[ -f "$HOME/.cursor/skills/atry-self-review/references/review-report-template.md" ]] &&
-  pass "atry-self-review review-report-template" || fail "atry-self-review review-report-template"
-[[ -f "$HOME/.cursor/skills/atry-self-review/references/review-walkthrough-template.md" ]] &&
-  pass "atry-self-review review-walkthrough-template" || fail "atry-self-review review-walkthrough-template"
-[[ -f "$HOME/.cursor/skills/atry-cross-review/references/review-report-template.md" ]] &&
-  pass "atry-cross-review review-report-template" || fail "atry-cross-review review-report-template"
-[[ -f "$HOME/.cursor/skills/atry-cross-review/references/review-walkthrough-template.md" ]] &&
-  pass "atry-cross-review review-walkthrough-template" || fail "atry-cross-review review-walkthrough-template"
+# v1 artifact outlines are gone. atry scaffolds the files each skill fills.
+for gone in \
+  "$HOME/.cursor/skills/atry-plan/references/plan-template.md" \
+  "$HOME/.cursor/skills/atry-plan/references/meta-template.md" \
+  "$HOME/.cursor/skills/atry-plan/references/history-log-template.md" \
+  "$HOME/.cursor/skills/atry-implement/references/implement-plan-template.md" \
+  "$HOME/.cursor/skills/atry-implement/references/implement-report-template.md" \
+  "$HOME/.cursor/skills/atry-implement/references/task-status-template.md" \
+  "$HOME/.cursor/skills/atry-self-review/references/review-report-template.md" \
+  "$HOME/.cursor/skills/atry-self-review/references/review-walkthrough-template.md" \
+  "$HOME/.cursor/skills/atry-cross-review/references/review-report-template.md" \
+  "$HOME/.cursor/skills/atry-cross-review/references/review-walkthrough-template.md"; do
+  base="$(basename "$gone")"
+  [[ ! -e "$gone" ]] && pass "removed $base" || fail "removed $base"
+done
 
 # Every references/<file>.md named in an installed SKILL.md must exist in that bundle.
 # Also: preflight block between markers must match docs/partials/preflight.md.

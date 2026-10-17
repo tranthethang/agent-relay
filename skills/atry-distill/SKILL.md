@@ -1,56 +1,40 @@
 ---
 name: atry-distill
-description: Use when the user wants to export a run's manifest, at any run state.
+description: Use when the user wants to export a run manifest, at any run state.
+requires-atry: ">=26.10.16"
 ---
 
 # Distill
 
 ## Overview
 
-This skill exports a deterministic `$RUN_DIR/distill/manifest` with
-`atry distill`. Distill is an export. It is not a stage. It does not append to
-the history, edit `meta.md`, or close the run. The manifest contract is in
-`references/file-conventions.md` ("Distill manifest").
+This skill writes `90-distill/manifest.json` for one run. It does not close the run.
 
 ## Preflight
 
 <!-- BEGIN PREFLIGHT -->
 
-Run `atry version` before anything else in this skill. If it fails, stop.
-Do not search the filesystem for helpers. Do not run `scripts/atry`,
-`scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
-
-Tell the user to run `verify.sh` and fix what it reports. The most common
-cause is `$HOME/.local/bin` missing from `PATH`. Run `atry` from the repo
-root. Confirm that each `atry resolve` and `atry run-init` call below prints
-`atry: using <path>` on stderr. Full rule: `references/file-conventions.md`
-("atry preflight").
+This skill needs `requires-atry` in its front matter.
+Run `atry version --json` before any other command in this skill.
+Read the `version` string from that JSON.
+Split both versions on `.` and compare the numbers from the left.
+Find the first pair of numbers that differ. Ignore the numbers after that pair.
+Stop when the required number in that pair is higher than the installed number.
+Tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
+Do not search the filesystem for helpers.
+Do not run files under `scripts/` or `~/.agent-relay/lib/`.
+When this skill names a run, call `atry context <run> --json` first.
 
 <!-- END PREFLIGHT -->
 
-### Commands used in this stage
+## Steps
 
-| Command                         | Meaning of a non-zero exit                                     |
-| ------------------------------- | -------------------------------------------------------------- |
-| `atry version`                  | atry missing/broken on PATH -- stop, see Preflight             |
-| `atry resolve [RUN_ID or path]` | ambiguous or not found -- ask for the `RUN_ID` or path         |
-| `atry distill <run-dir-or-id>`  | usage error, run not resolved, or no sha256 tool -- stop / fix |
+1. Call `atry context <run> --json` when the user names a run.
+2. Run `atry distill <run>`.
+3. Tell the user the manifest path and the file count.
 
-## Instructions
-
-1. Resolve the run:
-   ```bash
-   RUN_DIR="$(atry resolve [RUN_ID or path])"
-   ```
-2. Export the manifest:
-   ```bash
-   atry distill "$RUN_DIR"
-   ```
-3. Report the path and the file count from stderr (`distill: wrote <path> (<N> files)`).
+Stop when the command fails. Show the field path to the user.
 
 ## Non-goals
 
-- Do not write typed notes, summaries, or legacy vault or metrics content.
-- Do not append to `history.log`. Do not run `atry close`.
-- Do not invent lessons. Do not parse plan or review markdown into structured
-  records.
+Do not write a summary. Do not edit the manifest by hand. Do not run `atry close`.

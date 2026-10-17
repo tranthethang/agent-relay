@@ -1,9 +1,10 @@
-Run `atry version` before anything else in this skill. If it fails, stop.
-Do not search the filesystem for helpers. Do not run `scripts/atry`,
-`scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
-
-Tell the user to run `verify.sh` and fix what it reports. The most common
-cause is `$HOME/.local/bin` missing from `PATH`. Run `atry` from the repo
-root. Confirm that each `atry resolve` and `atry run-init` call below prints
-`atry: using <path>` on stderr. Full rule: `references/file-conventions.md`
-("atry preflight").
+This skill needs `requires-atry` in its front matter.
+Run `atry version --json` before any other command in this skill.
+Read the `version` string from that JSON.
+Split both versions on `.` and compare the numbers from the left.
+Find the first pair of numbers that differ. Ignore the numbers after that pair.
+Stop when the required number in that pair is higher than the installed number.
+Tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
+Do not search the filesystem for helpers.
+Do not run files under `scripts/` or `~/.agent-relay/lib/`.
+When this skill names a run, call `atry context <run> --json` first.

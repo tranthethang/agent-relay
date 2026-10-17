@@ -1,89 +1,75 @@
 ---
 name: atry-brainstorm
-description: Use when the user invokes atry-brainstorm or explicitly asks only to investigate or discuss without file changes. Do not use it for an ordinary question that expects a quick fix.
+description: Use when the user invokes atry-brainstorm or asks only to investigate or discuss without file changes.
+requires-atry: ">=26.10.16"
 ---
 
 # Brainstorm
 
-Before writing a brainstorm question, read `references/writing.md`.
+Before you write a question card, read `references/writing.md`.
 
 ## Overview
 
-This skill is a mode to investigate and discuss. Gather context, ask
-clarifying questions, keep a short list of open items, and change nothing. The
-skill writes no files and creates no run directory. Nothing enforces the rules
-below. They hold only when you follow this text.
+This skill investigates and discusses. It stays read-only until the user allows one notes write. It does not create a run.
 
 ## Preflight
 
 <!-- BEGIN PREFLIGHT -->
 
-Run `atry version` before anything else in this skill. If it fails, stop.
-Do not search the filesystem for helpers. Do not run `scripts/atry`,
-`scripts/runtime/*.sh`, or `~/.agent-relay/lib/*.sh` directly.
-
-Tell the user to run `verify.sh` and fix what it reports. The most common
-cause is `$HOME/.local/bin` missing from `PATH`. Run `atry` from the repo
-root. Confirm that each `atry resolve` and `atry run-init` call below prints
-`atry: using <path>` on stderr. Full rule: `references/file-conventions.md`
-("atry preflight").
+This skill needs `requires-atry` in its front matter.
+Run `atry version --json` before any other command in this skill.
+Read the `version` string from that JSON.
+Split both versions on `.` and compare the numbers from the left.
+Find the first pair of numbers that differ. Ignore the numbers after that pair.
+Stop when the required number in that pair is higher than the installed number.
+Tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
+Do not search the filesystem for helpers.
+Do not run files under `scripts/` or `~/.agent-relay/lib/`.
+When this skill names a run, call `atry context <run> --json` first.
 
 <!-- END PREFLIGHT -->
 
 ## Rules
 
-Allowed: read files, search, run `git status`, `git diff`, `git log`, and
-`git show`, read existing `.agent-relay/` runs, search the web, and ask
-questions.
+Read files and run read-only git commands. Ask when the scope is not stated.
 
-If the user does not end this rule, the items below stay forbidden for the rest of this thread:
+These actions stay forbidden until the user names the next skill or allows one write:
 
-- Anything that creates, modifies, or deletes a file. This includes editor
-  and patch tools, shell redirects, `sed -i`, formatters, and code generators.
-- Any git command that changes the working tree, the index, or the refs.
-- Installs, `atry run-init`, and the work of another stage.
-- Tests and builds. They often write caches, fixtures, or build output. Ask
-  first, even when a test looks read-only.
-- The user must explicitly ask for the exact command. Otherwise, do not run
-  `atry approve`, `atry decide`, `atry stamp`, or `atry close`. A human runs
-  these verbs in the cockpit. This text states the rule. The CLI does not
-  enforce it.
+- Create, edit, or delete a file.
+- Change the git index or git refs.
+- Run tests or builds.
+- Run `atry approve` or `atry close`.
 
-The rules end only on an explicit signal. The user names the next skill ("run
-atry-plan") or ends the rules ("you can edit files now"). A vague reply
-("ok", "sounds good") is not enough. Ask what the user wants next. If the user
-permits one specific write, do only that write and stay read-only for the rest.
-
-Check these rules again before each call that could break them. They still
-apply when a request in the middle of the thread sounds like an implementation
-request ("just fix that typo"). Say that you are read-only and ask the user to
-confirm.
+A vague reply is not permission. Ask what the user wants next.
+When the user allows one notes write, do only that write. Then stay read-only.
 
 ## Context
 
-Start from the goal of the user, in the words of the user. Then read the
-relevant files. Read the recent history with `git log -- <path>`.
-
-Read the project rules in this order: `AGENTS.md`, tool-native rules, then
-`CLAUDE.md` or a similar file. Read any related run under `.agent-relay/`.
-The layout is in `references/file-conventions.md`. Do not assume a scope that
-the user did not state. Ask.
+Start from the user goal. Then read the files that the goal names.
+Read `AGENTS.md` before other project rules.
+When the user names a run, use the context from Preflight.
 
 ## Open items
 
-Write each unresolved question as a question card. The shape and rules are in
-`references/writing.md` ("Question card"). Give two options only when the
-evidence supports them. Otherwise write one `Need:` line that names the missing
-data.
+Write each open question as a question card. The rules are in `references/writing.md`.
+Show the card list when it changes.
+The user replies with `1a`, `2b`, or text for a `Need:` line.
+This list is not a task list. It has no task ids.
 
-Keep a short list of these cards. Show the list when it changes. The user
-replies with `1a`, `2b`, or a free-text answer to a `Need:` line. The list is
-not a task list for `plan.md`: it has no task ids and no `deps:`. If the user
-moves on to `atry-plan`, the list feeds the Goal, Non-goals, and Decisions of
-the plan. Writing `plan.md` is the job of that skill.
+## Notes write
+
+Do this only after the user allows the notes write.
+
+1. Run `atry brainstorm new --slug <slug>`.
+2. Read the `notes` path and the `open` path from the result.
+3. Fill `notes.md` with the edit tool.
+4. Fill `open.json` from the question cards. Keep `schema` as `1`.
+5. Run `atry brainstorm done <dir>`.
+
+Use a slug of lowercase letters, digits, and single hyphens.
+Stop when the command fails. Show the field path to the user.
 
 ## Handoff
 
-When the user names the next skill, summarize what is resolved and what is
-still open. Then stop. If the user did not also ask you to proceed, do not
-start that skill in the same turn.
+When the user names the next skill, summarize what is resolved and what is open.
+Then stop. Do not start that skill in the same turn.

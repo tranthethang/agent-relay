@@ -28,9 +28,7 @@ the copies under `skills/*/references/`). Maintainer docs that point here
 `<RUN_ID>` is the Unix timestamp in seconds (`date +%s`). `<RUN_SLUG>` is 3–48
 characters matching `^[a-z]+(-[a-z]+)*$`.
 
-Empty outlines for each artifact live in that skill's
-`references/*-template.md` (installed with the bundle). Runtime files live
-inside their respective run directory.
+Runtime files live inside their respective run directory.
 
 ## atry preflight
 
@@ -170,9 +168,9 @@ id: <RUN_ID>
 
 If those lines are missing, `atry-implement` adds them before coding. `base`
 should be a real ref in that repo (`HEAD` before the work, or the branch tip).
-Do not invent one. The plan skill's `references/plan-template.md` also outlines
-`## Non-goals`, the optional `## Decisions` and `## Flow` sections, and
-numbered tasks that may list `(deps: T1 T2)`. Helpers parse only `## Tasks`.
+Do not invent one. Optional sections are `## Non-goals`, `## Decisions`, and
+`## Flow`. Numbered tasks may list `(deps: T1 T2)`. Helpers parse only
+`## Tasks`.
 
 ## Review headings
 
