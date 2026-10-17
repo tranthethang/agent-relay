@@ -82,9 +82,11 @@ jobs:
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
 
+      # Trusted publishing (OIDC) needs npm 11.5.1 or newer. Node 22 ships npm 10.
+      - name: Install npm for trusted publishing
+        run: npm install -g npm@11.15.0
+
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public --tag latest
 
       - name: Create the GitHub Release

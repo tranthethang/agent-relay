@@ -16,7 +16,9 @@ test("release workflow computes X.M.Z and publishes from main", () => {
   expect(yaml).toContain("cancel-in-progress: false");
   expect(yaml).toContain("fetch-depth: 0");
   expect(yaml).toContain("fetch-tags: true");
-  expect(yaml).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
+  expect(yaml).not.toContain("NODE_AUTH_TOKEN");
+  expect(yaml).not.toContain("NPM_TOKEN");
+  expect(yaml).toContain("npm install -g npm@11.15.0");
   expect(yaml).toContain("npm publish --provenance --access public --tag latest");
   expect(yaml).toContain("gh release create");
   expect(yaml).toContain("--generate-notes");
@@ -34,6 +36,7 @@ test("release workflow computes X.M.Z and publishes from main", () => {
     "npm test",
     "npm version",
     "git push origin",
+    "npm install -g npm@11.15.0",
     "npm publish --provenance --access public --tag latest",
     "gh release create",
   ];

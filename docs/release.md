@@ -25,9 +25,13 @@ The job installs dependencies first, because the version script imports `src/cor
 
 A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it. The workflow refuses when `requires-atry` is higher than the new version.
 
-## Token
+## Trusted publishing
 
-Store an npm access token with read and write as the repository secret `NPM_TOKEN`. The workflow passes it as `NODE_AUTH_TOKEN`. The token can expire. A failed publish step is the sign. Renew the secret and run the workflow again.
+The workflow publishes with npm trusted publishing (OIDC). There is no npm token and no repository secret. npm no longer lets a token that bypasses 2FA publish directly.
+
+On npmjs.com, open the package settings. Under Trusted Publisher, add GitHub Actions with user `tranthethang`, repository `agent-relay`, and workflow `release.yml`. The job has `id-token: write` and installs npm 11.15.0 before it publishes, because trusted publishing needs npm 11.5.1 or newer.
+
+The first publish of a new package cannot use trusted publishing. Publish it once by hand with `npm publish --access public`, then add the trusted publisher.
 
 A tag without a publish is safe. The next release takes the next number.
 
