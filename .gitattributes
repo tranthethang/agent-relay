@@ -1,2 +1,4 @@
 # dprint checks TypeScript with LF line endings; Windows runners check out CRLF by default.
 *.ts text eol=lf
+# sync:check compares Markdown byte for byte; keep LF on Windows checkouts too.
+*.md text eol=lf
