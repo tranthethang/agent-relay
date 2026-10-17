@@ -8,7 +8,7 @@ test("atry brainstorm new scaffolds notes.md and open.json", async () => {
     const created = await runCli(["brainstorm", "new", "--slug", "agent-relay-v2", "--json"], dir);
     expect(created.code).toBe(0);
     const body = JSON.parse(created.stdout) as { path: string; notes: string; open: string };
-    expect(body.path).toContain("brainstorms/2026");
+    expect(body.path).toContain(join("brainstorms", "2026"));
     expect(body.path.endsWith("-agent-relay-v2")).toBe(true);
     expect(await readFile(body.notes, "utf8")).toBe("# agent-relay-v2\n");
     expect(JSON.parse(await readFile(body.open, "utf8"))).toEqual({ schema: 1, open: [] });

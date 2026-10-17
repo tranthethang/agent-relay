@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,7 +39,8 @@ export function runCli(args: string[], cwd: string): Promise<CliResult> {
 }
 
 export async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
-  const dir = await mkdtemp(join(tmpdir(), "atry-"));
+  // Windows tmpdir() can be an 8.3 short path; the CLI reports the long one.
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "atry-")));
   try {
     return await fn(dir);
   } finally {

@@ -1,12 +1,12 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { expect, test } from "vitest";
 import { RelayError } from "../src/core/error.js";
 import { appendJsonl, atomicWrite, joinUnder, readJsonl, readText } from "../src/core/files.js";
 import { withTempDir } from "./helper.js";
 
 test("joinUnder joins parts and rejects a path that escapes", () => {
-  const root = join("/tmp", "relay-root");
+  const root = resolve("/tmp", "relay-root");
   expect(joinUnder(root, "locks", "T1.lock")).toBe(join(root, "locks", "T1.lock"));
   expect(() => joinUnder(root, "..", "outside")).toThrow(RelayError);
   expect(() => joinUnder(root, "locks", "../../outside")).toThrow(RelayError);
