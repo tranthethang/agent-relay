@@ -59,18 +59,21 @@ function comparePath(left: string, right: string): number {
 
 async function listFiles(root: string): Promise<string[]> {
   const out: string[] = [];
-  await walk(root, out);
+  await walk(root, root, out);
   return out;
 }
 
-async function walk(dir: string, out: string[]): Promise<void> {
+async function walk(root: string, dir: string, out: string[]): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
-      await walk(path, out);
+      if (dir === root && entry.name === "locks") continue;
+      await walk(root, path, out);
       continue;
     }
-    if (entry.isFile()) out.push(path);
+    if (!entry.isFile()) continue;
+    if (entry.name.startsWith(".") && entry.name.endsWith(".tmp")) continue;
+    out.push(path);
   }
 }

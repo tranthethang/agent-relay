@@ -3,7 +3,7 @@
 Each skill is `skills/<name>/SKILL.md` plus `references/`. Bundles do not
 contain `scripts/`.
 
-Front matter needs `name`, `description`, and `requires-atry`. The preflight
+Front matter needs `name`, `description`, and `requires-atry`. All six skills share one `requires-atry` value. That value is not higher than `VERSION`. A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it. The preflight
 block between `<!-- BEGIN PREFLIGHT -->` and `<!-- END PREFLIGHT -->` is copied
 from `docs/partials/preflight.md` by `scripts/maint/sync-references.sh`.
 

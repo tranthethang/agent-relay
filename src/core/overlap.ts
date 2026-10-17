@@ -2,10 +2,17 @@ import { RelayError } from "./error.js";
 import { type PlanIndex } from "./tasks.js";
 
 export function normalizePath(input: string): string {
+  const slashed = input.replaceAll("\\", "/");
+  if (slashed.startsWith("/") || /^[A-Za-z]:/.test(slashed)) {
+    throw new RelayError("validation", "path leaves the repo", "files");
+  }
   const parts: string[] = [];
-  for (const part of input.replaceAll("\\", "/").split("/")) {
+  for (const part of slashed.split("/")) {
     if (part === "" || part === ".") continue;
     if (part === "..") {
+      if (parts.length === 0) {
+        throw new RelayError("validation", "path leaves the repo", "files");
+      }
       parts.pop();
       continue;
     }

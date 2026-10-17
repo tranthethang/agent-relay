@@ -5,7 +5,15 @@ import { type RebuildResult, rebuildRun } from "./cache.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { atomicWrite, isEnoent, readJson } from "./files.js";
-import { acquireLock, readOwner, releaseLock, removeLock, stealLock } from "./lock.js";
+import {
+  acquireLock,
+  createStealGuard,
+  readOwner,
+  releaseLock,
+  removeLock,
+  removeStealGuard,
+  stealLock,
+} from "./lock.js";
 import { appendEvent, openRun } from "./mutate.js";
 import { overlappingTask } from "./overlap.js";
 import { type RunState } from "./reduce.js";
@@ -166,23 +174,29 @@ export async function stealTask(
   const item = requireTask(index, id);
   refuseFinished(loaded.run.state, id, "steal");
   assertDeps(loaded.run.state, id, item.deps, "steal");
-  await stealLock(runDir, id, session, ttlMinutes * 60_000);
-  const implement = await ensureImplement(runDir, item.id, item.title);
-  await appendEvent(loaded, runDir, {
-    stage: "implement",
-    action: "stolen",
-    task: id,
-    session,
-  });
-  return {
-    schema: schemaVersion,
-    path: runDir,
-    task: id,
-    status: "in-progress",
-    session,
-    action: "stolen",
-    implement,
-  };
+  await createStealGuard(runDir, id, session);
+  try {
+    await assertNoOverlap(runDir, index, id, session);
+    await stealLock(runDir, id, session, ttlMinutes * 60_000);
+    const implement = await ensureImplement(runDir, item.id, item.title);
+    await appendEvent(loaded, runDir, {
+      stage: "implement",
+      action: "stolen",
+      task: id,
+      session,
+    });
+    return {
+      schema: schemaVersion,
+      path: runDir,
+      task: id,
+      status: "in-progress",
+      session,
+      action: "stolen",
+      implement,
+    };
+  } finally {
+    await removeStealGuard(runDir, id);
+  }
 }
 
 export async function listTasks(runDir: string): Promise<ListResult> {

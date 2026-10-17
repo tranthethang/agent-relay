@@ -12,7 +12,13 @@ test("normalizePath compares equal paths and directory prefixes", () => {
   expect(pathsOverlap("src/core", "src/core/claim.ts")).toBe(true);
   expect(pathsOverlap("src/core/claim.ts", "src/core/claim.ts")).toBe(true);
   expect(pathsOverlap("src/foo", "src/foobar")).toBe(false);
+  expect(normalizePath("src/../src/core/plan.ts")).toBe("src/core/plan.ts");
   expect(() => normalizePath(".")).toThrow(RelayError);
+  expect(() => normalizePath("./")).toThrow(RelayError);
+  expect(() => normalizePath("")).toThrow(RelayError);
+  expect(() => normalizePath("../outside")).toThrow(RelayError);
+  expect(() => normalizePath("/x")).toThrow(RelayError);
+  expect(() => normalizePath("C:\\x")).toThrow(RelayError);
   const tasks = [
     { id: "T1", title: "A", deps: [], files: ["src/core/claim.ts"], path: "10-plan/T1.md" },
     { id: "T2", title: "B", deps: [], files: ["src/core"], path: "10-plan/T2.md" },

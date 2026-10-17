@@ -5,6 +5,7 @@ import { assertClaimOwner, releaseClaimLock } from "./claim.js";
 import { fromZod, RelayError } from "./error.js";
 import { atomicWrite, isEnoent, readJson } from "./files.js";
 import { appendEvent, openRun } from "./mutate.js";
+import { normalizePath } from "./overlap.js";
 import { type RunState } from "./reduce.js";
 import { type PlanIndex, planIndexSchema, type TasksInput, tasksInputSchema } from "./tasks.js";
 import { schemaVersion, taskIdSchema } from "./vocab.js";
@@ -119,6 +120,7 @@ export async function planDone(runDir: string): Promise<PlanDoneResult> {
     throw new RelayError("gate", `plan done refused: ${started.id} has started`, started.id);
   }
   const input = await readTasksInput(runDir);
+  assertPlanFiles(input.tasks);
   const index = indexFromTasks(input.tasks);
   await writePlanFiles(runDir, index);
   await appendEvent(loaded, runDir, { stage: "plan", action: "completed" });
@@ -129,6 +131,7 @@ export async function planAmend(runDir: string): Promise<PlanDoneResult> {
   const loaded = await openRun(runDir);
   const current = await readIndex(runDir);
   const input = await readTasksInput(runDir);
+  assertPlanFiles(input.tasks);
   const unmatched = new Map<string, string[]>();
   for (const task of current.tasks) {
     unmatched.set(task.title, [...(unmatched.get(task.title) ?? []), task.id]);
@@ -139,6 +142,15 @@ export async function planAmend(runDir: string): Promise<PlanDoneResult> {
     if (hasStarted(loaded.run.state, task.id)) {
       throw new RelayError("gate", `plan amend refused: ${task.id} has started`, task.id);
     }
+  }
+  for (let index = 0; index < input.tasks.length; index += 1) {
+    const id = matched[index];
+    const task = input.tasks[index];
+    if (id === undefined || task === undefined) continue;
+    if (!hasStarted(loaded.run.state, id)) continue;
+    const previous = current.tasks.find((item) => item.id === id);
+    if (previous === undefined || sameDeps(previous.deps, task.deps)) continue;
+    throw new RelayError("gate", `plan amend refused: ${id} has started`, `${id}.deps`);
   }
   let next = maxTaskNumber([
     ...current.tasks.map((task) => task.id),
@@ -252,8 +264,33 @@ function assertLifecycle(
   throw new RelayError("gate", `${verb} refused: run is ${state.lifecycle}`, "state.lifecycle");
 }
 
+function assertPlanFiles(tasks: TasksInput["tasks"]): void {
+  tasks.forEach((task, index) => {
+    task.files.forEach((file, fileIndex) => {
+      try {
+        normalizePath(file);
+      } catch (error) {
+        if (error instanceof RelayError) {
+          throw new RelayError("validation", error.message, `tasks[${index}].files[${fileIndex}]`);
+        }
+        throw error;
+      }
+    });
+  });
+}
+
 function hasStarted(state: RunState, id: string): boolean {
   return taskStatus(state, id) !== "pending";
+}
+
+function sameDeps(left: readonly string[], right: readonly string[]): boolean {
+  const before = new Set(left);
+  const after = new Set(right);
+  if (before.size !== after.size) return false;
+  for (const dep of before) {
+    if (!after.has(dep)) return false;
+  }
+  return true;
 }
 
 function taskStatus(state: RunState, id: string): RunState["tasks"][number]["status"] {

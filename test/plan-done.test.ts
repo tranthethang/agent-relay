@@ -47,6 +47,38 @@ test("indexFromTasks assigns ids and rejects dep errors", () => {
   }
 });
 
+test("plan done and plan amend reject root and escaping files", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "plan-files");
+    const rejected = [".", "./", "", "../outside", "/x", "C:\\x"];
+    for (const file of rejected) {
+      await writeTasks(run, [{ title: "First", files: ["src/ok.ts", file] }]);
+      const result = await runCli(["plan", "done", run], dir);
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain("tasks[0].files[1]");
+    }
+    await expect(readFile(join(run, "10-plan", "index.json"), "utf8")).rejects.toThrow();
+    await writeTasks(run, [{ title: "First", files: ["src/core/plan.ts"] }]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await writeTasks(run, [{ title: "First", files: ["src/../src/core/plan.ts"] }]);
+    const amended = await runCli(["plan", "amend", run, "--json"], dir);
+    expect(amended.code).toBe(0);
+    const index = JSON.parse(await readFile(join(run, "10-plan", "index.json"), "utf8")) as {
+      tasks: { files: string[] }[];
+    };
+    expect(index.tasks[0]?.files).toEqual(["src/../src/core/plan.ts"]);
+    await writeTasks(run, [{ title: "First", files: ["../outside"] }]);
+    const bad = await runCli(["plan", "amend", run], dir);
+    expect(bad.code).toBe(2);
+    expect(bad.stderr).toContain("tasks[0].files[0]");
+    const kept = JSON.parse(await readFile(join(run, "10-plan", "index.json"), "utf8")) as {
+      tasks: { files: string[] }[];
+    };
+    expect(kept.tasks[0]?.files).toEqual(["src/../src/core/plan.ts"]);
+  });
+});
+
 test("atry plan done reports dep errors and the 8-task gate", async () => {
   await withTempGitRepo(async (dir) => {
     await gitCommit(dir);

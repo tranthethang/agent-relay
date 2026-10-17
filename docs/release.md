@@ -8,7 +8,7 @@ Publish uses npm trusted publishing (OIDC, provenance). The workflow
 [`.github/workflows/npm-release.yml`](../.github/workflows/npm-release.yml)
 runs on a `v*` tag and publishes dist-tag `latest`.
 
-1. Set the same version in `VERSION` and `package.json`.
+1. Set the same version in `VERSION` and `package.json`. A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it.
 2. Write the section in `CHANGELOG.md`.
 3. Update the README install lines when the install command changes.
 4. Commit those files.

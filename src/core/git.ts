@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { RelayError } from "./error.js";
 
 export type DiffSize = {
@@ -26,10 +28,25 @@ export async function gitHead(cwd: string): Promise<string> {
   }
 }
 
+// Run artifacts under .agent-relay/ are not part of the change.
+const outsideRuns = [".", ":(exclude).agent-relay"];
+
 export async function diffSize(cwd: string, base: string, head: string): Promise<DiffSize> {
+  void head;
   let text: string;
+  let untracked: string;
+  let root: string;
   try {
-    text = await git(cwd, ["diff", "--numstat", base, head]);
+    root = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
+    text = await git(root, ["diff", "--numstat", base, "--", ...outsideRuns]);
+    untracked = await git(root, [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      ...outsideRuns,
+    ]);
   } catch {
     throw new RelayError("validation", "git diff failed", "base");
   }
@@ -43,7 +60,28 @@ export async function diffSize(cwd: string, base: string, head: string): Promise
     added += count(add);
     deleted += count(del);
   }
+  for (const name of untracked.split("\0")) {
+    if (name.length === 0) continue;
+    files += 1;
+    added += await lineCount(root, name);
+  }
   return { files, added, deleted };
+}
+
+async function lineCount(cwd: string, name: string): Promise<number> {
+  let body: Buffer;
+  try {
+    body = await readFile(join(cwd, name));
+  } catch {
+    return 0;
+  }
+  if (body.includes(0) || body.length === 0) return 0;
+  let lines = 0;
+  for (const byte of body) {
+    if (byte === 10) lines += 1;
+  }
+  if (body[body.length - 1] !== 10) lines += 1;
+  return lines;
 }
 
 function count(value: string | undefined): number {

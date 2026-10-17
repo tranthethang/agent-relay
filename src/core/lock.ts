@@ -113,6 +113,39 @@ export async function removeLock(runDir: string, task: string): Promise<LockFile
   return owner;
 }
 
+export async function createStealGuard(
+  runDir: string,
+  task: string,
+  session: string,
+): Promise<void> {
+  const name = taskName(task);
+  const rel = `locks/${name}.steal`;
+  const filePath = joinUnder(runDir, "locks", `${name}.steal`);
+  await mkdir(joinUnder(runDir, "locks"), { recursive: true });
+  let handle;
+  try {
+    handle = await open(filePath, "wx");
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? error.code : "";
+    if (code === "EEXIST") throw new RelayError("lock", `steal guard exists: ${rel}`, rel);
+    throw error;
+  }
+  const body = { session, ts: new Date().toISOString() };
+  try {
+    await handle.writeFile(`${JSON.stringify(body)}\n`, "utf8");
+  } catch (error) {
+    await handle.close();
+    await rm(filePath, { force: true });
+    throw error;
+  }
+  await handle.close();
+}
+
+export async function removeStealGuard(runDir: string, task: string): Promise<void> {
+  const name = taskName(task);
+  await rm(joinUnder(runDir, "locks", `${name}.steal`), { force: true });
+}
+
 export async function stealLock(
   runDir: string,
   task: string,
