@@ -17,4 +17,5 @@ root [`README.md`](../README.md). Agent constraints for editing the repo are in
 | [troubleshooting.md](troubleshooting.md)   | Triage install, gate, and lock failures          |
 
 Related root files: [`CONTRIBUTING.md`](../CONTRIBUTING.md),
-[`CHANGELOG.md`](../CHANGELOG.md), [`VERSION`](../VERSION).
+[`CHANGELOG.md`](../CHANGELOG.md), [`ROADMAP.md`](../ROADMAP.md),
+[`VERSION`](../VERSION).

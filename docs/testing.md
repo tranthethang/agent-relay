@@ -3,7 +3,7 @@
 ```bash
 npm test
 npm run check
-bash scripts/maint/sync-references.sh --check
+npm run sync:check
 ```
 
 `npm test` builds `dist/atry.js` and runs vitest. CLI tests spawn that binary.

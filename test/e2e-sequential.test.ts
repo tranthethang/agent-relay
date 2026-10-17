@@ -1,22 +1,12 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { mustCli } from "./e2e.js";
+import { closeRun, completeReview, mustCli } from "./e2e.js";
 import { gitCommit, withTempGitRepo } from "./helper.js";
 
 const tasksInput = {
   schema: 1,
   tasks: [{ title: "Add the note", deps: [], files: ["src/note.ts"] }],
-};
-
-const review = {
-  schema: 1,
-  kind: "self",
-  tool: "cursor",
-  model: "unknown",
-  fixed: 0,
-  tests: "pass",
-  open: [],
 };
 
 test("a sequential run moves from run new to close", async () => {
@@ -46,18 +36,10 @@ test("a sequential run moves from run new to close", async () => {
     );
     expect(JSON.parse(implemented.stdout)).toMatchObject({ lifecycle: "reviewing" });
 
-    await mustCli(["review", "new", run, "self", "--tool", "cursor", "--model", "unknown"], dir);
-    await writeFile(join(run, "30-self-review", "01.json"), `${JSON.stringify(review)}\n`);
-    await mustCli(["review", "done", run, "self"], dir);
+    await completeReview(dir, run, "self", "cursor", "unknown");
+    await completeReview(dir, run, "cross", "codex", "gpt-5.4");
 
-    await mustCli(["review", "new", run, "cross", "--tool", "codex", "--model", "gpt-5.4"], dir);
-    await writeFile(
-      join(run, "40-cross-review", "01.json"),
-      `${JSON.stringify({ ...review, kind: "cross", tool: "codex", model: "gpt-5.4" })}\n`,
-    );
-    await mustCli(["review", "done", run, "cross"], dir);
-
-    const closed = await mustCli(["close", run, "--via", "arg", "--json"], dir);
+    const closed = await closeRun(dir, run);
     expect(JSON.parse(closed.stdout)).toMatchObject({ lifecycle: "closed" });
     const status = await mustCli(["status", run, "--json"], dir);
     expect(JSON.parse(status.stdout)).toMatchObject({ lifecycle: "closed" });

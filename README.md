@@ -130,8 +130,8 @@ scaffold that already has every key. Task status lives in events.
 ```bash
 npm test
 npm run check
-bash scripts/maint/sync-references.sh --check
+npm run sync:check
 ```
 
 Contributor rules: [`AGENTS.md`](AGENTS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).
-Maintainer docs: [`docs/INDEX.md`](docs/INDEX.md).
+Maintainer docs: [`docs/INDEX.md`](docs/INDEX.md). History and next work: [`ROADMAP.md`](ROADMAP.md).

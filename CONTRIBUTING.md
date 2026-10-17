@@ -22,7 +22,7 @@ Detail: [`docs/testing.md`](docs/testing.md).
 ```bash
 npm test
 npm run check
-bash scripts/maint/sync-references.sh --check
+npm run sync:check
 ```
 
 CI runs `npm test` on macOS, Linux, and Windows. It also checks formatting
@@ -31,21 +31,20 @@ and skill-reference sync.
 ## Formatting
 
 ```bash
-brew install shfmt dprint
+brew install dprint
 make fmt
 make fmt-check
 ```
 
-`dprint.json` formats TypeScript, markdown, and yaml, and runs `shfmt` on
-`scripts/maint/sync-references.sh`. Edit convention parts under
-`docs/conventions/`, then run `make fmt`, so the generated copies match.
+`dprint.json` formats TypeScript, markdown, and yaml. Edit convention parts
+under `docs/conventions/`, then run `make fmt`, so the generated copies match.
 
 ## Where things live
 
 - Skill bundles: `skills/<name>/`
 - CLI: `src/` and the published `dist/atry.js`
 - Tests: `test/`
-- Maintainer sync: `scripts/maint/sync-references.sh`
+- Maintainer sync: `scripts/maint/sync-references.ts` (`npm run sync`)
 - Release version: [`VERSION`](VERSION) (`YY.M.D`, matching `package.json`
   and the `v*` tag)
 

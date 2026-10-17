@@ -58,15 +58,20 @@ function skillEnv(home: string): NodeJS.ProcessEnv {
 }
 
 function runSkills(home: string): Promise<{ code: number; stdout: string; stderr: string }> {
-  const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+  // Node refuses to spawn a .cmd file without a shell (EINVAL), so Windows goes
+  // through cmd.exe. Quote the repo path and drop its trailing separator so the
+  // closing quote is not escaped.
+  const win = process.platform === "win32";
+  const npx = win ? "npx.cmd" : "npx";
+  const repoArg = win ? `"${repo.replace(/[\\/]+$/, "")}"` : repo;
   return new Promise((resolve, reject) => {
     const child = spawn(
       npx,
-      ["--yes", "skills@1.7.2", "add", repo, "-g", "--copy", "-y", "--json", "-a", ...agents],
+      ["--yes", "skills@1.7.2", "add", repoArg, "-g", "--copy", "-y", "--json", "-a", ...agents],
       {
         cwd: tmpdir(),
         env: skillEnv(home),
-        shell: process.platform === "win32",
+        shell: win,
       },
     );
     let stdout = "";

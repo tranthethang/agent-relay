@@ -24,7 +24,7 @@ This repo does not call agents or pick models.
 | CLI    | `src/cli/`                         | Commander router                               |
 | Core   | `src/core/`                        | Schemas, events, gates, claim, review, distill |
 | Tests  | `test/`                            | Vitest, including CLI end-to-end tests         |
-| Sync   | `scripts/maint/sync-references.sh` | Copy convention parts into skill bundles       |
+| Sync   | `scripts/maint/sync-references.ts` | Copy convention parts into skill bundles       |
 
 Build output is `dist/atry.js`. Git ignores `dist/`.
 

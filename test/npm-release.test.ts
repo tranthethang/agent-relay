@@ -11,6 +11,8 @@ test("npm release checks CalVer and publishes latest with provenance", () => {
   expect(yaml).toContain("package.json");
   expect(yaml).toContain("VERSION");
   expect(yaml).toContain("YY.M.D");
-  expect(yaml).not.toContain("NPM_TOKEN");
-  expect(yaml).not.toContain("NODE_AUTH_TOKEN");
+  expect(yaml).toContain("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
+  expect(yaml).toContain("npm view");
+  expect(yaml).toContain("steps.published.outputs.already != 'true'");
+  expect(yaml).not.toContain("trusted publishing");
 });

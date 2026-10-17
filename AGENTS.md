@@ -15,13 +15,11 @@ steps are in [`README.md`](README.md).
 ## Hard constraints
 
 - Node.js 22 or newer for the CLI and the tests.
-- Bash remains only for `scripts/maint/sync-references.sh`. Use
-  `set -euo pipefail` in that script.
+- No bash scripts. Sync shared skill text with `npm run sync`.
 - No `sudo`. Do not write an installer that targets `$HOME`.
 - Do not invent orchestration. Record state in `events.jsonl`.
 - Do not claim CI proves skills work end-to-end. CI runs `npm run check`,
-  `npm test` on macOS, Linux, and Windows, and
-  `scripts/maint/sync-references.sh --check`.
+  `npm test` on macOS, Linux, and Windows, and `npm run sync:check`.
 - Sole-maintainer repo: do not add migration for v1 runs or the old bash tree.
 
 ## Layout
@@ -33,7 +31,7 @@ steps are in [`README.md`](README.md).
 | `skills/<name>/`                   | Skill bundles (`SKILL.md` plus `references/`; no `scripts/`) |
 | `docs/`                            | Maintainer docs. Start at [`docs/INDEX.md`](docs/INDEX.md)   |
 | `docs/file-conventions.md`         | Generated from `docs/conventions/` and synced into bundles   |
-| `scripts/maint/sync-references.sh` | Copies convention parts and partials into skills             |
+| `scripts/maint/sync-references.ts` | Copies convention parts and partials into skills             |
 | `VERSION`                          | Release version. The git tag is `v` plus this string         |
 
 ## Editing skills and docs
@@ -41,7 +39,7 @@ steps are in [`README.md`](README.md).
 1. Edit `docs/conventions/` for run layout. Edit `docs/partials/preflight.md`
    and `docs/partials/writing.md` for shared skill text. Do not hand-edit
    `docs/file-conventions.md` or `skills/*/references/file-conventions.md`.
-2. Run `bash scripts/maint/sync-references.sh`. CI fails on drift (`--check`).
+2. Run `npm run sync`. CI fails on drift (`npm run sync:check`).
 3. Skill text calls `atry` verbs. Do not tell the agent to run files under
    `scripts/`.
 4. Keep claims honest. Same-tool cross-review is a warning. `claim` checks
@@ -52,7 +50,7 @@ steps are in [`README.md`](README.md).
 ```bash
 npm test
 npm run check
-bash scripts/maint/sync-references.sh --check
+npm run sync:check
 ```
 
 ## Versioning

@@ -13,9 +13,9 @@ check: ## Typecheck and check formatting
 	npm run check
 
 fmt: ## Format files and sync skill references
-	bash scripts/maint/sync-references.sh
+	npm run sync
 	dprint fmt
 
 fmt-check: ## Check formatting and skill reference sync
-	bash scripts/maint/sync-references.sh --check
+	npm run sync:check
 	dprint check
