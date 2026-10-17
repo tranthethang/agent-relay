@@ -3,7 +3,7 @@
 # to keep here as documentation of the convention)
 .agent-relay/
 
-# Release build output (scripts/build-release-assets.sh) and the TypeScript bundle
+# TypeScript bundle
 dist/
 
 node_modules/

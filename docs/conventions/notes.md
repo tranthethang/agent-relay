@@ -1,8 +1,7 @@
 ## Notes
 
-- Put each run at `.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`.
-- Commit `.agent-relay/` if you want the notes on the branch. Otherwise add
-  the directory to `.gitignore`. This repo does not choose for you.
-  `bin/install.sh` prints that reminder.
-- Id generation: `RUN_ID` is generated offline via `date +%s` (Unix epoch
-  seconds). No npm or network required.
+- Commit `.agent-relay/` when you want the notes on the branch. Otherwise add
+  the directory to `.gitignore`. This repo does not choose.
+- Run ids come from `atry run new`. They do not need a network call.
+- v1 files such as `plan.md`, `meta.md`, and `history.log` are not part of
+  this layout. `atry` does not read them.

@@ -1,7 +1,7 @@
 ---
 name: atry-implement
 description: Use when the user asks to implement, build, or code from an existing agent-relay plan.
-requires-atry: ">=26.10.16"
+requires-atry: ">=26.10.17"
 ---
 
 # Implement

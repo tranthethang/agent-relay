@@ -9,8 +9,7 @@
     "commands": [
       {
         "command": "shfmt -i 2 -ln bash",
-        "exts": ["sh"],
-        "fileNames": ["atry"]
+        "exts": ["sh"]
       }
     ]
   },

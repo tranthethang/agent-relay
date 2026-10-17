@@ -1,7 +1,7 @@
 ---
 name: atry-cross-review
 description: Use when the user asks for a second opinion or an independent review of an agent-relay change.
-requires-atry: ">=26.10.16"
+requires-atry: ">=26.10.17"
 ---
 
 # Cross-Review

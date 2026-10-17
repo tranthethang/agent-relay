@@ -1,7 +1,7 @@
 ---
 name: atry-self-review
 description: Use right after an agent-relay implement stage finishes, before any cross-review.
-requires-atry: ">=26.10.16"
+requires-atry: ">=26.10.17"
 ---
 
 # Self-Review

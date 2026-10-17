@@ -6,8 +6,7 @@
 #                              (per-skill subset from the manifest below)
 #   - reviewer-conduct.md
 #     -> atry-self-review (canonical) -> atry-cross-review
-# Runtime helpers live under scripts/runtime/ and are installed via `atry`
-# (~/.agent-relay); skill bundles must not carry scripts/.
+# Skill bundles must not carry scripts/. The CLI is the npm `atry` binary.
 # Usage:
 #   bash scripts/maint/sync-references.sh              # update copies
 #   bash scripts/maint/sync-references.sh --check       # fail if any copy drifts

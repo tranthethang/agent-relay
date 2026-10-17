@@ -10,49 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  smoke:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Check bootstrap sync
-        run: bash ./scripts/maint/sync-bootstrap.sh --check
-
-      - name: Check skill bundle sync (references)
-        run: bash ./scripts/maint/sync-references.sh --check
-
-      - name: Run local smoke tests
-        run: bash ./tests/smoke.sh
-
-      - name: Run task scripts tests
-        run: bash ./tests/tasks.sh
-
-      - name: Run distill (manifest export) tests
-        run: bash ./tests/distill.sh
-
-      - name: Run human cockpit helper tests
-        run: bash ./tests/status.sh
-
-      - name: Run remote smoke tests
-        run: bash ./tests/smoke-remote.sh
-
-  shellcheck:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
-
-      - name: Run shellcheck
-        # Severity floor: -S warning (see CONTRIBUTING.md).
-        run: shellcheck -S warning bin/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh lib/*.sh tests/*.sh
-
   format:
     runs-on: ubuntu-latest
     steps:

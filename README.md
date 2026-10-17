@@ -2,174 +2,136 @@
 
 [![CI](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml)
 
-Markdown skills plus a small bash CLI (`atry`) for doing one piece of work in
-stages — plan, implement, self-review, cross-review — across AI coding tools
-(Cursor, Claude, Codex, Antigravity, Kiro). Each stage writes plain markdown
-into your repo so the next stage, in the same or another tool, can pick it up.
-
-You run every stage yourself, one at a time, in whichever tool you open.
-Nothing here schedules agents, calls a model, or checks that an agent followed
-a skill.
+Markdown skills plus a TypeScript CLI (`atry`) for one piece of work in stages:
+plan, implement, self-review, and cross-review. You run each stage yourself, in
+whatever tool you open. Nothing here schedules agents, calls a model, or checks
+that an agent followed a skill.
 
 ## What it does and does not do
 
 Does:
 
-- Install skill bundles (`SKILL.md` + `references/`) into each tool's global
-  skill directory, and the `atry` CLI into `~/.agent-relay/`.
-- Give skills a fixed file layout per run and helpers to create, resolve, log,
-  and review runs, and to split a plan into claimable tasks.
-- Record which tool and model each stage says it used, and what a human
-  approved, attested, or decided.
+- Install six skill bundles with `npx skills add`.
+- Install the `atry` CLI from npm. The binary name is `atry`.
+- Store run state in `events.jsonl` and a `run.json` cache.
+- Scaffold the files an agent fills, then validate them.
 
 Does not:
 
-- Run, order, or gate stages. An agent can skip a step or ignore a skill.
-- Verify provenance. `tool=` / `model=` lines are what the agent wrote;
-  `by=human` lines are what someone typed. Neither is proof.
-- Guarantee a tool loads the installed files. Install copies files to known
-  paths; smoke tests check front-matter, not that a tool picks the skill up.
-- Show that this workflow improves results. There is no measurement.
-
-## Stages
-
-![Six agent-relay skills: optional brainstorm, then plan, implement, self-review, and cross-review, with optional distill](assets/six-agent-relay-skills.webp)
-
-| Skill                                            | What it asks the agent to do                                                                       | Writes                                                                         |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [`atry-brainstorm`](skills/atry-brainstorm/)     | Investigate and discuss only, until you name the next skill                                        | nothing                                                                        |
-| [`atry-plan`](skills/atry-plan/)                 | Write goal, non-goals, decisions, and tasks with deps                                              | `plan.md`, `meta.md`, `history.log`                                            |
-| [`atry-implement`](skills/atry-implement/)       | Implement the plan task by task                                                                    | `implement-plan.md`, `implement-report.md` (or per-task dirs in parallel mode) |
-| [`atry-self-review`](skills/atry-self-review/)   | Review the diff against the plan; fix confirmed bugs                                               | `Self-Review` section in `review-report.md` / `review-walkthrough.md`          |
-| [`atry-cross-review`](skills/atry-cross-review/) | Second review, ideally in a different tool. Nothing enforces "different"; `atry review` only warns | `Cross-Review` section in the same two files                                   |
-| [`atry-distill`](skills/atry-distill/)           | Run `atry distill`. Not a stage: no history event, does not close the run, works at any state      | `distill/manifest` (file list + sha256, for external readers)                  |
-
-All files live under `your-repo/.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/`.
-Committing that directory or ignoring it is up to you. Layout and naming
-rules: [`docs/file-conventions.md`](docs/file-conventions.md) (also shipped as
-`references/file-conventions.md` in every bundle).
-
-A run is closed by a human with `atry close`; nothing closes it automatically.
-
-## `atry` CLI
-
-Skills call these verbs; you can run them directly too.
-
-```bash
-atry version
-atry resolve [RUN_ID or path]
-atry run-init "$id" --slug "$slug" --title "…" --base "$(git rev-parse HEAD)"
-atry history append "$RUN_DIR" implement started tool=cursor
-atry review upsert "$RUN_DIR/review-report.md" Self-Review "$(date +%F)" "$body_file"
-atry distill "$RUN_DIR"          # write distill/manifest
-```
-
-Commands meant for the person coordinating the run (they append records with
-`by=human`; they block nothing):
-
-```bash
-atry status [<run>]                        # read-only; shows next step
-atry approve <run> plan
-atry stamp <run> <stage> tool=… model=…    # record the real tool/model
-atry decide <run> <id> "resolution"        # appends decisions.md
-atry close <run> [--abandon "reason"]
-```
-
-Skills tell agents not to run `approve` / `stamp` / `decide` / `close` unless
-you asked. The CLI does not enforce that. `implement started` without a plan
-approval prints a warning and continues.
-
-### Parallel tasks (optional)
-
-`atry task-init` splits `plan.md` `## Tasks` into per-task status files;
-`atry claim` / `update` / `release` / `steal` / `list` / `check` coordinate
-several agents on one run with `mkdir` locks. This serializes task **status**
-only — it does not stop two agents editing the same source file. Use disjoint
-paths or separate worktrees. Details: [`docs/task-claim.md`](docs/task-claim.md).
+- Run, order, or watch stages. An agent can skip a step or ignore a skill.
+- Prove which tool or model ran. `tool` and `model` are records.
+- Read v1 run directories. Delete those yourself.
+- Prompt on a terminal. Questions happen in the agent chat.
 
 ## Install
 
-Needs bash ≥ 3.2 and standard POSIX tools. No `sudo`; writes only under
-`$HOME`.
+Node.js 22 or newer.
 
 ```bash
-git clone https://github.com/tranthethang/agent-relay.git
-cd agent-relay
-./bin/install.sh
-./bin/verify.sh      # fails with a fix line if `atry` is not runnable from PATH
+npx skills add tranthethang/agent-relay -g --copy
+npm i -g @tranthethang/agent-relay
 atry version
 ```
 
-| Tool        | Destination                                                  |
-| ----------- | ------------------------------------------------------------ |
-| Cursor      | `~/.cursor/skills/<name>/`                                   |
-| Antigravity | `~/.gemini/config/skills/<name>/`                            |
-| Claude      | `~/.claude/skills/<name>/`                                   |
-| Codex       | `~/.codex/skills/<name>/`                                    |
-| Kiro        | `~/.kiro/skills/<name>/`                                     |
-| (CLI)       | `~/.agent-relay/bin/atry` + `lib/`; shim `~/.local/bin/atry` |
+`--copy` writes real files. Some tools refuse a symlink that points outside
+their skill directory. Skill paths depend on the `skills` CLI. Cursor, Codex,
+and Antigravity share `~/.agents/skills/`. Claude Code uses `~/.claude/skills/`.
+Kiro uses `~/.kiro/skills/`.
 
-If `verify.sh` reports `atry is not on PATH`, add `~/.local/bin` to your login
-shell profile (zsh: `~/.zprofile`; bash: `~/.bash_profile`). Agents often
-start login shells, so a `~/.zshrc`-only change may not reach them:
+## Stages
+
+| Skill               | What it asks the agent to do                      |
+| ------------------- | ------------------------------------------------- |
+| `atry-brainstorm`   | Discuss only, until you name the next skill       |
+| `atry-plan`         | Create a run and fill `10-plan/`                  |
+| `atry-implement`    | Implement the plan task by task                   |
+| `atry-self-review`  | Review the diff against the plan                  |
+| `atry-cross-review` | Second review, ideally in a different tool        |
+| `atry-distill`      | Write `90-distill/manifest.json` at any run state |
+
+A run lives at `.agent-relay/{YMD}-{id}-{slug}/`. Commit that directory or
+ignore it. This repo does not choose.
+
+## `atry` CLI
+
+Text is the default. `--json` adds `"schema": 1`.
 
 ```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile
+atry version
+atry run new --slug <slug> --title <title>
+atry resolve [run]
+atry status [run]
+atry context <run> --json [--task T1]
+atry plan new <run>
+atry plan done <run>
+atry approve <run> --via confirm|arg
+atry stage start <run> implement --tool <tool>
+atry task start <run> T1
+atry task done <run> T1
+atry stage done <run> implement --tool <tool>
+atry review new <run> self|cross --tool <tool>
+atry review done <run> self|cross
+atry close <run> --via confirm|arg
+atry distill <run>
 ```
 
-Flags, `targets.conf`, adding a tool: [`docs/installer.md`](docs/installer.md).
+`atry approve` and `atry close` are for the person who coordinates the run.
+The skills ask before they run those verbs. Implement start refuses when the
+plan is not approved. Close refuses while the latest review has open questions,
+unless you pass `--ack-open`. `atry close --abandon <reason>` stops a run from
+any open state.
 
-### Release install
+### Parallel tasks
 
 ```bash
-REF="v26.10.16"
-curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/install.sh"
-curl -fLO "https://github.com/tranthethang/agent-relay/releases/download/${REF}/SHA256SUMS"
-shasum -a 256 -c SHA256SUMS
-bash ./install.sh --ref "$REF"
+atry claim <run> T1 --session <tag>
+atry release <run> T1 --session <tag>
+atry list <run>
 ```
 
-This README describes the default branch. A release tag can lag behind it;
-check [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` for what is not in the
-tag yet.
+`claim` refuses a task whose `files` overlap a lock held by another session.
+It does not create worktrees.
 
-`SHA256SUMS` catches truncated downloads, not a replaced release.
-`targets.conf` is `source`d as bash after an allowlist check that refuses
-anything other than plain `KEY=value` / `KEY=(...)` lines. That reduces risk;
-it does not make sourcing safe. See [`docs/security.md`](docs/security.md).
+## Run layout
 
-### Upgrading
+```text
+.agent-relay/
+  brainstorms/<YMD>-<slug>/notes.md, open.json
+  <YMD>-<id>-<slug>/
+    10-plan/overview.md
+    10-plan/tasks.input.json
+    10-plan/index.json
+    10-plan/T1.md
+    20-implement/T1.md
+    30-self-review/01.md, 01.json
+    40-cross-review/01.md, 01.json
+    90-distill/manifest.json
+    run.json
+    events.jsonl
+    locks/
+```
 
-Re-run `./bin/install.sh`. Install refuses to overwrite a skill directory
-without its `.agent-relay-owned` marker (for example one from a very old
-install or created by hand); remove those with `./bin/uninstall.sh --force`
-first. There is no migration for old run layouts or removed commands.
+Markdown is prose. `atry` does not parse it. An agent fills JSON only from a
+scaffold that already has every key. Task status lives in events.
 
 ## Known limits
 
-- Cross-review independence is a request in the skill text. `atry review`
-  prints a non-blocking warning when the Cross-Review `tool=` / `model=`
-  matches the Self-Review or the implementer's tool; it never refuses.
-- Plan approval is a warning, not a gate.
-- Parallel claim does not protect overlapping source edits.
-- Antigravity has moved its skills path before; install can succeed while the
-  app ignores the files.
-- Skill directories must be real directories inside each tool's skill dir;
-  some tools refuse symlinks that point outside it.
+- Cross-review independence is a request. `atry review done` warns when the
+  cross-review tool or model family matches implement or self-review. It does
+  not refuse.
+- `claim` checks recorded file paths. It does not stop two agents from editing
+  the same file outside those paths.
+- There is no migration from the bash CLI or from v1 run files.
+- CI runs `npm test` on macOS, Linux, and Windows. It does not show that an
+  agent follows a skill.
 
 ## Development
 
 ```bash
-make test                                   # smoke, tasks, distill, status, remote smoke
+npm test
+npm run check
 bash scripts/maint/sync-references.sh --check
-bash scripts/maint/sync-bootstrap.sh --check
 ```
 
-CI runs those suites, both sync checks, `shellcheck -S warning`, and a
-formatting check (`dprint` / `shfmt`). CI does not test whether any agent
-follows a skill.
-
-After editing `skills/` or `scripts/runtime/`, re-run `./bin/install.sh` to
-refresh your installed copies. Contributor rules: [`AGENTS.md`](AGENTS.md),
-[`CONTRIBUTING.md`](CONTRIBUTING.md). Maintainer docs:
-[`docs/INDEX.md`](docs/INDEX.md).
+Contributor rules: [`AGENTS.md`](AGENTS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Maintainer docs: [`docs/INDEX.md`](docs/INDEX.md).

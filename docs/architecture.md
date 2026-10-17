@@ -1,95 +1,38 @@
 # Architecture
 
-Short map of agent-relay for maintainers. This is descriptive of the current
-tree, not a roadmap.
+Short map of agent-relay. This describes the current tree.
 
 ## What runs where
 
+A person opens a tool and invokes a skill by name. The skill tells the agent
+to call `atry`. The agent writes prose with its own editor. `atry` writes
+`events.jsonl`, `run.json`, scaffolds, and locks.
+
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  Human opens Cursor / Claude / Codex / Antigravity / Kiro   │
-│  and invokes a skill by name                                │
-└───────────────────────────┬─────────────────────────────────┘
-                            │ reads installed bundle
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  ~/.…/skills/<name>/                                        │
-│    SKILL.md          ← instructions to the agent            │
-│    references/       ← e.g. file-conventions.md (copy)      │
-└───────────────────────────┬─────────────────────────────────┘
-                            │ agent runs `atry …` (PATH)
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  ~/.agent-relay/bin/atry + lib/*.sh                         │
-└───────────────────────────┬─────────────────────────────────┘
-                            │ agent writes under target repo
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  <target-repo>/.agent-relay/{YMD}-{RUN_ID}-{RUN_SLUG}/      │
-│                   plan.md / meta.md / history.log           │
-│                   implement-plan / report / review-*        │
-└─────────────────────────────────────────────────────────────┘
+tool skill text
+    -> atry (npm bin, dist/atry.js)
+        -> <repo>/.agent-relay/<YMD>-<id>-<slug>/
 ```
 
-Separately, **this** repo’s installer copies bundles into those global skill
-directories and installs the `atry` CLI under `~/.agent-relay/`. It does not
-call agents, pick models, or watch project `.agent-relay/` run dirs.
+This repo does not call agents or pick models.
 
 ## Layers
 
-| Layer                | Location                                                | Job                                                                                           |
-| -------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Skill text           | `skills/<name>/SKILL.md`                                | Tell an agent what to do; **record**, rarely enforce                                          |
-| Shared conventions   | `docs/conventions/*.md` → `docs/file-conventions.md`    | Artifact names / id / per-run layout (per-skill subset in each bundle)                        |
-| Helpers              | `scripts/atry` + `scripts/runtime/` → `~/.agent-relay/` | Bash the agent runs (`atry resolve`, `atry claim`, `atry review`, …)                          |
-| Maintainer scripts   | `scripts/maint/`                                        | Sync / release only (not installed for agents)                                                |
-| Installer            | `bin/install.sh`, `uninstall.sh`, `verify.sh`           | Copy / remove / check files under `$HOME` (+ atry home)                                       |
-| Shared install logic | `lib/bootstrap.sh`                                      | Download, checksum verify, `validate_targets_conf` (inlined into bin via `sync-bootstrap.sh`) |
-| Manifest             | `targets.conf`                                          | Per-tool install roots; still `source`d after allowlist validation                            |
-| Tests                | `tests/*.sh`                                            | Offline smoke of install + task helpers; not “did the agent obey the skill?”                  |
+| Layer  | Location                           | Job                                            |
+| ------ | ---------------------------------- | ---------------------------------------------- |
+| Skills | `skills/<name>/`                   | Instructions plus `references/`                |
+| CLI    | `src/cli/`                         | Commander router                               |
+| Core   | `src/core/`                        | Schemas, events, gates, claim, review, distill |
+| Tests  | `test/`                            | Vitest, including CLI end-to-end tests         |
+| Sync   | `scripts/maint/sync-references.sh` | Copy convention parts into skill bundles       |
 
-## Stage flow (expected usage)
+Build output is `dist/atry.js`. Git ignores `dist/`.
 
-0. **brainstorm** (optional) → read-only investigation and discussion; writes
-   nothing, no run directory
-1. **plan** → create run directory via `atry run-init`, write `plan.md`
-2. **approve** (optional, human) → `atry approve <run> plan` records approval;
-   implement warns but does not stop when missing
-3. **implement** → code + `implement-plan.md` / `implement-report.md` (or parallel dirs)
-4. **self-review** → upsert dated Self-Review section; broad-vision analysis;
-   escalate tradeoffs per `reviewer-conduct.md`
-5. **cross-review** → upsert Cross-Review with inverted-question framing
-   (skill asks for a different tool; nothing enforces it)
-6. **distill** (optional export) → `atry distill` writes
-   `$RUN_DIR/distill/manifest`; does not append history or close the run
-7. **close** (human) → `atry close` / `--abandon`
+## State
 
-`atry status` is the read-only cockpit for “where is this run / what next”.
-`atry stamp` / `atry decide` record tool/model attestation and decision
-resolutions. Nothing in this repo schedules that order. Skipping a stage is
-always possible.
+`events.jsonl` is the source of truth. `run.json` is a cache rebuilt from
+those events. Lifecycle values are `planned`, `approved`, `implementing`,
+`reviewing`, `closed`, and `abandoned`.
 
-## Sync gates (do not skip)
-
-Two copy-vs-source checks keep installable bundles from silently diverging:
-
-- `scripts/maint/sync-references.sh` — `docs/conventions/*.md` →
-  `docs/file-conventions.md` and per-skill `references/file-conventions.md`
-  (manifest subsets); `docs/partials/preflight.md` → marked regions in each
-  `SKILL.md`; also keeps review `*-template.md` and `reviewer-conduct.md`
-  byte-identical between `atry-self-review` and `atry-cross-review`; refuses
-  orphan `skills/*/scripts/`
-- `scripts/maint/sync-bootstrap.sh` — `lib/bootstrap.sh` body → marked regions in `bin/*.sh`
-
-CI runs both with `--check`.
-
-## Explicit non-goals
-
-- No message bus, orchestrator, or agent runtime
-- No cryptographic proof of which tool/model wrote a provenance line
-- No protection of overlapping source-file edits in parallel mode (only task **status** / report files)
-- No built-in knowledge vault, external memory sink, or typed-note distillation
-  (downstream tools may read `distill/manifest`)
-
-For trust detail see [security.md](security.md). For install mechanics see
-[installer.md](installer.md).
+Implement start requires `approved`. Close from `reviewing` reads the latest
+completed review. Open questions block close unless `--ack-open` is set.

@@ -1,7 +1,7 @@
 ---
 name: atry-plan
 description: Use when the user asks to plan work in this repo before implementing.
-requires-atry: ">=26.10.16"
+requires-atry: ">=26.10.17"
 ---
 
 # Plan

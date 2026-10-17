@@ -1,100 +1,22 @@
 # Testing
 
-Offline suites. They do **not** prove an agent followed a skill or that a host
-app loaded an installed bundle.
-
-## Commands
-
 ```bash
-make test                 # smoke + tasks + distill + status + remote smoke
-make smoke                # same as test today
-./tests/smoke.sh          # install / uninstall / verify under fake HOME
-./tests/tasks.sh          # atry task-init / claim / review helpers
-./tests/distill.sh        # atry distill (manifest export)
-./tests/status.sh         # human cockpit (status/approve/stamp/decide/close)
-./tests/smoke-remote.sh   # --ref path with stubbed curl + fixtures
-```
-
-Also required before claiming a change that touches sync surfaces:
-
-```bash
-bash scripts/maint/sync-bootstrap.sh --check
+npm test
+npm run check
 bash scripts/maint/sync-references.sh --check
-bash -n bin/*.sh lib/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh tests/*.sh
 ```
 
-Formatting (needs `dprint` and `shfmt` on `PATH`):
+`npm test` builds `dist/atry.js` and runs vitest. CLI tests spawn that binary.
+They do not call the `atry` on `PATH`.
 
-```bash
-make fmt         # write
-make fmt-check   # CI-style check + sync --check
-```
+End-to-end tests live in `test/e2e-sequential.test.ts` and
+`test/e2e-parallel.test.ts`. They drive `run new` through `close`, and a
+two-session claim with an overlap refusal. CI runs the same `npm test` on
+macOS, Linux, and Windows.
 
-CI (`.github/workflows/ci.yml`):
+`test/skills-install.test.ts` runs `npx skills@1.7.2 add <repo> -g --copy` with a
+temporary `HOME`. It needs network access the first time `npx` fetches
+`skills`.
 
-- Matrix: `ubuntu-latest`, `macos-latest` — both sync checks + all three test
-  scripts
-- `shellcheck -S warning` on `bin/`, `scripts/atry`, `scripts/runtime/`,
-  `scripts/maint/`, `lib/`, `tests/`
-- `dprint check` (shell via exec→shfmt, plus markdown/yaml)
-
-Severity floor is **warning** (warning-clean across in-scope files; see
-`CONTRIBUTING.md`).
-
-## What each suite covers
-
-### `tests/smoke.sh`
-
-- Installs into a temporary `HOME` (never your real skill dirs)
-- Per-tool skill-folder paths for cursor / antigravity / claude / codex / kiro
-- Front-matter: each installed `SKILL.md` starts with `---` and has non-empty
-  `name:` / `description:` inside that block
-- Bundle `references/` present; no skill `scripts/`; `~/.agent-relay` `atry`
-  CLI + PATH shim
-- Ownership marker `.agent-relay-owned`; uninstall refuses unmarked dirs;
-  `--force` uninstall; symlink destination outside tool dir refused
-- Flag edge cases: `--only`, unknown tool/skill, `--no-clobber`, `--target`
-  rejected
-- `validate_targets_conf`: real `targets.conf`, benign `.resource` path, bare
-  command line, `VAR=value cmd`, command substitution
-
-### `tests/tasks.sh`
-
-- Happy path claim → update → release → list
-- `check` OK → hand-edited rollup → `MISMATCH` → restore → OK
-- Lock collision, concurrent claim, steal mutex, deps / cycles / sorting
-- Cross-operation races (barrier + N iterations): steal vs release, claim vs
-  steal, update vs steal, release vs release
-- Rejected inputs: invalid init status / dependency id, failed-init cleanup,
-  unowned `report-write` (and `--force` history)
-- `atry review` upsert idempotency, fenced headings (char/length/indent),
-  same-tool warning, fence-aware provenance
-- `scripts/maint/sync-references.sh --check` and drift / orphan-scripts
-  detection
-
-### `tests/smoke-remote.sh`
-
-- Stubbed `curl` + `tests/fixtures/` tarball / `SHA256SUMS`
-- Honors `--ref` / `--sha256` and `AGENT_RELAY_*` env
-- Bad checksum / layout failures
-
-Requires fixtures under `tests/fixtures/` (script errors clearly if missing).
-
-## Adding a regression
-
-1. Prefer extending the suite that already owns the surface (`smoke` vs
-   `tasks`).
-2. Keep tests offline (no network, no real `$HOME`).
-3. For bash heredocs that embed ` ``` ` or `$()`, use `printf` / quoted
-   heredocs — unquoted `<<EOF` expands backticks (already burned once in
-   review-section tests).
-4. After changing `scripts/runtime/` or `docs/file-conventions.md`, run
-   `scripts/maint/sync-references.sh` (not only `--check`) and reinstall so
-   `~/.agent-relay` matches before dogfooding.
-5. After changing `lib/bootstrap.sh`, run `scripts/maint/sync-bootstrap.sh`.
-
-## What green CI does _not_ mean
-
-- A listed IDE loads the skill
-- Provenance `tool=` / `model=` were truthful
-- Parallel agents did not race the same source file
+`npm run check` runs dprint and `tsc --noEmit`. CI does the same. CI does not
+prove that an agent follows a skill.

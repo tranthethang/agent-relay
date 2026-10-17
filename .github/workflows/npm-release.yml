@@ -70,5 +70,5 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Publish to npm next
-        run: npm publish --provenance --access public --tag next
+      - name: Publish to npm latest
+        run: npm publish --provenance --access public --tag latest
