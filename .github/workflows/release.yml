@@ -1,0 +1,93 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      major:
+        description: "Raise X and set Z to 0"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse unless main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Release runs on refs/heads/main. Current ref is ${GITHUB_REF}." >&2
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compute the next version
+        id: version
+        env:
+          TZ: Asia/Ho_Chi_Minh
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.major }}" = "true" ]; then
+            version="$(node --experimental-strip-types scripts/maint/next-version.ts --major)"
+          else
+            version="$(node --experimental-strip-types scripts/maint/next-version.ts)"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Check requires-atry
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types scripts/maint/next-version.ts --check-requires "${{ steps.version.outputs.version }}"
+
+      - name: Install dprint
+        run: npm install -g dprint@0.57.4
+
+      - name: Check format and types
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Set the package version
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
+
+      - name: Push the tag
+        run: |
+          set -euo pipefail
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public --tag latest
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ steps.version.outputs.version }}" --generate-notes

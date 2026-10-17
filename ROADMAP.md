@@ -34,4 +34,4 @@ P12 `next-version-scheme` changes the version scheme and publishes.
 
 The README lists the current limits. Cross-review in the same tool is a warning. `claim` checks the paths recorded on the task. v1 run directories are not read.
 
-P11 removed the bash script, the pnpm files, and the shfmt step, and extended the parallel end-to-end test to `close`. The npm workflow publishes with `NPM_TOKEN`. The first publish is manual. P12 changes the version scheme, bumps the version, and does that first publish. This repo does not set up trusted publishing.
+P11 removed the bash script, the pnpm files, and the shfmt step, and extended the parallel end-to-end test to `close`. The npm workflow publishes with `NPM_TOKEN`. v2 uses `X.M.Z` from the first release. This repo does not set up trusted publishing.

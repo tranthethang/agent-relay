@@ -1,7 +1,7 @@
 ---
 name: atry-distill
 description: Use when the user wants to export a run manifest, at any run state.
-requires-atry: ">=26.10.17"
+requires-atry: ">=0.1.0"
 ---
 
 # Distill
@@ -16,6 +16,7 @@ This skill writes `90-distill/manifest.json` for one run. It does not close the 
 
 This skill needs `requires-atry` in its front matter.
 Run `atry version --json` before any other command in this skill.
+Stop when the output is not a JSON object with `schema` and `version`, and tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 Read the `version` string from that JSON.
 Split both versions on `.` and compare the numbers from the left.
 Find the first pair of numbers that differ. Ignore the numbers after that pair.

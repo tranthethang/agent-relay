@@ -26,5 +26,5 @@ test("package.json matches the P1 package contract", () => {
     "typescript",
     "vitest",
   ]);
-  expect(pkg.version).toBe(readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim());
+  expect(pkg.version).toBe("0.0.0");
 });

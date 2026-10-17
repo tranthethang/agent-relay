@@ -135,3 +135,4 @@ npm run sync:check
 
 Contributor rules: [`AGENTS.md`](AGENTS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).
 Maintainer docs: [`docs/INDEX.md`](docs/INDEX.md). History and next work: [`ROADMAP.md`](ROADMAP.md).
+Release notes: [GitHub Releases](https://github.com/tranthethang/agent-relay/releases).

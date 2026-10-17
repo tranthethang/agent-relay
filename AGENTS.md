@@ -32,7 +32,7 @@ steps are in [`README.md`](README.md).
 | `docs/`                            | Maintainer docs. Start at [`docs/INDEX.md`](docs/INDEX.md)   |
 | `docs/file-conventions.md`         | Generated from `docs/conventions/` and synced into bundles   |
 | `scripts/maint/sync-references.ts` | Copies convention parts and partials into skills             |
-| `VERSION`                          | Release version. The git tag is `v` plus this string         |
+| `scripts/maint/next-version.ts`    | Next `X.M.Z` version from tags and the month                 |
 
 ## Editing skills and docs
 
@@ -55,20 +55,18 @@ npm run sync:check
 
 ## Versioning
 
-- Calendar version `YY.M.D` (UTC day of the release; no zero padding), no `v`
-  in [`VERSION`](VERSION). The git tag is `v` plus that string (for example
-  `26.9.30` becomes `v26.9.30`). `package.json` `version` matches `VERSION`.
-- One release per UTC calendar day.
+- The version is `X.M.Z`. The git tag is `v` plus that string.
+- `X` starts at `0`. It rises only when the release workflow input `major` is true.
+- `M` is the month in `Asia/Ho_Chi_Minh`. It is `1` to `12`, with no zero padding.
+- `Z` is the release count in that month. It is `0` to `99`.
+- `package.json` in git stays `0.0.0`. The workflow sets the version before publish.
 - Full steps: [`docs/release.md`](docs/release.md).
 
 ## Release checklist
 
-1. Bump [`VERSION`](VERSION), [`package.json`](package.json), and
-   [`CHANGELOG.md`](CHANGELOG.md) together.
-2. Update [`README.md`](README.md) when install behavior changes.
-3. Commit on the branch you intend to tag.
-4. Tag `v$(cat VERSION)` and push it. The npm workflow refuses a mismatched
-   tag and publishes dist-tag `latest`.
+1. Run the Release workflow on `main`. Set `major` when the next number would not be higher, such as January after December.
+2. The workflow publishes npm dist-tag `latest` and opens a GitHub Release.
+3. Update [`README.md`](README.md) when install behavior changes.
 
 ## Tone
 

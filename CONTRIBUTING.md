@@ -45,7 +45,6 @@ under `docs/conventions/`, then run `make fmt`, so the generated copies match.
 - CLI: `src/` and the published `dist/atry.js`
 - Tests: `test/`
 - Maintainer sync: `scripts/maint/sync-references.ts` (`npm run sync`)
-- Release version: [`VERSION`](VERSION) (`YY.M.D`, matching `package.json`
-  and the `v*` tag)
+- Release version: `X.M.Z` from git tags. `package.json` in git stays `0.0.0`. Notes are the [GitHub Releases](https://github.com/tranthethang/agent-relay/releases).
 
 Installing a skill is not the same as using the stages in that tool.

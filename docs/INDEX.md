@@ -12,10 +12,10 @@ root [`README.md`](../README.md). Agent constraints for editing the repo are in
 | [skills-authoring.md](skills-authoring.md) | Edit or add a skill bundle                       |
 | [task-claim.md](task-claim.md)             | Maintain claim, release, and file-overlap checks |
 | [testing.md](testing.md)                   | Run or extend the vitest suites                  |
-| [release.md](release.md)                   | Cut a calendar version and publish npm `latest`  |
+| [release.md](release.md)                   | Cut an `X.M.Z` release and publish npm `latest`  |
 | [security.md](security.md)                 | Understand trust boundaries                      |
 | [troubleshooting.md](troubleshooting.md)   | Triage install, gate, and lock failures          |
 
-Related root files: [`CONTRIBUTING.md`](../CONTRIBUTING.md),
-[`CHANGELOG.md`](../CHANGELOG.md), [`ROADMAP.md`](../ROADMAP.md),
-[`VERSION`](../VERSION).
+Related root files: [`CONTRIBUTING.md`](../CONTRIBUTING.md)
+and [`ROADMAP.md`](../ROADMAP.md). Release notes are the
+[GitHub Releases](https://github.com/tranthethang/agent-relay/releases).

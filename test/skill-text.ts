@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import { requiresFits as schemeFits } from "../scripts/maint/next-version.ts";
 
 const forbidden = /\b(mktemp|trap|heredoc|grep|sed)\b/;
+const scheme = /^>=(0|[1-9][0-9]*)\.([1-9]|1[0-2])\.([0-9]|[1-9][0-9])$/;
 
 export function skillText(name: string): string {
   return readFileSync(new URL(`../skills/${name}/SKILL.md`, import.meta.url), "utf8");
@@ -40,35 +42,12 @@ export function sharedRequires(texts: readonly string[]): string {
   return first;
 }
 
-export function compareCalver(left: string, right: string): number {
-  const a = calverParts(left);
-  const b = calverParts(right);
-  for (let index = 0; index < 3; index += 1) {
-    const x = a[index] ?? 0;
-    const y = b[index] ?? 0;
-    if (x !== y) return x < y ? -1 : 1;
-  }
-  return 0;
-}
-
 export function requiresFits(required: string, version: string): boolean {
-  return compareCalver(required, version) <= 0;
+  return schemeFits(required, version);
 }
 
 export function requiredVersion(): string {
   const required = sharedRequires(skillNames.map((name) => skillText(name)));
-  const version = readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
-  if (!requiresFits(required, version)) {
-    throw new Error("requires-atry is higher than VERSION");
-  }
-  return required.replace(/^[<>=]+/, "");
-}
-
-function calverParts(value: string): number[] {
-  const bare = value.replace(/^[<>=]+/, "");
-  const parts = bare.split(".");
-  if (parts.length !== 3 || parts.some((part) => !/^[0-9]+$/.test(part))) {
-    throw new Error("bad calver");
-  }
-  return parts.map((part) => Number(part));
+  if (!scheme.test(required)) throw new Error("requires-atry is not >=X.M.Z");
+  return required.replace(/^>=/, "");
 }
