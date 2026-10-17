@@ -6,6 +6,7 @@ import { RelayError } from "../core/error.js";
 import { oneToken, selectRun } from "../core/select.js";
 import { statusDetail, statusDetailText, statusList, statusListText } from "../core/status.js";
 import { schemaVersion } from "../core/vocab.js";
+import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
 
 export function registerCommands(program: Command): void {
@@ -60,6 +61,8 @@ export function registerCommands(program: Command): void {
       const result = await contextFor(await selectRun(process.cwd(), token), opts.task);
       writeResult(result, commandJson(command), contextText);
     });
+
+  registerLifecycle(program);
 }
 
 function commandJson(command: Command): boolean {

@@ -78,6 +78,16 @@ function checkIdentity(name: string, run: RunJson): void {
   }
 }
 
+export async function commitState(
+  runDir: string,
+  current: RunJson,
+  state: RunState,
+): Promise<RunJson> {
+  const run = withState(current, canonicalState(state));
+  await atomicWrite(join(runDir, "run.json"), `${JSON.stringify(run)}\n`);
+  return run;
+}
+
 function withState(current: RunJson, state: RunState): RunJson {
   const next: RunJson = {
     schema: schemaVersion,

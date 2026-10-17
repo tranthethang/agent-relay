@@ -58,3 +58,33 @@ export async function withTempGitRepo<T>(fn: (dir: string) => Promise<T>): Promi
     await rm(dir, { recursive: true, force: true });
   }
 }
+
+export function gitCommit(cwd: string, message = "init"): Promise<unknown> {
+  return execFileAsync(
+    "git",
+    [
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "user.name=test",
+      "commit",
+      "--allow-empty",
+      "-m",
+      message,
+    ],
+    { cwd },
+  );
+}
+
+export async function reachReview(runPath: string, cwd: string): Promise<void> {
+  for (
+    const args of [
+      ["approve", runPath, "--via", "arg"],
+      ["stage", "start", runPath, "implement", "--tool", "cursor"],
+      ["stage", "done", runPath, "implement", "--tool", "cursor"],
+    ]
+  ) {
+    const result = await runCli(args, cwd);
+    if (result.code !== 0) throw new Error(`${args.join(" ")}: ${result.stderr}`);
+  }
+}
