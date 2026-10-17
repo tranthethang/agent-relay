@@ -7,9 +7,11 @@ import { oneToken, selectRun } from "../core/select.js";
 import { statusDetail, statusDetailText, statusList, statusListText } from "../core/status.js";
 import { schemaVersion } from "../core/vocab.js";
 import { registerClaim } from "./claim.js";
+import { registerDistill } from "./distill.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
 import { registerPlan } from "./plan.js";
+import { registerReview } from "./review.js";
 
 export function registerCommands(program: Command): void {
   program
@@ -67,6 +69,8 @@ export function registerCommands(program: Command): void {
   registerLifecycle(program);
   registerPlan(program);
   registerClaim(program);
+  registerReview(program);
+  registerDistill(program);
 }
 
 function commandJson(command: Command): boolean {

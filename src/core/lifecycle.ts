@@ -254,10 +254,23 @@ async function assertNoOpenQuestions(runDir: string, events: readonly EventLine[
 }
 
 // The folder whose review `completed` event is newest wins. Without events, cross beats self.
+// A `ref` on that event names the exact file, so a later unfinished scaffold cannot hide it.
 async function latestReview(
   runDir: string,
   events: readonly EventLine[],
 ): Promise<{ path: string; open: number } | null> {
+  let newest: EventLine | undefined;
+  for (const event of events) {
+    if (event.action !== "completed") continue;
+    if (reviewDirs.some((review) => review.stage === event.stage)) newest = event;
+  }
+  if (newest?.ref !== undefined) {
+    const dir = reviewDirs.find((review) => review.stage === newest.stage)?.dir;
+    if (dir === undefined || !new RegExp(`^${dir}/[0-9]+\\.json$`).test(newest.ref)) {
+      throw new RelayError("validation", "invalid review ref", newest.ref);
+    }
+    return { path: newest.ref, open: await readReview(runDir, newest.ref) };
+  }
   const hits: { done: number; rank: number; n: number; rel: string }[] = [];
   for (const review of reviewDirs) {
     let done = -1;
