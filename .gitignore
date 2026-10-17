@@ -3,8 +3,13 @@
 # to keep here as documentation of the convention)
 .agent-relay/
 
-# Release build output (scripts/build-release-assets.sh)
+# Release build output (scripts/build-release-assets.sh) and the TypeScript bundle
 dist/
+
+node_modules/
+
+# Temporary git repos created by vitest
+.tmp-test/
 
 # macOS Finder metadata (any depth; pattern without slash matches nested paths)
 .DS_Store

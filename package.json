@@ -1,0 +1,37 @@
+{
+  "name": "@tranthethang/agent-relay",
+  "version": "26.10.16",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tranthethang/agent-relay.git"
+  },
+  "bin": {
+    "atry": "dist/atry.js"
+  },
+  "files": [
+    "dist/atry.js"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "check": "dprint check \"**/*.ts\" && tsc --noEmit",
+    "pretest": "npm run build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "15.0.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsup": "9.0.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

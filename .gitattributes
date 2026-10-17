@@ -1,0 +1,2 @@
+# dprint checks TypeScript with LF line endings; Windows runners check out CRLF by default.
+*.ts text eol=lf

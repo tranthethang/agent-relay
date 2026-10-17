@@ -97,9 +97,9 @@ bash -n bin/*.sh lib/*.sh scripts/atry scripts/runtime/*.sh scripts/maint/*.sh t
 
 ## Versioning
 
-- Calendar version `YY.MM.DD` (UTC day of the release; zero-padded), no `v`
-  in [`VERSION`](VERSION); git tag is `v` + that string (e.g. `26.09.28` →
-  `v26.09.28`).
+- Calendar version `YY.M.D` (UTC day of the release; no zero padding), no `v`
+  in [`VERSION`](VERSION); git tag is `v` + that string (e.g. `26.9.30` →
+  `v26.9.30`).
 - One release per UTC calendar day; do not cut a second tag the same UTC day.
 - Full release steps: [`docs/release.md`](docs/release.md).
 
@@ -111,7 +111,7 @@ builds `dist/` from the tagged commit; it does not rewrite README.
 
 1. Bump [`VERSION`](VERSION) and [`CHANGELOG.md`](CHANGELOG.md) together.
 2. Update [`README.md`](README.md) so user-facing pins match that version:
-   - Release-install `REF="vYY.MM.DD"` must equal `v` + contents of `VERSION`.
+   - Release-install `REF="vYY.M.D"` must equal `v` + contents of `VERSION`.
    - If install/upgrade behavior changed (ownership marker, `uninstall --force`,
      unsupported layouts), refresh the README upgrade section and
      [`docs/installer.md`](docs/installer.md) in the same commit.
