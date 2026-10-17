@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -35,6 +36,15 @@ export function runCli(args: string[], cwd: string): Promise<CliResult> {
       resolve({ stdout, stderr, code: code ?? 1 });
     });
   });
+}
+
+export async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
+  const dir = await mkdtemp(join(tmpdir(), "atry-"));
+  try {
+    return await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 export async function withTempGitRepo<T>(fn: (dir: string) => Promise<T>): Promise<T> {
