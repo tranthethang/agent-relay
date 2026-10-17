@@ -8,6 +8,7 @@ import { statusDetail, statusDetailText, statusList, statusListText } from "../c
 import { schemaVersion } from "../core/vocab.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
+import { registerPlan } from "./plan.js";
 
 export function registerCommands(program: Command): void {
   program
@@ -63,6 +64,7 @@ export function registerCommands(program: Command): void {
     });
 
   registerLifecycle(program);
+  registerPlan(program);
 }
 
 function commandJson(command: Command): boolean {
