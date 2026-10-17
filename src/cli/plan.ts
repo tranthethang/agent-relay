@@ -1,4 +1,5 @@
 import { type Command } from "commander";
+import { assertClaimOwner, releaseClaimLock } from "../core/claim.js";
 import { RelayError } from "../core/error.js";
 import {
   planAmend,
@@ -56,9 +57,14 @@ export function registerPlan(program: Command): void {
     .description("Mark a started task done")
     .argument("<run>", "run id, slug, name, or path")
     .argument("<task>", "task id")
-    .action(async (run: string, taskId: string, _opts: unknown, command: Command) => {
+    .option("--session <tag>", "session that owns the claim")
+    .action(async (run: string, taskId: string, opts: { session?: string }, command: Command) => {
       const runDir = await takeRun(command, run);
-      writeResult(await taskDone(runDir, taskId), commandJson(command), taskMoveText);
+      writeResult(
+        await taskDone(runDir, taskId, opts.session),
+        commandJson(command),
+        taskMoveText,
+      );
     });
   task
     .command("skip")
@@ -66,9 +72,19 @@ export function registerPlan(program: Command): void {
     .argument("<run>", "run id, slug, name, or path")
     .argument("<task>", "task id")
     .requiredOption("--reason <text>", "why the task is skipped")
-    .action(async (run: string, taskId: string, opts: { reason: string }, command: Command) => {
+    .option("--session <tag>", "session that owns the claim")
+    .action(async (
+      run: string,
+      taskId: string,
+      opts: { reason: string; session?: string },
+      command: Command,
+    ) => {
       const runDir = await takeRun(command, run);
-      writeResult(await taskSkip(runDir, taskId, opts.reason), commandJson(command), taskMoveText);
+      writeResult(
+        await taskSkip(runDir, taskId, opts.reason, opts.session),
+        commandJson(command),
+        taskMoveText,
+      );
     });
 }
 

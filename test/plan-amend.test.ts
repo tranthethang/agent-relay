@@ -49,11 +49,11 @@ test("atry plan amend keeps ids and refuses to drop a started task", async () =>
       { title: "First" },
       { title: "Second" },
       { title: "Third" },
-      { title: "Later", deps: ["T5"] },
+      { title: "Later", deps: ["T6"] },
     ]);
     const forward = await runCli(["plan", "amend", run], dir);
     expect(forward.code).toBe(2);
-    expect(forward.stderr).toContain("unknown id T5");
+    expect(forward.stderr).toContain("unknown id T6");
     await writeTasks(run, [{ title: "First" }, { title: "Third" }]);
     const middle = await runCli(["plan", "amend", run], dir);
     expect(middle.code).toBe(4);
@@ -62,5 +62,22 @@ test("atry plan amend keeps ids and refuses to drop a started task", async () =>
     const moved = await runCli(["plan", "amend", run, "--json"], dir);
     expect(moved.code).toBe(0);
     expect((JSON.parse(moved.stdout) as { tasks: string[] }).tasks).toEqual(["T2", "T1", "T3"]);
+  });
+});
+
+test("atry plan amend does not reuse the id of a dropped task", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "plan-reuse");
+    await writeTasks(run, [{ title: "First" }, { title: "Second" }]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await writeTasks(run, [{ title: "First" }]);
+    expect((await runCli(["plan", "amend", run], dir)).code).toBe(0);
+    await writeTasks(run, [{ title: "First" }, { title: "New" }]);
+    const amended = await runCli(["plan", "amend", run, "--json"], dir);
+    expect(amended.code).toBe(0);
+    expect((JSON.parse(amended.stdout) as { tasks: string[] }).tasks).toEqual(["T1", "T3"]);
+    expect(await readFile(join(run, "10-plan", "T3.md"), "utf8")).toContain("# T3: New");
+    expect(await readFile(join(run, "10-plan", "T2.md"), "utf8")).toContain("# T2: Second");
   });
 });

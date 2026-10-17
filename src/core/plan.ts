@@ -1,6 +1,7 @@
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { type ZodType } from "zod";
+import { assertClaimOwner, releaseClaimLock } from "./claim.js";
 import { fromZod, RelayError } from "./error.js";
 import { atomicWrite, isEnoent, readJson } from "./files.js";
 import { appendEvent, openRun } from "./mutate.js";
@@ -139,7 +140,10 @@ export async function planAmend(runDir: string): Promise<PlanDoneResult> {
       throw new RelayError("gate", `plan amend refused: ${task.id} has started`, task.id);
     }
   }
-  let next = maxTaskNumber(current.tasks.map((task) => task.id));
+  let next = maxTaskNumber([
+    ...current.tasks.map((task) => task.id),
+    ...(await planFileIds(runDir)),
+  ]);
   const ids = matched.map((existing) => {
     if (existing !== undefined) return existing;
     next += 1;
@@ -171,7 +175,11 @@ export async function taskStart(runDir: string, task: string): Promise<TaskMoveR
   return moveResult(runDir, id, "in-progress", implement);
 }
 
-export async function taskDone(runDir: string, task: string): Promise<TaskMoveResult> {
+export async function taskDone(
+  runDir: string,
+  task: string,
+  session?: string,
+): Promise<TaskMoveResult> {
   const id = parseTaskId(task);
   const loaded = await openRun(runDir);
   assertLifecycle(loaded.run.state, ["implementing"], "task done");
@@ -181,7 +189,9 @@ export async function taskDone(runDir: string, task: string): Promise<TaskMoveRe
   if (current !== "in-progress") {
     throw new RelayError("gate", `task done refused: ${id} is ${current}`, id);
   }
+  await assertClaimOwner(runDir, id, session);
   await appendEvent(loaded, runDir, { stage: "implement", action: "task-done", task: id });
+  await releaseClaimLock(runDir, id, session);
   return moveResult(runDir, id, "done", join(runDir, "20-implement", `${id}.md`));
 }
 
@@ -189,6 +199,7 @@ export async function taskSkip(
   runDir: string,
   task: string,
   reason: string,
+  session?: string,
 ): Promise<TaskMoveResult> {
   const id = parseTaskId(task);
   const text = reason.trim();
@@ -201,12 +212,14 @@ export async function taskSkip(
   if (current === "done" || current === "skipped") {
     throw new RelayError("gate", `task skip refused: ${id} is ${current}`, id);
   }
+  await assertClaimOwner(runDir, id, session);
   await appendEvent(loaded, runDir, {
     stage: "implement",
     action: "task-skipped",
     task: id,
     reason: text,
   });
+  await releaseClaimLock(runDir, id, session);
   const result = moveResult(runDir, id, "skipped", join(runDir, "20-implement", `${id}.md`));
   result.reason = text;
   return result;
@@ -266,6 +279,14 @@ function maxTaskNumber(ids: readonly string[]): number {
     if (number > max) max = number;
   }
   return max;
+}
+
+// A dropped task keeps its T<n>.md, so its id is never handed to a new task.
+async function planFileIds(runDir: string): Promise<string[]> {
+  const names = await readdir(join(runDir, "10-plan"));
+  return names
+    .filter((name) => /^T[1-9][0-9]*\.md$/.test(name))
+    .map((name) => name.slice(0, -".md".length));
 }
 
 function assertDeps(tasks: PlanIndex["tasks"]): void {

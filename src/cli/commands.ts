@@ -6,6 +6,7 @@ import { RelayError } from "../core/error.js";
 import { oneToken, selectRun } from "../core/select.js";
 import { statusDetail, statusDetailText, statusList, statusListText } from "../core/status.js";
 import { schemaVersion } from "../core/vocab.js";
+import { registerClaim } from "./claim.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
 import { registerPlan } from "./plan.js";
@@ -65,6 +66,7 @@ export function registerCommands(program: Command): void {
 
   registerLifecycle(program);
   registerPlan(program);
+  registerClaim(program);
 }
 
 function commandJson(command: Command): boolean {

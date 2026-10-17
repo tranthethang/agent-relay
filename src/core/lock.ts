@@ -105,3 +105,28 @@ export async function releaseLock(runDir: string, task: string, session: string)
   }
   await rm(lockFilePath(runDir, name));
 }
+
+export async function removeLock(runDir: string, task: string): Promise<LockFile> {
+  const name = taskName(task);
+  const owner = await readOwner(runDir, name);
+  await rm(lockFilePath(runDir, name));
+  return owner;
+}
+
+export async function stealLock(
+  runDir: string,
+  task: string,
+  session: string,
+  ttlMs: number,
+): Promise<LockFile> {
+  if (session.length === 0) {
+    throw new RelayError("usage", "session is empty", "session");
+  }
+  const name = taskName(task);
+  const owner = await readOwner(runDir, name);
+  if (!isStale(owner, ttlMs)) {
+    throw new RelayError("lock", `lock held by ${owner.session}`, `locks/${name}.lock`);
+  }
+  await rm(lockFilePath(runDir, name));
+  return acquireLock(runDir, name, session);
+}

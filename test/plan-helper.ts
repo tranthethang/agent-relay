@@ -26,6 +26,18 @@ export function taskInput(
   }\n`;
 }
 
+export async function startImplement(dir: string, run: string): Promise<void> {
+  for (
+    const args of [
+      ["approve", run, "--via", "arg"],
+      ["stage", "start", run, "implement", "--tool", "cursor"],
+    ]
+  ) {
+    const result = await runCli(args, dir);
+    if (result.code !== 0) throw new Error(`${args.join(" ")}: ${result.stderr}`);
+  }
+}
+
 export async function writeTasks(
   run: string,
   tasks: { title: string; deps?: string[]; files?: string[] }[],
