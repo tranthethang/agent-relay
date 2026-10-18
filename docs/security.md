@@ -14,8 +14,8 @@ product.
 | `decided` event      | Answer tied to a question and review path         | Proof that a person selected the answer      |
 | `claim` locks        | A per-task lock and a file-overlap check          | Protection for edits outside `files`         |
 | Run lock             | Serializes CLI state changes and event appends    | A lock on direct repository edits            |
-| Review tree check     | Compares the current tree with the latest review | Proof that an agent inspected every file      |
-| Review waiver         | Records `--waive-review` and its reason           | Evidence that a person approved the waiver    |
+| Review tree check    | Compares the current tree with the latest review  | Proof that an agent inspected every file     |
+| Review waiver        | Records `--waive-review` and its reason           | Evidence that a person approved the waiver   |
 
 `events.jsonl` is append-only only by convention of this CLI. Another process
 can edit the file. `atry` validates the events it reads.

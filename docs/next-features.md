@@ -31,11 +31,11 @@ Settled on 2026-10-18:
 
 Data in a run has three trust levels:
 
-| Level | Example                                         | Trust |
-| ----- | ----------------------------------------------- | ----- |
+| Level | Example                                                | Trust |
+| ----- | ------------------------------------------------------ | ----- |
 | 1     | `atry` measures it: `base`, `size`, event order, tests | High  |
-| 2     | Agent fills JSON: `fixed`, `open`, `tool`, `model`    | Low   |
-| 3     | Skill prose only: "edit only listed files"      | None  |
+| 2     | Agent fills JSON: `fixed`, `open`, `tool`, `model`     | Low   |
+| 3     | Skill prose only: "edit only listed files"             | None  |
 
 Some gates still read level 2 or level 3 data. The rule for new work:
 
