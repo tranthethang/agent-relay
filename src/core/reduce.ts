@@ -27,6 +27,7 @@ function applyEvent(state: RunState, event: EventLine): void {
 }
 
 function applyLifecycle(state: RunState, event: EventLine): void {
+  if (event.action === "waived") return;
   if (event.action === "abandoned") {
     state.lifecycle = "abandoned";
     return;

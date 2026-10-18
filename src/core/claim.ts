@@ -14,7 +14,7 @@ import {
   removeStealGuard,
   stealLock,
 } from "./lock.js";
-import { appendEvent, openRun } from "./mutate.js";
+import { appendEvent, withRunLock } from "./mutate.js";
 import { overlappingTask } from "./overlap.js";
 import { type RunState } from "./reduce.js";
 import { type PlanIndex, planIndexSchema } from "./tasks.js";
@@ -87,33 +87,34 @@ export async function claimTask(
 ): Promise<ClaimResult> {
   requireSession(session);
   const id = parseTaskId(task);
-  const loaded = await openRun(runDir);
-  assertImplementing(loaded.run.state, "claim");
-  const index = await loadPlanIndex(runDir);
-  const item = requireTask(index, id);
-  refuseFinished(loaded.run.state, id, "claim");
-  assertDeps(loaded.run.state, id, item.deps, "claim");
-  await acquireLock(runDir, id, session);
-  try {
-    await assertNoOverlap(runDir, index, id, session);
-  } catch (error) {
-    await releaseLock(runDir, id, session);
-    throw error;
-  }
-  const implement = await ensureImplement(runDir, item.id, item.title);
-  await appendAll(loaded, runDir, [
-    { stage: "implement", action: "claimed", task: id, session },
-    { stage: "implement", action: "task-started", task: id, session },
-  ]);
-  return {
-    schema: schemaVersion,
-    path: runDir,
-    task: id,
-    status: "in-progress",
-    session,
-    action: "claimed",
-    implement,
-  };
+  return withRunLock(runDir, async (loaded) => {
+    assertImplementing(loaded.run.state, "claim");
+    const index = await loadPlanIndex(runDir);
+    const item = requireTask(index, id);
+    refuseFinished(loaded.run.state, id, "claim");
+    assertDeps(loaded.run.state, id, item.deps, "claim");
+    await acquireLock(runDir, id, session);
+    try {
+      await assertNoOverlap(runDir, index, id, session);
+    } catch (error) {
+      await releaseLock(runDir, id, session);
+      throw error;
+    }
+    const implement = await ensureImplement(runDir, item.id, item.title);
+    await appendAll(loaded, runDir, [
+      { stage: "implement", action: "claimed", task: id, session },
+      { stage: "implement", action: "task-started", task: id, session },
+    ]);
+    return {
+      schema: schemaVersion,
+      path: runDir,
+      task: id,
+      status: "in-progress",
+      session,
+      action: "claimed",
+      implement,
+    };
+  });
 }
 
 export async function releaseTask(
@@ -125,36 +126,37 @@ export async function releaseTask(
 ): Promise<ReleaseResult> {
   requireSession(session);
   const id = parseTaskId(task);
-  const loaded = await openRun(runDir);
-  assertImplementing(loaded.run.state, "release");
-  const index = await loadPlanIndex(runDir);
-  requireTask(index, id);
-  const text = reason?.trim() ?? "";
-  if (force) {
-    if (text.length === 0) throw new RelayError("validation", "reason is empty", "reason");
-    await removeLock(runDir, id);
-  } else {
-    if (text.length > 0) throw new RelayError("usage", "reason requires --force", "reason");
-    await releaseLock(runDir, id, session);
-  }
-  const input = {
-    stage: "implement" as const,
-    action: "released" as const,
-    task: id,
-    session,
-    ...(force ? { reason: text } : {}),
-  };
-  await appendEvent(loaded, runDir, input);
-  const result: ReleaseResult = {
-    schema: schemaVersion,
-    path: runDir,
-    task: id,
-    session,
-    action: "released",
-    forced: force,
-  };
-  if (force) result.reason = text;
-  return result;
+  return withRunLock(runDir, async (loaded) => {
+    assertImplementing(loaded.run.state, "release");
+    const index = await loadPlanIndex(runDir);
+    requireTask(index, id);
+    const text = reason?.trim() ?? "";
+    if (force) {
+      if (text.length === 0) throw new RelayError("validation", "reason is empty", "reason");
+      await removeLock(runDir, id);
+    } else {
+      if (text.length > 0) throw new RelayError("usage", "reason requires --force", "reason");
+      await releaseLock(runDir, id, session);
+    }
+    const input = {
+      stage: "implement" as const,
+      action: "released" as const,
+      task: id,
+      session,
+      ...(force ? { reason: text } : {}),
+    };
+    await appendEvent(loaded, runDir, input);
+    const result: ReleaseResult = {
+      schema: schemaVersion,
+      path: runDir,
+      task: id,
+      session,
+      action: "released",
+      forced: force,
+    };
+    if (force) result.reason = text;
+    return result;
+  });
 }
 
 export async function stealTask(
@@ -168,35 +170,36 @@ export async function stealTask(
     throw new RelayError("usage", "ttl must be a non-negative number", "ttl");
   }
   const id = parseTaskId(task);
-  const loaded = await openRun(runDir);
-  assertImplementing(loaded.run.state, "steal");
-  const index = await loadPlanIndex(runDir);
-  const item = requireTask(index, id);
-  refuseFinished(loaded.run.state, id, "steal");
-  assertDeps(loaded.run.state, id, item.deps, "steal");
-  await createStealGuard(runDir, id, session);
-  try {
-    await assertNoOverlap(runDir, index, id, session);
-    await stealLock(runDir, id, session, ttlMinutes * 60_000);
-    const implement = await ensureImplement(runDir, item.id, item.title);
-    await appendEvent(loaded, runDir, {
-      stage: "implement",
-      action: "stolen",
-      task: id,
-      session,
-    });
-    return {
-      schema: schemaVersion,
-      path: runDir,
-      task: id,
-      status: "in-progress",
-      session,
-      action: "stolen",
-      implement,
-    };
-  } finally {
-    await removeStealGuard(runDir, id);
-  }
+  return withRunLock(runDir, async (loaded) => {
+    assertImplementing(loaded.run.state, "steal");
+    const index = await loadPlanIndex(runDir);
+    const item = requireTask(index, id);
+    refuseFinished(loaded.run.state, id, "steal");
+    assertDeps(loaded.run.state, id, item.deps, "steal");
+    await createStealGuard(runDir, id, session);
+    try {
+      await assertNoOverlap(runDir, index, id, session);
+      await stealLock(runDir, id, session, ttlMinutes * 60_000);
+      const implement = await ensureImplement(runDir, item.id, item.title);
+      await appendEvent(loaded, runDir, {
+        stage: "implement",
+        action: "stolen",
+        task: id,
+        session,
+      });
+      return {
+        schema: schemaVersion,
+        path: runDir,
+        task: id,
+        status: "in-progress",
+        session,
+        action: "stolen",
+        implement,
+      };
+    } finally {
+      await removeStealGuard(runDir, id);
+    }
+  });
 }
 
 export async function listTasks(runDir: string): Promise<ListResult> {

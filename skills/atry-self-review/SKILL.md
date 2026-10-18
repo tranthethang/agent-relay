@@ -45,6 +45,11 @@ Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigr
 9. Use `pass`, `fail`, or `not-run` for `tests`.
 10. Run `atry review done <run> self`.
 
+After `review done`, run `atry status <run> --json` and read
+`reviews.delta`. If present, show its file and line counts to the user. The
+delta records edits made after the latest review started. At close, the user
+must accept the latest review delta before the agent uses `--ack-fixes`.
+
 Fix a confirmed bug before `review done`.
 Leave a style-only note in the markdown file. Do not change code for style.
 Write a genuine tradeoff as a question card and in `open`.

@@ -45,7 +45,9 @@ test("atry review done validates the latest JSON and records head and size", asy
         action?: string;
         tool?: string;
         head?: string;
+        tree?: string;
         size?: { files: number };
+        delta?: { files: number; added: number; deleted: number };
         ref?: string;
       }
     ).filter((event) => event.stage === "self-review" && event.action === "completed");
@@ -53,8 +55,66 @@ test("atry review done validates the latest JSON and records head and size", asy
     expect(completed[0]).toMatchObject({
       tool: "cursor",
       head: body.head,
+      tree: expect.stringMatching(/^[0-9a-f]{40}$/),
       ref: "30-self-review/02.json",
     });
+    expect(completed[0]).not.toHaveProperty("delta");
+  });
+});
+
+test("atry review done records edits made after review new", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-delta");
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    await writeFile(join(dir, "source.txt"), "change during review\n");
+    const done = await runCli(["review", "done", run, "self"], dir);
+    expect(done.code).toBe(0);
+    const events = (await readFile(join(run, "events.jsonl"), "utf8"))
+      .trim().split("\n").map((line) =>
+        JSON.parse(line) as {
+          stage?: string;
+          action?: string;
+          tree?: string;
+          delta?: { files: number; added: number; deleted: number };
+        }
+      );
+    const started = events.find((event) =>
+      event.stage === "self-review" && event.action === "started"
+    );
+    const completed = events.find((event) =>
+      event.stage === "self-review" && event.action === "completed"
+    );
+    expect(started?.tree).toMatch(/^[0-9a-f]{40}$/);
+    expect(completed?.tree).toMatch(/^[0-9a-f]{40}$/);
+    expect(completed?.tree).not.toBe(started?.tree);
+    expect(completed?.delta).toEqual({ files: 1, added: 1, deleted: 0 });
+  });
+});
+
+test("atry review done records a delta when a later start has no tree", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-delta-start");
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    await writeFile(join(dir, "during.txt"), "edited\n");
+    expect((await runCli(["stage", "start", run, "self-review", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+    expect((await runCli(["review", "done", run, "self"], dir)).code).toBe(0);
+    const events = (await readFile(join(run, "events.jsonl"), "utf8"))
+      .trim().split("\n").map((line) =>
+        JSON.parse(line) as {
+          stage?: string;
+          action?: string;
+          delta?: { files: number; added: number; deleted: number };
+        }
+      );
+    const completed = events.find((event) =>
+      event.stage === "self-review" && event.action === "completed"
+    );
+    expect(completed?.delta).toEqual({ files: 1, added: 1, deleted: 0 });
   });
 });
 

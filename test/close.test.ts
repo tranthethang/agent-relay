@@ -30,6 +30,8 @@ test("atry close gates on open questions and abandon skips the gate", async () =
     expect(early.code).toBe(4);
     expect(early.stderr).toContain("close refused: run is planned");
     await reachReview(run.path, dir);
+    await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+    await runCli(["review", "done", run.path, "self"], dir);
     const plain = await runCli(["close", run.path, "--via", "arg", "--json"], dir);
     expect(plain.code).toBe(0);
     expect(JSON.parse(plain.stdout)).toMatchObject({ lifecycle: "closed" });
@@ -58,9 +60,22 @@ test("atry close gates on open questions and abandon skips the gate", async () =
     const refused = await runCli(["close", openRun.path], dir);
     expect(refused.code).toBe(4);
     expect(refused.stderr).toContain("40-cross-review/01.json");
-    const acked = await runCli(["close", "--ack-open", "--via", "confirm", openRun.path], dir);
+    const acked = await runCli([
+      "close",
+      "--ack-open",
+      "--waive-review",
+      "legacy review data",
+      "--via",
+      "confirm",
+      openRun.path,
+    ], dir);
     expect(acked.code).toBe(0);
     expect(acked.stdout).toBe("lifecycle: closed\n");
+    const waiverEvents = (await readFile(join(openRun.path, "events.jsonl"), "utf8"))
+      .trim().split("\n").map((line) => JSON.parse(line) as { action: string; reason?: string });
+    expect(waiverEvents.find((event) => event.action === "waived")).toMatchObject({
+      reason: "legacy review data",
+    });
 
     const third = await runCli([
       "run",

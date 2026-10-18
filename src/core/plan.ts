@@ -4,7 +4,7 @@ import { type ZodType } from "zod";
 import { assertClaimOwner, releaseClaimLock } from "./claim.js";
 import { fromZod, RelayError } from "./error.js";
 import { atomicWrite, isEnoent, readJson } from "./files.js";
-import { appendEvent, openRun } from "./mutate.js";
+import { appendEvent, openRun, withRunLock } from "./mutate.js";
 import { normalizePath } from "./overlap.js";
 import { type RunState } from "./reduce.js";
 import { type PlanIndex, planIndexSchema, type TasksInput, tasksInputSchema } from "./tasks.js";
@@ -113,78 +113,81 @@ export async function planNew(runDir: string): Promise<PlanNewResult> {
 }
 
 export async function planDone(runDir: string): Promise<PlanDoneResult> {
-  const loaded = await openRun(runDir);
-  assertLifecycle(loaded.run.state, ["planned", "approved"], "plan done");
-  const started = loaded.run.state.tasks.find((task) => task.status !== "pending");
-  if (started !== undefined) {
-    throw new RelayError("gate", `plan done refused: ${started.id} has started`, started.id);
-  }
-  const input = await readTasksInput(runDir);
-  assertPlanFiles(input.tasks);
-  const index = indexFromTasks(input.tasks);
-  await writePlanFiles(runDir, index);
-  await appendEvent(loaded, runDir, { stage: "plan", action: "completed" });
-  return doneResult(runDir, index);
+  return withRunLock(runDir, async (loaded) => {
+    assertLifecycle(loaded.run.state, ["planned", "approved"], "plan done");
+    const started = loaded.run.state.tasks.find((task) => task.status !== "pending");
+    if (started !== undefined) {
+      throw new RelayError("gate", `plan done refused: ${started.id} has started`, started.id);
+    }
+    const input = await readTasksInput(runDir);
+    assertPlanFiles(input.tasks);
+    const index = indexFromTasks(input.tasks);
+    await writePlanFiles(runDir, index);
+    await appendEvent(loaded, runDir, { stage: "plan", action: "completed" });
+    return doneResult(runDir, index);
+  });
 }
 
 export async function planAmend(runDir: string): Promise<PlanDoneResult> {
-  const loaded = await openRun(runDir);
-  const current = await readIndex(runDir);
-  const input = await readTasksInput(runDir);
-  assertPlanFiles(input.tasks);
-  const unmatched = new Map<string, string[]>();
-  for (const task of current.tasks) {
-    unmatched.set(task.title, [...(unmatched.get(task.title) ?? []), task.id]);
-  }
-  const matched = input.tasks.map((task) => unmatched.get(task.title)?.shift());
-  for (const task of current.tasks) {
-    if (matched.includes(task.id)) continue;
-    if (hasStarted(loaded.run.state, task.id)) {
-      throw new RelayError("gate", `plan amend refused: ${task.id} has started`, task.id);
+  return withRunLock(runDir, async (loaded) => {
+    const current = await readIndex(runDir);
+    const input = await readTasksInput(runDir);
+    assertPlanFiles(input.tasks);
+    const unmatched = new Map<string, string[]>();
+    for (const task of current.tasks) {
+      unmatched.set(task.title, [...(unmatched.get(task.title) ?? []), task.id]);
     }
-  }
-  for (let index = 0; index < input.tasks.length; index += 1) {
-    const id = matched[index];
-    const task = input.tasks[index];
-    if (id === undefined || task === undefined) continue;
-    if (!hasStarted(loaded.run.state, id)) continue;
-    const previous = current.tasks.find((item) => item.id === id);
-    if (previous === undefined || sameDeps(previous.deps, task.deps)) continue;
-    throw new RelayError("gate", `plan amend refused: ${id} has started`, `${id}.deps`);
-  }
-  let next = maxTaskNumber([
-    ...current.tasks.map((task) => task.id),
-    ...(await planFileIds(runDir)),
-  ]);
-  const ids = matched.map((existing) => {
-    if (existing !== undefined) return existing;
-    next += 1;
-    return `T${next}`;
+    const matched = input.tasks.map((task) => unmatched.get(task.title)?.shift());
+    for (const task of current.tasks) {
+      if (matched.includes(task.id)) continue;
+      if (hasStarted(loaded.run.state, task.id)) {
+        throw new RelayError("gate", `plan amend refused: ${task.id} has started`, task.id);
+      }
+    }
+    for (let index = 0; index < input.tasks.length; index += 1) {
+      const id = matched[index];
+      const task = input.tasks[index];
+      if (id === undefined || task === undefined) continue;
+      if (!hasStarted(loaded.run.state, id)) continue;
+      const previous = current.tasks.find((item) => item.id === id);
+      if (previous === undefined || sameDeps(previous.deps, task.deps)) continue;
+      throw new RelayError("gate", `plan amend refused: ${id} has started`, `${id}.deps`);
+    }
+    let next = maxTaskNumber([
+      ...current.tasks.map((task) => task.id),
+      ...(await planFileIds(runDir)),
+    ]);
+    const ids = matched.map((existing) => {
+      if (existing !== undefined) return existing;
+      next += 1;
+      return `T${next}`;
+    });
+    const index = indexFromTasks(input.tasks, ids);
+    await writePlanFiles(runDir, index);
+    return doneResult(runDir, index);
   });
-  const index = indexFromTasks(input.tasks, ids);
-  await writePlanFiles(runDir, index);
-  return doneResult(runDir, index);
 }
 
 export async function taskStart(runDir: string, task: string): Promise<TaskMoveResult> {
   const id = parseTaskId(task);
-  const loaded = await openRun(runDir);
-  assertLifecycle(loaded.run.state, ["implementing"], "task start");
-  const index = await readIndex(runDir);
-  const item = requireTask(index, id);
-  const current = taskStatus(loaded.run.state, id);
-  if (current !== "pending") {
-    throw new RelayError("gate", `task start refused: ${id} is ${current}`, id);
-  }
-  for (const dep of item.deps) {
-    const status = taskStatus(loaded.run.state, dep);
-    if (status !== "done" && status !== "skipped") {
-      throw new RelayError("gate", `task start refused: ${dep} is ${status}`, `${id}.deps`);
+  return withRunLock(runDir, async (loaded) => {
+    assertLifecycle(loaded.run.state, ["implementing"], "task start");
+    const index = await readIndex(runDir);
+    const item = requireTask(index, id);
+    const current = taskStatus(loaded.run.state, id);
+    if (current !== "pending") {
+      throw new RelayError("gate", `task start refused: ${id} is ${current}`, id);
     }
-  }
-  const implement = await writeImplementScaffold(runDir, item.id, item.title);
-  await appendEvent(loaded, runDir, { stage: "implement", action: "task-started", task: id });
-  return moveResult(runDir, id, "in-progress", implement);
+    for (const dep of item.deps) {
+      const status = taskStatus(loaded.run.state, dep);
+      if (status !== "done" && status !== "skipped") {
+        throw new RelayError("gate", `task start refused: ${dep} is ${status}`, `${id}.deps`);
+      }
+    }
+    const implement = await writeImplementScaffold(runDir, item.id, item.title);
+    await appendEvent(loaded, runDir, { stage: "implement", action: "task-started", task: id });
+    return moveResult(runDir, id, "in-progress", implement);
+  });
 }
 
 export async function taskDone(
@@ -193,18 +196,19 @@ export async function taskDone(
   session?: string,
 ): Promise<TaskMoveResult> {
   const id = parseTaskId(task);
-  const loaded = await openRun(runDir);
-  assertLifecycle(loaded.run.state, ["implementing"], "task done");
-  const index = await readIndex(runDir);
-  requireTask(index, id);
-  const current = taskStatus(loaded.run.state, id);
-  if (current !== "in-progress") {
-    throw new RelayError("gate", `task done refused: ${id} is ${current}`, id);
-  }
-  await assertClaimOwner(runDir, id, session);
-  await appendEvent(loaded, runDir, { stage: "implement", action: "task-done", task: id });
-  await releaseClaimLock(runDir, id, session);
-  return moveResult(runDir, id, "done", join(runDir, "20-implement", `${id}.md`));
+  return withRunLock(runDir, async (loaded) => {
+    assertLifecycle(loaded.run.state, ["implementing"], "task done");
+    const index = await readIndex(runDir);
+    requireTask(index, id);
+    const current = taskStatus(loaded.run.state, id);
+    if (current !== "in-progress") {
+      throw new RelayError("gate", `task done refused: ${id} is ${current}`, id);
+    }
+    await assertClaimOwner(runDir, id, session);
+    await appendEvent(loaded, runDir, { stage: "implement", action: "task-done", task: id });
+    await releaseClaimLock(runDir, id, session);
+    return moveResult(runDir, id, "done", join(runDir, "20-implement", `${id}.md`));
+  });
 }
 
 export async function taskSkip(
@@ -216,25 +220,26 @@ export async function taskSkip(
   const id = parseTaskId(task);
   const text = reason.trim();
   if (text.length === 0) throw new RelayError("validation", "reason is empty", "reason");
-  const loaded = await openRun(runDir);
-  assertLifecycle(loaded.run.state, ["implementing"], "task skip");
-  const index = await readIndex(runDir);
-  requireTask(index, id);
-  const current = taskStatus(loaded.run.state, id);
-  if (current === "done" || current === "skipped") {
-    throw new RelayError("gate", `task skip refused: ${id} is ${current}`, id);
-  }
-  await assertClaimOwner(runDir, id, session);
-  await appendEvent(loaded, runDir, {
-    stage: "implement",
-    action: "task-skipped",
-    task: id,
-    reason: text,
+  return withRunLock(runDir, async (loaded) => {
+    assertLifecycle(loaded.run.state, ["implementing"], "task skip");
+    const index = await readIndex(runDir);
+    requireTask(index, id);
+    const current = taskStatus(loaded.run.state, id);
+    if (current === "done" || current === "skipped") {
+      throw new RelayError("gate", `task skip refused: ${id} is ${current}`, id);
+    }
+    await assertClaimOwner(runDir, id, session);
+    await appendEvent(loaded, runDir, {
+      stage: "implement",
+      action: "task-skipped",
+      task: id,
+      reason: text,
+    });
+    await releaseClaimLock(runDir, id, session);
+    const result = moveResult(runDir, id, "skipped", join(runDir, "20-implement", `${id}.md`));
+    result.reason = text;
+    return result;
   });
-  await releaseClaimLock(runDir, id, session);
-  const result = moveResult(runDir, id, "skipped", join(runDir, "20-implement", `${id}.md`));
-  result.reason = text;
-  return result;
 }
 
 function doneResult(runDir: string, index: PlanIndex): PlanDoneResult {

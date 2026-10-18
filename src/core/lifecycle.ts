@@ -4,8 +4,9 @@ import { z } from "zod";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { isEnoent, readJson } from "./files.js";
-import { diffSize, gitHead } from "./git.js";
-import { appendEvent, openRun } from "./mutate.js";
+import { gitHead, treeDiffSize, workTree } from "./git.js";
+import { appendEvent, withRunLock } from "./mutate.js";
+import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
 import { reviewJsonSchema } from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
@@ -39,6 +40,7 @@ export type StageResult = {
   action: "started" | "completed";
   lifecycle: RunState["lifecycle"];
   head?: string;
+  tree?: string;
   size?: { files: number; added: number; deleted: number };
 };
 
@@ -53,6 +55,14 @@ export type CloseResult = {
   schema: 1;
   path: string;
   lifecycle: "closed" | "abandoned";
+};
+
+export type ReviewIntegrity = {
+  required: Array<"self" | "cross">;
+  done: Array<"self" | "cross">;
+  treeMatch: boolean | null;
+  delta?: { files: number; added: number; deleted: number };
+  waived: boolean;
 };
 
 export type BrainstormDoneResult = {
@@ -109,50 +119,127 @@ export async function approveRun(input: {
   via: string;
 }): Promise<ApproveResult> {
   const via = parseVia(input.via);
-  const loaded = await openRun(input.runDir);
-  assertMove(loaded.run.state, "approve");
-  const saved = await appendEvent(loaded, input.runDir, { stage: "plan", action: "approved", via });
-  return {
-    schema: schemaVersion,
-    path: input.runDir,
-    approved: true,
-    lifecycle: saved.run.state.lifecycle,
-  };
+  return withRunLock(input.runDir, async (loaded) => {
+    assertMove(loaded.run.state, "approve");
+    const saved = await appendEvent(loaded, input.runDir, {
+      stage: "plan",
+      action: "approved",
+      via,
+    });
+    return {
+      schema: schemaVersion,
+      path: input.runDir,
+      approved: true,
+      lifecycle: saved.run.state.lifecycle,
+    };
+  });
 }
 
 export async function closeRun(input: {
   runDir: string;
   via?: string;
   ackOpen?: boolean;
+  ackFixes?: boolean;
   abandon?: string;
+  waiveReview?: string;
 }): Promise<CloseResult> {
   const via = input.via === undefined ? undefined : parseVia(input.via);
-  const loaded = await openRun(input.runDir);
-  if (input.abandon !== undefined) {
-    const reason = input.abandon.trim();
-    if (reason.length === 0) throw new RelayError("validation", "reason is empty", "reason");
+  const waiveReason = input.waiveReview?.trim();
+  if (input.waiveReview !== undefined && waiveReason?.length === 0) {
+    throw new RelayError("validation", "reason is empty", "waive-review");
+  }
+  return withRunLock(input.runDir, async (loaded) => {
+    if (input.abandon !== undefined) {
+      const reason = input.abandon.trim();
+      if (reason.length === 0) throw new RelayError("validation", "reason is empty", "reason");
+      const saved = await appendEvent(loaded, input.runDir, {
+        stage: "run",
+        action: "abandoned",
+        reason,
+        ...(via === undefined ? {} : { via }),
+      });
+      if (saved.run.state.lifecycle !== "abandoned") {
+        throw new RelayError("validation", "close did not abandon the run", "state.lifecycle");
+      }
+      return { schema: schemaVersion, path: input.runDir, lifecycle: saved.run.state.lifecycle };
+    }
+    assertMove(loaded.run.state, "close");
+    if (input.ackOpen !== true) await assertNoOpenQuestions(input.runDir, loaded.events);
+    if (waiveReason !== undefined) {
+      await appendEvent(loaded, input.runDir, {
+        stage: "run",
+        action: "waived",
+        reason: waiveReason,
+        ...(via === undefined ? {} : { via }),
+      });
+    } else {
+      await assertReviewIntegrity(
+        input.runDir,
+        loaded.run.base,
+        loaded.events,
+        input.ackFixes === true,
+      );
+    }
     const saved = await appendEvent(loaded, input.runDir, {
       stage: "run",
-      action: "abandoned",
-      reason,
+      action: "closed",
       ...(via === undefined ? {} : { via }),
     });
-    if (saved.run.state.lifecycle !== "abandoned") {
-      throw new RelayError("validation", "close did not abandon the run", "state.lifecycle");
+    if (saved.run.state.lifecycle !== "closed") {
+      throw new RelayError("validation", "close did not close the run", "state.lifecycle");
     }
     return { schema: schemaVersion, path: input.runDir, lifecycle: saved.run.state.lifecycle };
-  }
-  assertMove(loaded.run.state, "close");
-  if (input.ackOpen !== true) await assertNoOpenQuestions(input.runDir, loaded.events);
-  const saved = await appendEvent(loaded, input.runDir, {
-    stage: "run",
-    action: "closed",
-    ...(via === undefined ? {} : { via }),
   });
-  if (saved.run.state.lifecycle !== "closed") {
-    throw new RelayError("validation", "close did not close the run", "state.lifecycle");
+}
+
+export async function reviewIntegrity(
+  runDir: string,
+  base: string,
+  events: readonly EventLine[],
+): Promise<ReviewIntegrity> {
+  const policy = await readPolicy(runDir, base);
+  const tree = await workTree(runDir);
+  const size = await treeDiffSize(runDir, base, tree);
+  const required = size.added + size.deleted < policy.smallChange
+    ? ["self"] as const
+    : policy.requireReviews;
+  const done: ReviewIntegrity["done"] = [];
+  let latest: EventLine | undefined;
+  for (const event of events) {
+    if (event.action !== "completed") continue;
+    if (event.stage !== "self-review" && event.stage !== "cross-review") continue;
+    if (!done.includes(event.stage === "self-review" ? "self" : "cross")) {
+      done.push(event.stage === "self-review" ? "self" : "cross");
+    }
+    latest = event;
   }
-  return { schema: schemaVersion, path: input.runDir, lifecycle: saved.run.state.lifecycle };
+  return {
+    required: [...required],
+    done,
+    treeMatch: latest === undefined ? null : latest.tree === tree,
+    ...(latest?.delta === undefined ? {} : { delta: latest.delta }),
+    waived: events.some((event) => event.action === "waived"),
+  };
+}
+
+async function assertReviewIntegrity(
+  runDir: string,
+  base: string,
+  events: readonly EventLine[],
+  ackFixes: boolean,
+): Promise<void> {
+  const integrity = await reviewIntegrity(runDir, base, events);
+  for (const kind of integrity.required) {
+    if (!integrity.done.includes(kind)) {
+      throw new RelayError("gate", `required ${kind} review is missing`, `${kind}-review`);
+    }
+  }
+  if (integrity.treeMatch !== true) {
+    throw new RelayError("gate", "latest review tree does not match current tree", "review.tree");
+  }
+  if (integrity.delta !== undefined && !ackFixes) {
+    throw new RelayError("gate", "latest review has unacknowledged fixes", "review.delta");
+  }
 }
 
 export async function finishBrainstorm(path: string): Promise<BrainstormDoneResult> {
@@ -187,30 +274,36 @@ async function recordStage(
   const stage = parseStage(input.stage);
   const tool = parseTool(input.tool);
   const model = parseModel(input.model);
-  const loaded = await openRun(input.runDir);
-  assertMove(loaded.run.state, stageMove(stage, action));
-  const measured = action === "completed" && sizedStages.has(stage)
-    ? await measure(input.runDir, loaded.run.base)
-    : undefined;
-  const saved = await appendEvent(loaded, input.runDir, {
-    stage,
-    action,
-    tool,
-    ...(model === undefined ? {} : { model }),
-    ...(measured === undefined ? {} : { head: measured.head, size: measured.size }),
+  return withRunLock(input.runDir, async (loaded) => {
+    assertMove(loaded.run.state, stageMove(stage, action));
+    const measured = action === "completed" && sizedStages.has(stage)
+      ? await measure(input.runDir, loaded.run.base)
+      : undefined;
+    const saved = await appendEvent(loaded, input.runDir, {
+      stage,
+      action,
+      tool,
+      ...(model === undefined ? {} : { model }),
+      ...(measured === undefined ? {} : {
+        head: measured.head,
+        tree: measured.tree,
+        size: measured.size,
+      }),
+    });
+    const result: StageResult = {
+      schema: schemaVersion,
+      path: input.runDir,
+      stage,
+      action,
+      lifecycle: saved.run.state.lifecycle,
+    };
+    if (measured !== undefined) {
+      result.head = measured.head;
+      result.tree = measured.tree;
+      result.size = measured.size;
+    }
+    return result;
   });
-  const result: StageResult = {
-    schema: schemaVersion,
-    path: input.runDir,
-    stage,
-    action,
-    lifecycle: saved.run.state.lifecycle,
-  };
-  if (measured !== undefined) {
-    result.head = measured.head;
-    result.size = measured.size;
-  }
-  return result;
 }
 
 function stageMove(
@@ -242,9 +335,14 @@ function assertMove(state: RunState, move: Move): void {
 async function measure(
   runDir: string,
   base: string,
-): Promise<{ head: string; size: { files: number; added: number; deleted: number } }> {
+): Promise<{
+  head: string;
+  tree: string;
+  size: { files: number; added: number; deleted: number };
+}> {
   const head = await gitHead(runDir);
-  return { head, size: await diffSize(runDir, base, head) };
+  const tree = await workTree(runDir);
+  return { head, tree, size: await treeDiffSize(runDir, base, tree) };
 }
 
 async function assertNoOpenQuestions(runDir: string, events: readonly EventLine[]): Promise<void> {

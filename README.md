@@ -71,15 +71,37 @@ atry task done <run> T1
 atry stage done <run> implement --tool <tool>
 atry review new <run> self|cross --tool <tool>
 atry review done <run> self|cross
-atry close <run> --via confirm|arg
+atry close <run> --via confirm|arg [--ack-open] [--ack-fixes]
+atry close <run> --waive-review "<reason>" [--ack-open]
 atry distill <run>
 ```
 
 `atry approve` and `atry close` are for the person who coordinates the run.
 The skills ask before they run those verbs. Implement start refuses when the
-plan is not approved. Close refuses while the latest review has open questions,
-unless you pass `--ack-open`. `atry close --abandon <reason>` stops a run from
-any open state.
+plan is not approved. Close requires completed reviews for its policy and
+checks the latest completed review against the current code tree. It refuses
+while the latest review has open questions unless you pass `--ack-open`.
+Changes made after the latest review started require user acceptance and
+`--ack-fixes`. `--waive-review <reason>` records a review waiver and skips
+review integrity checks; it does not skip the open-question check.
+`atry close --abandon <reason>` stops a run from any open state.
+
+### Review policy
+
+The committed `.agent-relay.json` at the run's base commit controls review
+requirements. A missing file uses these defaults:
+
+```json
+{
+  "schema": 1,
+  "requireReviews": ["self", "cross"],
+  "smallChange": 20
+}
+```
+
+Changes below `smallChange` lines, counting additions and deletions from base
+to the current tree, require only a self-review. Policy can also include an
+optional `testCommand`; P13 records it as policy but does not run it.
 
 ### Parallel tasks
 
@@ -116,6 +138,12 @@ scaffold that already has every key. Task status lives in events.
 
 ## Known limits
 
+- The tree snapshot uses a temporary copy of the Git index and excludes
+  `.agent-relay/`. It does not change the real index.
+- `locks/run.lock` serializes CLI state changes. It does not lock direct file
+  edits made outside `atry`.
+- A review waiver is recorded with its reason. It does not prove who approved
+  the waiver.
 - Cross-review independence is a request. `atry review done` warns when the
   cross-review tool or model family matches implement or self-review. It does
   not refuse.

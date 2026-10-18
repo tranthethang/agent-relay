@@ -35,4 +35,17 @@ those events. Lifecycle values are `planned`, `approved`, `implementing`,
 `reviewing`, `closed`, and `abandoned`.
 
 Implement start requires `approved`. Close from `reviewing` reads the latest
-completed review. Open questions block close unless `--ack-open` is set.
+completed review. The policy at the run's base commit determines which review
+kinds are required. A missing policy uses self and cross reviews, with a
+self-only exception for changes below 20 added and deleted lines.
+
+The CLI records a Git tree for implementation completion and review start and
+completion. It builds that tree with a temporary copy of the index and excludes
+`.agent-relay/`. A review completion records edits made since its start.
+Close checks the latest completed review against the current tree and refuses
+an unacknowledged delta. `--ack-fixes` accepts that delta after the user agrees.
+`--waive-review <reason>` records a waiver and skips those review checks.
+Open questions still require `--ack-open`.
+
+Every run state change uses `locks/run.lock`. The lock serializes CLI checks
+and event writes. Direct edits to repository files do not take this lock.

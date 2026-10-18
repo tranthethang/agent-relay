@@ -4,8 +4,8 @@ import { z } from "zod";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { atomicWrite, isEnoent, readJson } from "./files.js";
-import { diffSize, gitHead } from "./git.js";
-import { appendEvent, openRun } from "./mutate.js";
+import { gitHead, treeDiffSize, workTree } from "./git.js";
+import { appendEvent, withRunLock } from "./mutate.js";
 import { type RunState } from "./reduce.js";
 import { schemaVersion, toolSchema } from "./vocab.js";
 
@@ -112,36 +112,39 @@ export async function reviewNew(input: {
   const model = input.model === undefined ? "unknown" : parseModel(input.model);
   const scaffold = reviewScaffold(kind, input.tool, model);
   const place = reviewPlaces[kind];
-  const loaded = await openRun(input.runDir);
-  if (loaded.run.state.lifecycle !== "reviewing") {
-    throw new RelayError(
-      "gate",
-      `review refused: run is ${loaded.run.state.lifecycle}`,
-      "state.lifecycle",
-    );
-  }
-  const dir = join(input.runDir, place.dir);
-  await mkdir(dir, { recursive: true });
-  const label = await nextLabel(dir);
-  const markdown = join(dir, `${label}.md`);
-  const json = join(dir, `${label}.json`);
-  await atomicWrite(markdown, reviewMarkdown(kind));
-  await atomicWrite(json, `${JSON.stringify(scaffold)}\n`);
-  const saved = await appendEvent(loaded, input.runDir, {
-    stage: place.stage,
-    action: "started",
-    tool: scaffold.tool,
-    model: scaffold.model,
+  return withRunLock(input.runDir, async (loaded) => {
+    if (loaded.run.state.lifecycle !== "reviewing") {
+      throw new RelayError(
+        "gate",
+        `review refused: run is ${loaded.run.state.lifecycle}`,
+        "state.lifecycle",
+      );
+    }
+    const dir = join(input.runDir, place.dir);
+    await mkdir(dir, { recursive: true });
+    const label = await nextLabel(dir);
+    const tree = await workTree(input.runDir);
+    const markdown = join(dir, `${label}.md`);
+    const json = join(dir, `${label}.json`);
+    await atomicWrite(markdown, reviewMarkdown(kind));
+    await atomicWrite(json, `${JSON.stringify(scaffold)}\n`);
+    const saved = await appendEvent(loaded, input.runDir, {
+      stage: place.stage,
+      action: "started",
+      tree,
+      tool: scaffold.tool,
+      model: scaffold.model,
+    });
+    return {
+      schema: schemaVersion,
+      path: input.runDir,
+      markdown,
+      json,
+      stage: place.stage,
+      action: "started",
+      lifecycle: saved.run.state.lifecycle,
+    };
   });
-  return {
-    schema: schemaVersion,
-    path: input.runDir,
-    markdown,
-    json,
-    stage: place.stage,
-    action: "started",
-    lifecycle: saved.run.state.lifecycle,
-  };
 }
 
 export async function reviewDone(input: {
@@ -150,44 +153,65 @@ export async function reviewDone(input: {
 }): Promise<ReviewDoneResult & { warnings: string[] }> {
   const kind = parseKind(input.kind);
   const place = reviewPlaces[kind];
-  const loaded = await openRun(input.runDir);
-  if (loaded.run.state.lifecycle !== "reviewing") {
-    throw new RelayError(
-      "gate",
-      `review refused: run is ${loaded.run.state.lifecycle}`,
-      "state.lifecycle",
-    );
-  }
-  const review = await readLatestReview(input.runDir, place.dir, kind);
-  const warnings = kind === "cross"
-    ? diversityWarnings(
-      review.value,
-      lastProvenance(loaded.events, "implement"),
-      lastProvenance(loaded.events, "self-review"),
-    )
-    : [];
-  const head = await gitHead(input.runDir);
-  const size = await diffSize(input.runDir, loaded.run.base, head);
-  const saved = await appendEvent(loaded, input.runDir, {
-    stage: place.stage,
-    action: "completed",
-    tool: review.value.tool,
-    model: review.value.model,
-    head,
-    size,
-    ref: review.rel,
+  return withRunLock(input.runDir, async (loaded) => {
+    if (loaded.run.state.lifecycle !== "reviewing") {
+      throw new RelayError(
+        "gate",
+        `review refused: run is ${loaded.run.state.lifecycle}`,
+        "state.lifecycle",
+      );
+    }
+    const review = await readLatestReview(input.runDir, place.dir, kind);
+    const warnings = kind === "cross"
+      ? diversityWarnings(
+        review.value,
+        lastProvenance(loaded.events, "implement"),
+        lastProvenance(loaded.events, "self-review"),
+      )
+      : [];
+    const head = await gitHead(input.runDir);
+    const tree = await workTree(input.runDir);
+    const size = await treeDiffSize(input.runDir, loaded.run.base, tree);
+    const startedTree = lastReviewStartTree(loaded.events, place.stage);
+    const delta = startedTree !== undefined && startedTree !== tree
+      ? await treeDiffSize(input.runDir, startedTree, tree)
+      : undefined;
+    const saved = await appendEvent(loaded, input.runDir, {
+      stage: place.stage,
+      action: "completed",
+      tool: review.value.tool,
+      model: review.value.model,
+      head,
+      tree,
+      size,
+      ...(delta === undefined ? {} : { delta }),
+      ref: review.rel,
+    });
+    return {
+      schema: schemaVersion,
+      path: input.runDir,
+      review: review.rel,
+      stage: place.stage,
+      action: "completed",
+      lifecycle: saved.run.state.lifecycle,
+      head,
+      size,
+      warnings,
+    };
   });
-  return {
-    schema: schemaVersion,
-    path: input.runDir,
-    review: review.rel,
-    stage: place.stage,
-    action: "completed",
-    lifecycle: saved.run.state.lifecycle,
-    head,
-    size,
-    warnings,
-  };
+}
+
+function lastReviewStartTree(
+  events: readonly EventLine[],
+  stage: ReviewStage,
+): string | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.stage === stage && event.action === "started" && event.tree !== undefined) {
+      return event.tree;
+    }
+  }
+  return undefined;
 }
 
 export function modelFamily(model: string): string {

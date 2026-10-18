@@ -20,7 +20,7 @@ test("diffSize counts a committed change against base", async () => {
     await writeFile(join(dir, "note.txt"), "one\n");
     await execFileAsync("git", ["add", "note.txt"], { cwd: dir });
     await gitCommit(dir, "add note");
-    const size = await diffSize(dir, base, await rev(dir));
+    const size = await diffSize(dir, base);
     expect(size).toEqual({ files: 1, added: 1, deleted: 0 });
   });
 });

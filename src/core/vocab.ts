@@ -18,6 +18,7 @@ export const actions = [
   "completed",
   "approved",
   "closed",
+  "waived",
   "abandoned",
   "task-started",
   "task-done",

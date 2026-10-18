@@ -56,12 +56,19 @@ Write a genuine tradeoff as a question card and in `open`.
 ## Close
 
 After `review done`, show `fixed`, each `open` item, and `tests`.
+Run `atry status <run> --json` and read `reviews.delta`. Show the delta when
+it is present. Explain that it counts edits made after the latest review
+started. Ask the user whether to accept those fixes before closing. Add
+`--ack-fixes` only after the user answers yes.
 Recommend `n` when `open` is not empty.
 Recommend `n` when `tests` is `fail`.
 When the skill call includes a `yes` token and `open` is empty, run `atry close <run> --via arg`.
 When that token is present and `open` is not empty, ask the user. Do not close yet.
+When a delta is present, ask the user to accept it even when the skill call includes a `yes` token.
 Otherwise ask the user to answer `y` or `n`.
 When the user answers `n`, stop. Do not record a close event.
 When the user answers `y` and `open` is empty, run `atry close <run> --via confirm`.
+When the user accepts a delta, add `--ack-fixes` to that close command.
 When the user answers `y` and `open` is not empty, ask once more.
-After that second yes, run `atry close <run> --via confirm --ack-open`.
+After that second yes, run `atry close <run> --via confirm --ack-open`. Include
+`--ack-fixes` too when the user accepted a delta.

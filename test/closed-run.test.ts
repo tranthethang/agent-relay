@@ -40,6 +40,8 @@ test("a closed or abandoned run refuses later write verbs", async () => {
     ], dir);
     const closed = JSON.parse(other.stdout) as { path: string };
     await reachReview(closed.path, dir);
+    await runCli(["review", "new", closed.path, "self", "--tool", "cursor"], dir);
+    await runCli(["review", "done", closed.path, "self"], dir);
     expect((await runCli(["close", closed.path, "--via", "arg"], dir)).code).toBe(0);
     const again = await runCli(["approve", closed.path, "--via", "confirm"], dir);
     expect(again.code).toBe(4);

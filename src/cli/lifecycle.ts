@@ -87,11 +87,19 @@ export function registerLifecycle(program: Command): void {
     .description("Close or abandon a run")
     .argument("[run]", "run id, slug, name, or path")
     .option("--ack-open", "close while the latest review has open questions")
+    .option("--ack-fixes", "accept fixes made after the latest review started")
+    .option("--waive-review <reason>", "close without required reviews")
     .option("--via <via>", "confirm or arg")
     .option("--abandon <reason>", "abandon the run")
     .action(async (
       run: string | undefined,
-      opts: { ackOpen?: boolean; via?: string; abandon?: string },
+      opts: {
+        ackOpen?: boolean;
+        ackFixes?: boolean;
+        via?: string;
+        abandon?: string;
+        waiveReview?: string;
+      },
       command: Command,
     ) => {
       const runDir = await takeRun(command, run);
@@ -100,7 +108,9 @@ export function registerLifecycle(program: Command): void {
           runDir,
           via: opts.via,
           ackOpen: opts.ackOpen === true,
+          ackFixes: opts.ackFixes === true,
           abandon: opts.abandon,
+          waiveReview: opts.waiveReview,
         }),
         commandJson(command),
         closeText,
