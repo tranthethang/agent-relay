@@ -1,7 +1,11 @@
+import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
+
+const execFileAsync = promisify(execFile);
 
 const review = {
   schema: 1,
@@ -130,5 +134,102 @@ test("atry close reads the review whose completed event is newest", async () => 
     await runCli(["stage", "done", run.path, "self-review", "--tool", "cursor"], dir);
     const closed = await runCli(["close", run.path], dir);
     expect(closed.code).toBe(0);
+  });
+});
+
+test("close --preview recommends n for a missing review and y after self-review", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const created = await runCli([
+      "run",
+      "new",
+      "--slug",
+      "preview-close",
+      "--title",
+      "Preview",
+      "--json",
+    ], dir);
+    const run = JSON.parse(created.stdout) as { path: string };
+    const early = await runCli(["close", run.path, "--preview", "--json"], dir);
+    expect(early.code).toBe(0);
+    expect(JSON.parse(early.stdout)).toMatchObject({
+      recommend: "n",
+      reasons: ["missing self review"],
+    });
+    const earlyText = await runCli(["close", run.path, "--preview"], dir);
+    expect(earlyText.stdout).toBe("recommend: n\nmissing self review\n");
+
+    await reachReview(run.path, dir);
+    await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+    await runCli(["review", "done", run.path, "self"], dir);
+    const before = await readFile(join(run.path, "events.jsonl"), "utf8");
+    const ready = await runCli(["close", run.path, "--preview", "--json"], dir);
+    expect(ready.code).toBe(0);
+    expect(JSON.parse(ready.stdout)).toEqual({ schema: 1, recommend: "y", reasons: [] });
+    expect((await runCli(["close", run.path, "--preview"], dir)).stdout).toBe("recommend: y\n");
+    expect(await readFile(join(run.path, "events.jsonl"), "utf8")).toBe(before);
+  });
+});
+
+test("close --preview names open items, delta, a tree mismatch, and failed tests", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self"],
+        smallChange: 0,
+        testCommand: "node -e \"process.exit(1)\"",
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+    await gitCommit(dir, "policy");
+    const created = await runCli([
+      "run",
+      "new",
+      "--slug",
+      "preview-reasons",
+      "--title",
+      "Reasons",
+      "--json",
+    ], dir);
+    const run = JSON.parse(created.stdout) as { path: string };
+    await reachReview(run.path, dir);
+    await mkdir(join(run.path, "30-self-review"), { recursive: true });
+    await writeFile(
+      join(run.path, "30-self-review", "01.json"),
+      `${JSON.stringify({ ...review, kind: "self" })}\n`,
+    );
+    const open = await runCli(["close", run.path, "--preview", "--json"], dir);
+    expect(open.code).toBe(0);
+    expect(JSON.parse(open.stdout).reasons).toContain("open items");
+
+    const second = await runCli([
+      "run",
+      "new",
+      "--slug",
+      "preview-gates",
+      "--title",
+      "Gates",
+      "--json",
+    ], dir);
+    const gated = JSON.parse(second.stdout) as { path: string };
+    await reachReview(gated.path, dir);
+    await runCli(
+      ["review", "new", gated.path, "self", "--tool", "cursor", "--model", "unknown"],
+      dir,
+    );
+    await writeFile(join(dir, "note.txt"), "changed\n");
+    await execFileAsync("git", ["add", "note.txt"], { cwd: dir });
+    await gitCommit(dir, "note");
+    const done = await runCli(["review", "done", gated.path, "self"], dir);
+    expect(done.code).toBe(0);
+    await writeFile(join(dir, "later.txt"), "after\n");
+    const preview = await runCli(["close", gated.path, "--preview", "--json"], dir);
+    expect(preview.code).toBe(0);
+    expect(JSON.parse(preview.stdout)).toMatchObject({
+      recommend: "n",
+      reasons: ["tree mismatch", "delta", "failed tests"],
+    });
   });
 });

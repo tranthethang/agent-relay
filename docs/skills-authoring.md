@@ -25,3 +25,34 @@ The skill text calls `atry` verbs. It does not tell the agent to run files under
 
 After you edit a skill, install it again with `npx skills add` if you dogfood
 from a global skill directory.
+
+## Token baseline
+
+`npm run tokens` counts characters in each `SKILL.md` plus every
+`references/*.md` path that file names. It divides by 4 and rounds to the
+nearest integer. The total row is the sum of the stage rows. This baseline
+is commit `ce19460998b550cb7ccca955bbb4cb1905bbef4d`.
+
+| stage        | references                                            | chars | tokens |
+| ------------ | ----------------------------------------------------- | ----: | -----: |
+| brainstorm   | references/writing.md                                 |  5473 |   1368 |
+| plan         | references/writing.md                                 |  5821 |   1455 |
+| implement    | references/writing.md                                 |  6257 |   1564 |
+| self-review  | references/writing.md, references/reviewer-conduct.md |  6710 |   1678 |
+| cross-review | references/writing.md, references/reviewer-conduct.md |  7912 |   1978 |
+| distill      | (none)                                                |  1393 |    348 |
+| total        |                                                       | 33566 |   8391 |
+
+## Token count after the skill rewrite
+
+The same `npm run tokens` command, after preflight moved into the CLI and the stage skills loop on `atry next`.
+
+| stage        | references                                            | chars | tokens |
+| ------------ | ----------------------------------------------------- | ----: | -----: |
+| brainstorm   | references/writing.md                                 |  5011 |   1253 |
+| plan         | references/writing.md                                 |  5525 |   1381 |
+| implement    | references/writing.md                                 |  5951 |   1488 |
+| self-review  | references/writing.md, references/reviewer-conduct.md |  6840 |   1710 |
+| cross-review | references/writing.md, references/reviewer-conduct.md |  7018 |   1755 |
+| distill      | (none)                                                |   931 |    233 |
+| total        |                                                       | 31276 |   7820 |

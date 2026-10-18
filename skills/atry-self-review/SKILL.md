@@ -16,44 +16,48 @@ This stage checks the implement diff against the plan. It fixes confirmed bugs. 
 
 <!-- BEGIN PREFLIGHT -->
 
-This skill needs `requires-atry` in its front matter.
-Run `atry version --json` before any other command in this skill.
-Stop when the output is not a JSON object with `schema` and `version`, and tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
-Read the `version` string from that JSON.
-Split both versions on `.` and compare the numbers from the left.
-Find the first pair of numbers that differ. Ignore the numbers after that pair.
-Stop when the required number in that pair is higher than the installed number.
-Tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
-Do not search the filesystem for helpers.
-Do not run files under `scripts/` or `~/.agent-relay/lib/`.
+Run `atry preflight --requires "<requires-atry>"` before any other command in this skill.
+Stop when that command exits non-zero.
+When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
 
 <!-- END PREFLIGHT -->
 
 Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigravity`, `kiro`, or `unknown`.
 
-## Steps
+## Loop
+
+Run `atry next <run> --json`.
+Read each path in `read` before you run `command`.
+Stop when `command` is `none`.
+When `command` is approve, stop. This skill does not approve.
+When `command` names cross-review, stop. Use the cross-review skill for that stage.
+When `command` contains `close`, run `atry close <run> --preview`.
+Show that preview and ask the user to answer `y` or `n`.
+When the skill call includes a `yes` token, use that token as `y`.
+Run `atry close <run> --via confirm` only when the preview says `recommend: y` and the user answers `y`.
+When the `yes` token is that answer, run `atry close <run> --via arg`.
+When the preview says `recommend: n`, or the user answers `n`, stop and do not record an event.
+When `command` contains `review new`, run `atry review new <run> self --tool <tool>`.
+Add `--model <model>` when you know the model.
+When `command` contains `review done`, follow the review method, then run `atry review done <run> self`.
+Repeat from the first step in this section.
+
+## Review method
 
 1. Read `run.base`, the plan paths, and the implement paths from the context JSON.
 2. Read `10-plan/overview.md`, each task file, and each `20-implement/` file.
 3. Diff the work from `run.base` to the current HEAD.
-4. Run `atry review new <run> self --tool <tool>`.
-5. Add `--model <model>` when you know the model.
-6. Let `atry review done` run the configured `testCommand` from the run's base policy.
-7. Fill the printed markdown file with the edit tool.
-8. Set `fixed` and `open` in the printed JSON file.
-9. Run `atry review done <run> self`.
 
 After the user answers an open question, record the answer with
 `atry review decide <run> Q<n> <answer>`. Use `a` or `b` for a choice card.
-Use the user's text for a `Need:` card. `review done` runs the configured test
-command and stores its exit code, duration, and tree in the event. It also
-writes the last 200 output lines to the matching `.test.log` file.
-
-After `review done`, run `atry status <run> --json` and read
-`reviews.delta`. If present, show its file and line counts to the user. The
-delta records edits made after the latest review started. At close, the user
-must accept the latest review delta before the agent uses `--ack-fixes`.
+Use the user's text for a `Need:` card.
+Let `atry review done` run the configured `testCommand` from the run's base policy.
+Fill the printed markdown file with the edit tool.
+Set `fixed` and `open` in the printed JSON file.
+`review done` stores the configured test command's exit code, duration, and tree.
+It also writes the last 200 output lines to the matching `.test.log` file.
+The close preview names a delta when one is present.
 
 Fix a confirmed bug before `review done`.
 Leave a style-only note in the markdown file. Do not change code for style.
@@ -62,4 +66,4 @@ Write a genuine tradeoff as a question card and in `open`.
 
 ## Non-goals
 
-Do not close the run. Do not approve the plan.
+Do not approve the plan.

@@ -58,10 +58,16 @@ export function registerPlan(program: Command): void {
     .argument("<run>", "run id, slug, name, or path")
     .argument("<task>", "task id")
     .option("--session <tag>", "session that owns the claim")
-    .action(async (run: string, taskId: string, opts: { session?: string }, command: Command) => {
+    .option("--allow-extra <reason>", "accept edits outside the task files")
+    .action(async (
+      run: string,
+      taskId: string,
+      opts: { session?: string; allowExtra?: string },
+      command: Command,
+    ) => {
       const runDir = await takeRun(command, run);
       writeResult(
-        await taskDone(runDir, taskId, opts.session),
+        await taskDone(runDir, taskId, opts.session, opts.allowExtra),
         commandJson(command),
         taskMoveText,
       );

@@ -25,6 +25,12 @@ test("parseEventLine accepts optional event fields", () => {
   expect(event.size?.added).toBe(2);
 });
 
+test("parseEventLine accepts SHA-1 and SHA-256 trees only", () => {
+  expect(parseEventLine({ ...validEvent, tree: "a".repeat(40) }).tree).toHaveLength(40);
+  expect(parseEventLine({ ...validEvent, tree: "b".repeat(64) }).tree).toHaveLength(64);
+  expect(() => parseEventLine({ ...validEvent, tree: "c".repeat(41) })).toThrow();
+});
+
 test("parseEventLine rejects a non-UTC timestamp", () => {
   expect(() => parseEventLine({ ...validEvent, ts: "2026-10-17T04:26:00+07:00" })).toThrow();
 });

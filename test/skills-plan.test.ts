@@ -10,6 +10,8 @@ test("plan uses run new, plan new, and plan done", () => {
   expect(text).toContain("atry plan new <run>");
   expect(text).toContain("atry plan done <run>");
   expect(text).toContain("atry plan amend <run>");
+  expect(text).toContain("atry approve <run> --preview");
+  expect(text).toContain("atry close <run> --preview");
   expect(text).toContain("tasks.input.json");
   expect(text).not.toContain("run-init");
   expect(text).not.toContain("plan.md");

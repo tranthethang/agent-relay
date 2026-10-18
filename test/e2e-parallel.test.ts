@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { closeRun, completeReview, mustCli } from "./e2e.js";
@@ -36,6 +36,8 @@ test("two sessions finish tasks, review in two tools, and close", async () => {
     });
     const again = await mustCli(["claim", run, "T1", "--session", "alice", "--json"], dir);
     expect(JSON.parse(again.stdout)).toMatchObject({ task: "T1", session: "alice" });
+    await mkdir(join(dir, "src/core"), { recursive: true });
+    await writeFile(join(dir, "src/core/claim.ts"), "export const claim = 1;\n");
     await mustCli(["task", "done", run, "T1", "--session", "alice"], dir);
 
     const bob = await mustCli(["claim", run, "T2", "--session", "bob", "--json"], dir);
@@ -44,6 +46,7 @@ test("two sessions finish tasks, review in two tools, and close", async () => {
       session: "bob",
       action: "claimed",
     });
+    await writeFile(join(dir, "src/core/note.ts"), "export const note = 1;\n");
     await mustCli(["task", "done", run, "T2", "--session", "bob"], dir);
 
     const implemented = await mustCli(

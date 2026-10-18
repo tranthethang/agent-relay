@@ -4,12 +4,14 @@ import { requiredVersion, requiresFits, sharedRequires } from "./skill-text.js";
 
 const partial = readFileSync(new URL("../docs/partials/preflight.md", import.meta.url), "utf8");
 
-test("preflight checks requires-atry against atry version --json", () => {
+test("preflight asks for atry preflight and context", () => {
   expect(partial).toContain("requires-atry");
-  expect(partial).toContain("atry version --json");
-  expect(partial).toContain("JSON object with `schema` and `version`");
+  expect(partial).toContain("atry preflight --requires");
+  expect(partial).toContain("exits non-zero");
+  expect(partial).toContain("unknown command");
   expect(partial).toContain("npm i -g @tranthethang/agent-relay@latest");
   expect(partial).toContain("atry context <run> --json");
+  expect(partial).not.toContain("atry version --json");
   expect(partial).not.toMatch(/\b(mktemp|trap|heredoc|grep|sed)\b/);
   expect(partial).not.toContain("```");
   expect(partial).not.toContain("verify.sh");

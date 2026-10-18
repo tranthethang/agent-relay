@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
-import { workTree } from "../src/core/git.js";
+import { changedPaths, workTree } from "../src/core/git.js";
 import { gitCommit, withTempGitRepo } from "./helper.js";
 
 const execFileAsync = promisify(execFile);
@@ -41,5 +41,17 @@ test("workTree ignores changes under .agent-relay", async () => {
     const before = await workTree(dir);
     await writeFile(join(dir, ".agent-relay", "run", "events.jsonl"), "after\n");
     expect(await workTree(dir)).toBe(before);
+  });
+});
+
+test("changedPaths lists both sides of a rename", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(join(dir, "old.txt"), "content that is long enough to match\n".repeat(5));
+    await execFileAsync("git", ["add", "old.txt"], { cwd: dir });
+    await gitCommit(dir);
+    const before = await workTree(dir);
+    await execFileAsync("git", ["mv", "old.txt", "new.txt"], { cwd: dir });
+    const paths = await changedPaths(dir, before, await workTree(dir));
+    expect(paths.sort()).toEqual(["new.txt", "old.txt"]);
   });
 });

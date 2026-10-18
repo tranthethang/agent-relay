@@ -21,6 +21,7 @@
     "check": "dprint check \"**/*.ts\" && tsc --noEmit",
     "pretest": "npm run build",
     "test": "vitest run",
+    "tokens": "node --experimental-strip-types scripts/maint/skill-tokens.ts",
     "sync": "node --experimental-strip-types scripts/maint/sync-references.ts",
     "sync:check": "node --experimental-strip-types scripts/maint/sync-references.ts --check"
   },

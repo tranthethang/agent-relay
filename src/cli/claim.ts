@@ -9,6 +9,7 @@ import {
   stealTask,
 } from "../core/claim.js";
 import { RelayError } from "../core/error.js";
+import { guardExit, guardPath, guardText } from "../core/guard.js";
 import { oneToken, selectRun } from "../core/select.js";
 import { writeResult } from "./output.js";
 
@@ -65,6 +66,24 @@ export function registerClaim(program: Command): void {
         commandJson(command),
         claimText,
       );
+    });
+
+  program
+    .command("guard")
+    .description("Check one path against in-progress task files")
+    .argument("<run>", "run id, slug, name, or path")
+    .argument("<path>", "repo path to check")
+    .option("--session <tag>", "session that must hold the task")
+    .action(async (
+      run: string,
+      filePath: string,
+      opts: { session?: string },
+      command: Command,
+    ) => {
+      const runDir = await takeRun(command, run);
+      const result = await guardPath(runDir, filePath, opts.session);
+      writeResult(result, commandJson(command), guardText);
+      process.exitCode = guardExit(result);
     });
 
   program

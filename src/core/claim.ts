@@ -5,6 +5,7 @@ import { type RebuildResult, rebuildRun } from "./cache.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { atomicWrite, isEnoent, readJson } from "./files.js";
+import { workTree } from "./git.js";
 import {
   acquireLock,
   createStealGuard,
@@ -101,9 +102,10 @@ export async function claimTask(
       throw error;
     }
     const implement = await ensureImplement(runDir, item.id, item.title);
+    const tree = await workTree(runDir);
     await appendAll(loaded, runDir, [
       { stage: "implement", action: "claimed", task: id, session },
-      { stage: "implement", action: "task-started", task: id, session },
+      { stage: "implement", action: "task-started", task: id, session, tree },
     ]);
     return {
       schema: schemaVersion,
@@ -181,11 +183,13 @@ export async function stealTask(
       await assertNoOverlap(runDir, index, id, session);
       await stealLock(runDir, id, session, ttlMinutes * 60_000);
       const implement = await ensureImplement(runDir, item.id, item.title);
+      const tree = await workTree(runDir);
       await appendEvent(loaded, runDir, {
         stage: "implement",
         action: "stolen",
         task: id,
         session,
+        tree,
       });
       return {
         schema: schemaVersion,
