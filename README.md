@@ -59,6 +59,8 @@ Text is the default. `--json` adds `"schema": 1`.
 
 ```bash
 atry version
+atry preflight --requires ">=X.Y.Z"
+atry next <run>
 atry run new --slug <slug> --title <title>
 atry resolve [run]
 atry status [run]
@@ -66,6 +68,8 @@ atry context <run> --json [--task T1]
 atry plan new <run>
 atry plan done <run>
 atry approve <run> --via confirm|arg
+atry approve <run> --preview
+atry close <run> --preview
 atry stage start <run> implement --tool <tool>
 atry task start <run> T1
 atry task done <run> T1
@@ -80,6 +84,12 @@ atry distill <run>
 ```
 
 `atry approve` and `atry close` are for the person who coordinates the run.
+`atry preflight --requires ">=X.Y.Z"` exits 0 when the installed version meets that range.
+A lower version prints `npm i -g @tranthethang/agent-relay@latest` and exits 1.
+`atry next <run>` prints the next command. `--json` adds `command`, `reason`, `needsHuman`, and `read`.
+`atry approve <run> --preview` prints Goal, Decisions, and the task count.
+`atry close <run> --preview` prints `recommend: y` or `recommend: n` and the reasons.
+Neither preview records an event.
 The skills ask before they run those verbs. Implement start refuses when the
 plan is not approved. Close requires completed reviews for its policy and
 checks the latest completed review against the current code tree. It refuses

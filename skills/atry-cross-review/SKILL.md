@@ -16,16 +16,9 @@ This stage reviews the plan, the implement files, and the latest self-review. It
 
 <!-- BEGIN PREFLIGHT -->
 
-This skill needs `requires-atry` in its front matter.
-Run `atry version --json` before any other command in this skill.
-Stop when the output is not a JSON object with `schema` and `version`, and tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
-Read the `version` string from that JSON.
-Split both versions on `.` and compare the numbers from the left.
-Find the first pair of numbers that differ. Ignore the numbers after that pair.
-Stop when the required number in that pair is higher than the installed number.
-Tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
-Do not search the filesystem for helpers.
-Do not run files under `scripts/` or `~/.agent-relay/lib/`.
+Run `atry preflight --requires "<requires-atry>"` before any other command in this skill.
+Stop when that command exits non-zero.
+When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
 
 <!-- END PREFLIGHT -->
@@ -34,21 +27,36 @@ Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigr
 Use a different tool than implement and self-review when you can.
 `review done` prints a warning when the tool matches. The warning does not stop the command.
 
-## Steps
+## Loop
+
+Run `atry next <run> --json`.
+Read each path in `read` before you run `command`.
+Stop when `command` is `none`.
+When `command` is approve, stop. This skill does not approve.
+When `command` names self-review, stop. Use the self-review skill for that stage.
+When `command` contains `close`, run `atry close <run> --preview`.
+Show that preview and ask the user to answer `y` or `n`.
+When the skill call includes a `yes` token, use that token as `y`.
+Run `atry close <run> --via confirm` only when the preview says `recommend: y` and the user answers `y`.
+When the `yes` token is that answer, run `atry close <run> --via arg`.
+When the preview says `recommend: n`, or the user answers `n`, stop and do not record an event.
+When `command` contains `review new`, run `atry review new <run> cross --tool <tool> --model <model>`.
+When `command` contains `review done`, follow the review method, then run `atry review done <run> cross`.
+Repeat from the first step in this section.
+
+## Review method
 
 1. Read `run.base`, `reviews.self`, and the stage paths from the context JSON.
 2. Read the plan files, the implement files, and the self-review pair.
 3. Diff the work from `run.base` to the current HEAD.
 4. Ask where each earlier claim can be wrong. Then check that place.
-5. Run `atry review new <run> cross --tool <tool> --model <model>`.
-6. Let `atry review done` run the configured `testCommand` from the run's base policy.
-7. Fill the printed markdown file with the edit tool.
-8. Set `fixed` and `open` in the printed JSON file.
-9. Run `atry review done <run> cross`.
 
 `review new cross` requires `--model`. After the user answers an open
 question, record the answer with `atry review decide <run> Q<n> <answer>`.
 Use `a` or `b` for a choice card and the user's text for a `Need:` card.
+Let `atry review done` run the configured `testCommand` from the run's base policy.
+Fill the printed markdown file with the edit tool.
+Set `fixed` and `open` in the printed JSON file.
 `review done` stores the configured test command's exit code, duration, and
 tree in the event and writes its last 200 output lines to `.test.log`.
 
@@ -56,24 +64,3 @@ Fix a confirmed bug before `review done`.
 Leave a style-only note in the markdown file. Do not change code for style.
 Write a genuine tradeoff as a question card and in `open`.
 `review new` records the stage start. Do not also run `atry stage start`.
-
-## Close
-
-After `review done`, show `fixed`, each `open` item, and the measured test
-result from `atry status <run> --json` under `reviews.cross.measured.tests`.
-Run `atry status <run> --json` and read `reviews.delta`. Show the delta when
-it is present. Explain that it counts edits made after the latest review
-started. Ask the user whether to accept those fixes before closing. Add
-`--ack-fixes` only after the user answers yes.
-Recommend `n` when some open items have no recorded decision.
-Recommend `n` when the measured test result has a non-zero exit code.
-When the skill call includes a `yes` token and `open` is empty, run `atry close <run> --via arg`.
-When that token is present and `open` is not empty, ask the user. Do not close yet.
-When a delta is present, ask the user to accept it even when the skill call includes a `yes` token.
-Otherwise ask the user to answer `y` or `n`.
-When the user answers `n`, stop. Do not record a close event.
-When the user answers `y` and `open` is empty, run `atry close <run> --via confirm`.
-When the user accepts a delta, add `--ack-fixes` to that close command.
-When the user answers `y` and `open` is not empty, ask once more.
-After that second yes, run `atry close <run> --via confirm --ack-open`. Include
-`--ack-fixes` too when the user accepted a delta.

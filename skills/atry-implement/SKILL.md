@@ -16,37 +16,34 @@ This stage implements an existing plan, one task at a time. It does not plan aga
 
 <!-- BEGIN PREFLIGHT -->
 
-This skill needs `requires-atry` in its front matter.
-Run `atry version --json` before any other command in this skill.
-Stop when the output is not a JSON object with `schema` and `version`, and tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
-Read the `version` string from that JSON.
-Split both versions on `.` and compare the numbers from the left.
-Find the first pair of numbers that differ. Ignore the numbers after that pair.
-Stop when the required number in that pair is higher than the installed number.
-Tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
-Do not search the filesystem for helpers.
-Do not run files under `scripts/` or `~/.agent-relay/lib/`.
+Run `atry preflight --requires "<requires-atry>"` before any other command in this skill.
+Stop when that command exits non-zero.
+When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
 
 <!-- END PREFLIGHT -->
 
 Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigravity`, `kiro`, or `unknown`.
 
-## Approve
+## Loop
 
-Read `approved` from the context JSON.
-When `approved` is true, skip this section.
-When the skill call includes a `yes` token, run `atry approve <run> --via arg`.
-Otherwise read Goal, Decisions, and the task count.
-Goal and Decisions are in `10-plan/overview.md`. The task count is `tasks` in the context JSON.
-Show those three items. Then ask the user to answer `y` or `n`.
-When the user answers `y`, run `atry approve <run> --via confirm`.
-When the user answers `n`, stop. Do not record an event.
-
-## Start
-
-Run `atry stage start <run> implement --tool <tool>`.
+Run `atry next <run> --json`.
+Read each path in `read` before you run `command`.
+Stop when `command` is `none`.
+When `needsHuman` is true for approve, run `atry approve <run> --preview`.
+Show that preview and ask the user to answer `y` or `n`.
+When the skill call includes a `yes` token, use that token as `y`.
+When the user answers `n`, stop and do not record an event.
+When the user answers `y` for approve, run `atry approve <run> --via confirm`.
+When the `yes` token is that answer, run `atry approve <run> --via arg`.
+When `command` contains `review` or `close`, stop.
+When `command` is stage start, run `atry stage start <run> implement --tool <tool>`.
+When `command` is stage done, run `atry stage done <run> implement --tool <tool>`.
+When `stage done` refuses, read the paths in the message.
+Ask the user before you pass `--allow-extra <reason>`.
 Add `--model <model>` when you know the model.
+When `needsHuman` is false and `command` is a task command, follow One task.
+Repeat from the first step in this section.
 
 ## One task
 
@@ -69,13 +66,6 @@ Add `--model <model>` when you know the model.
 `task done` and `task skip` drop the claim lock. Do not call `release` after them.
 Do not invent a meaning the plan does not state. Skip that task and record the reason.
 A stale lock can move with `atry steal <run> <task> --session <tag> --ttl <minutes>`.
-
-## Finish
-
-Run `atry list <run>` after each task.
-When every task is done or skipped, run `atry stage done <run> implement --tool <tool>`.
-When that command refuses, read the paths in the message.
-Ask the user before you pass `--allow-extra <reason>`.
 
 ## Rules
 

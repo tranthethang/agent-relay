@@ -4,9 +4,13 @@ import { resolve } from "node:path";
 import { RelayError } from "../core/error.js";
 import { isEnoent } from "../core/files.js";
 import {
+  approvePreview,
+  approvePreviewText,
   approveRun,
   approveText,
   brainstormDoneText,
+  closePreview,
+  closePreviewText,
   closeRun,
   closeText,
   doneStage,
@@ -77,9 +81,19 @@ export function registerLifecycle(program: Command): void {
     .command("approve")
     .description("Record plan approval")
     .argument("[run]", "run id, slug, name, or path")
-    .requiredOption("--via <via>", "confirm or arg")
-    .action(async (run: string | undefined, opts: { via: string }, command: Command) => {
+    .option("--via <via>", "confirm or arg")
+    .option("--preview", "print Goal, Decisions, and the task count")
+    .action(async (
+      run: string | undefined,
+      opts: { via?: string; preview?: boolean },
+      command: Command,
+    ) => {
       const runDir = await takeRun(command, run);
+      if (opts.preview === true) {
+        writeResult(await approvePreview(runDir), commandJson(command), approvePreviewText);
+        return;
+      }
+      if (opts.via === undefined) throw new RelayError("usage", "via is required", "via");
       writeResult(await approveRun({ runDir, via: opts.via }), commandJson(command), approveText);
     });
 
@@ -92,6 +106,7 @@ export function registerLifecycle(program: Command): void {
     .option("--waive-review <reason>", "close without required reviews")
     .option("--via <via>", "confirm or arg")
     .option("--abandon <reason>", "abandon the run")
+    .option("--preview", "print the close recommendation")
     .action(async (
       run: string | undefined,
       opts: {
@@ -100,10 +115,15 @@ export function registerLifecycle(program: Command): void {
         via?: string;
         abandon?: string;
         waiveReview?: string;
+        preview?: boolean;
       },
       command: Command,
     ) => {
       const runDir = await takeRun(command, run);
+      if (opts.preview === true) {
+        writeResult(await closePreview(runDir), commandJson(command), closePreviewText);
+        return;
+      }
       writeResult(
         await closeRun({
           runDir,

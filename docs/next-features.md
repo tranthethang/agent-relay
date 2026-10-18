@@ -165,6 +165,8 @@ Implemented in P13:
 
 ## N6. Skills carry logic that the CLI should own
 
+Status: done.
+
 Problem:
 
 - The preflight block repeats in six skills. It asks the model to compare

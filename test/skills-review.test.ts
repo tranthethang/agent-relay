@@ -10,9 +10,11 @@ test("self-review uses review new and review done", () => {
   expect(selfReview).toContain("atry review new <run> self --tool <tool>");
   expect(selfReview).toContain("atry review done <run> self");
   expect(selfReview).toContain("atry review decide <run> Q<n> <answer>");
+  expect(selfReview).toContain("atry next <run> --json");
+  expect(selfReview).toContain("atry close <run> --preview");
   expect(selfReview).toContain("configured `testCommand`");
   expect(selfReview).not.toContain("Set `fixed`, `tests`, and `open`");
-  expect(selfReview).not.toContain("atry close");
+  expect(selfReview).not.toContain("--ack-fixes");
   expect(selfReview).not.toContain("review upsert");
   expect(assertNoShellSnippet(selfReview)).toBeUndefined();
 });
@@ -23,14 +25,13 @@ test("cross-review asks before close and gates the yes token", () => {
   expect(crossReview).toContain("atry review new <run> cross --tool <tool> --model <model>");
   expect(crossReview).toContain("atry review done <run> cross");
   expect(crossReview).toContain("atry review decide <run> Q<n> <answer>");
+  expect(crossReview).toContain("atry next <run> --json");
+  expect(crossReview).toContain("atry close <run> --preview");
   expect(crossReview).toContain("atry close <run> --via arg");
   expect(crossReview).toContain("atry close <run> --via confirm");
-  expect(crossReview).toContain("atry close <run> --via confirm --ack-open");
-  expect(crossReview).toContain("Recommend `n` when some open items have no recorded decision");
-  expect(crossReview).toContain(
-    "Recommend `n` when the measured test result has a non-zero exit code",
-  );
-  expect(crossReview).toContain("Do not close yet");
+  expect(crossReview).toContain("recommend: y");
+  expect(crossReview).not.toContain("--ack-open");
+  expect(crossReview).not.toContain("Do not close yet");
   expect(crossReview).not.toContain("review upsert");
   expect(assertNoShellSnippet(crossReview)).toBeUndefined();
 });

@@ -1,6 +1,7 @@
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { rebuildRun } from "./cache.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
@@ -93,6 +94,83 @@ export function approveText(result: ApproveResult): string {
 
 export function closeText(result: CloseResult): string {
   return `lifecycle: ${result.lifecycle}\n`;
+}
+
+export type ApprovePreview = {
+  schema: 1;
+  goal: string;
+  decisions: string;
+  tasks: number;
+};
+
+export type ClosePreview = {
+  schema: 1;
+  recommend: "y" | "n";
+  reasons: string[];
+};
+
+export function approvePreviewText(result: ApprovePreview): string {
+  return `Goal:\n${result.goal}\n\nDecisions:\n${result.decisions}\n\ntasks: ${result.tasks}\n`;
+}
+
+export function closePreviewText(result: ClosePreview): string {
+  const reasons = result.reasons.length === 0 ? "" : `${result.reasons.join("\n")}\n`;
+  return `recommend: ${result.recommend}\n${reasons}`;
+}
+
+export function sectionText(markdown: string, heading: string): string {
+  const lines = markdown.split("\n");
+  const start = lines.findIndex((line) => line === `## ${heading}`);
+  if (start === -1) return "";
+  const body: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.startsWith("## ")) break;
+    body.push(line);
+  }
+  return body.join("\n").trim();
+}
+
+export async function approvePreview(runDir: string): Promise<ApprovePreview> {
+  let overview = "";
+  try {
+    overview = await readFile(join(runDir, "10-plan/overview.md"), "utf8");
+  } catch (error) {
+    if (!isEnoent(error)) throw error;
+  }
+  return {
+    schema: schemaVersion,
+    goal: sectionText(overview, "Goal"),
+    decisions: sectionText(overview, "Decisions"),
+    tasks: await taskCount(runDir),
+  };
+}
+
+export async function closePreview(runDir: string): Promise<ClosePreview> {
+  const loaded = await rebuildRun(runDir);
+  const reasons: string[] = [];
+  const integrity = await reviewIntegrity(runDir, loaded.run.base, loaded.events);
+  for (const kind of integrity.required) {
+    if (!integrity.done.includes(kind)) reasons.push(`missing ${kind} review`);
+  }
+  if (integrity.treeMatch === false) reasons.push("tree mismatch");
+  if (integrity.delta !== undefined) reasons.push("delta");
+  const latest = await latestReview(runDir, loaded.events);
+  if (latest !== null && latest.open > 0) reasons.push("open items");
+  const completed = [...loaded.events].reverse().find((event) =>
+    event.action === "completed"
+    && (event.stage === "self-review" || event.stage === "cross-review")
+  );
+  if (
+    completed?.tests !== undefined && completed.tests !== "not-configured"
+    && completed.tests.exit !== 0
+  ) {
+    reasons.push("failed tests");
+  }
+  return {
+    schema: schemaVersion,
+    recommend: reasons.length === 0 ? "y" : "n",
+    reasons,
+  };
 }
 
 export function brainstormDoneText(result: BrainstormDoneResult): string {
@@ -384,6 +462,19 @@ async function implementScope(
   const reason = allowExtra.trim();
   if (reason.length === 0) throw new RelayError("validation", "reason is empty", "allow-extra");
   return { extra: outside, reason };
+}
+
+async function taskCount(runDir: string): Promise<number> {
+  let value: unknown;
+  try {
+    value = await readJson(join(runDir, "10-plan/index.json"));
+  } catch (error) {
+    if (isEnoent(error)) return 0;
+    throw error;
+  }
+  const parsed = planIndexSchema.safeParse(value);
+  if (!parsed.success) return 0;
+  return parsed.data.tasks.length;
 }
 
 async function plannedFiles(runDir: string): Promise<string[]> {
