@@ -2,6 +2,7 @@
   "name": "@tranthethang/agent-relay",
   "version": "0.0.0",
   "type": "module",
+  "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tranthethang/agent-relay.git"
