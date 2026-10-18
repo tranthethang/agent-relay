@@ -39,11 +39,16 @@ Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigr
 3. Diff the work from `run.base` to the current HEAD.
 4. Run `atry review new <run> self --tool <tool>`.
 5. Add `--model <model>` when you know the model.
-6. Run the project tests when the repo has them.
+6. Let `atry review done` run the configured `testCommand` from the run's base policy.
 7. Fill the printed markdown file with the edit tool.
-8. Set `fixed`, `tests`, and `open` in the printed JSON file.
-9. Use `pass`, `fail`, or `not-run` for `tests`.
-10. Run `atry review done <run> self`.
+8. Set `fixed` and `open` in the printed JSON file.
+9. Run `atry review done <run> self`.
+
+After the user answers an open question, record the answer with
+`atry review decide <run> Q<n> <answer>`. Use `a` or `b` for a choice card.
+Use the user's text for a `Need:` card. `review done` runs the configured test
+command and stores its exit code, duration, and tree in the event. It also
+writes the last 200 output lines to the matching `.test.log` file.
 
 After `review done`, run `atry status <run> --json` and read
 `reviews.delta`. If present, show its file and line counts to the user. The

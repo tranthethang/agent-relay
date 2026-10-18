@@ -70,7 +70,7 @@ test("close requires policy reviews and matching review trees", async () => {
     expect(missing.code).toBe(4);
     expect(missing.stderr).toContain("required cross review is missing");
 
-    await runCli(["review", "new", run, "cross", "--tool", "codex"], dir);
+    await runCli(["review", "new", run, "cross", "--tool", "codex", "--model", "gpt-5.4"], dir);
     await writeFile(join(dir, "during-review.txt"), "edited after review started\n");
     expect((await runCli(["review", "done", run, "cross"], dir)).code).toBe(0);
     const delta = await runCli(["close", run], dir);

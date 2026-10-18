@@ -1,11 +1,10 @@
-import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { rebuildRun } from "./cache.js";
 import { fromZod, RelayError } from "./error.js";
 import { isEnoent, readJson } from "./files.js";
 import { type RunState } from "./reduce.js";
-import { type ReviewJson, reviewJsonSchema } from "./review.js";
 import { type RunJson } from "./run.js";
+import { type ReviewEvidence, reviewEvidenceFor } from "./status.js";
 import { type PlanIndex, planIndexSchema } from "./tasks.js";
 import { schemaVersion, taskIdSchema } from "./vocab.js";
 
@@ -18,8 +17,6 @@ type TaskView = {
   implement: string;
   files: string[];
 };
-
-type ReviewView = ReviewJson & { path: string };
 
 export type ContextResult = {
   schema: 1;
@@ -37,7 +34,7 @@ export type ContextResult = {
   lifecycle: RunState["lifecycle"];
   approved: boolean;
   tasks: TaskView[];
-  reviews: { self: ReviewView | null; cross: ReviewView | null };
+  reviews: { self: ReviewEvidence | null; cross: ReviewEvidence | null };
   brainstorm: string | null;
   paths: {
     plan: string[];
@@ -56,8 +53,8 @@ export async function contextFor(runDir: string, task: string | undefined): Prom
   const index = await readIndex(runDir);
   const tasks = mergeTasks(loaded.run.state, index);
   const reviews = {
-    self: await latestReview(runDir, "30-self-review"),
-    cross: await latestReview(runDir, "40-cross-review"),
+    self: await reviewEvidenceFor(runDir, loaded.events, "self"),
+    cross: await reviewEvidenceFor(runDir, loaded.events, "cross"),
   };
   const result: ContextResult = {
     schema: schemaVersion,
@@ -191,39 +188,4 @@ async function readIndex(runDir: string): Promise<PlanIndex | null> {
     throw new RelayError(issue.code, issue.message, fieldPath);
   }
   return parsed.data;
-}
-
-function reviewNumber(name: string): number {
-  return Number(name.slice(0, name.length - ".json".length));
-}
-
-async function latestReview(runDir: string, dirName: string): Promise<ReviewView | null> {
-  let names: string[];
-  try {
-    names = await readdir(join(runDir, dirName));
-  } catch (error) {
-    if (isEnoent(error)) return null;
-    throw error;
-  }
-  const files = names.filter((name) => /^[0-9]+\.json$/.test(name));
-  files.sort((left, right) => reviewNumber(left) - reviewNumber(right));
-  const latest = files[files.length - 1];
-  if (latest === undefined) return null;
-  const rel = `${dirName}/${latest}`;
-  let value: unknown;
-  try {
-    value = await readJson(join(runDir, dirName, latest));
-  } catch (error) {
-    if (error instanceof RelayError && error.message === "invalid JSON") {
-      throw new RelayError("validation", "invalid JSON", rel);
-    }
-    throw error;
-  }
-  const parsed = reviewJsonSchema.safeParse(value);
-  if (!parsed.success) {
-    const issue = fromZod(parsed.error);
-    const fieldPath = issue.fieldPath.length === 0 ? rel : `${rel}:${issue.fieldPath}`;
-    throw new RelayError(issue.code, issue.message, fieldPath);
-  }
-  return { path: rel, ...parsed.data };
 }

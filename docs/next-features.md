@@ -33,11 +33,11 @@ Data in a run has three trust levels:
 
 | Level | Example                                         | Trust |
 | ----- | ----------------------------------------------- | ----- |
-| 1     | `atry` measures it: `base`, `size`, event order | High  |
-| 2     | Agent fills JSON: `tests`, `fixed`, `open`      | Low   |
+| 1     | `atry` measures it: `base`, `size`, event order, tests | High  |
+| 2     | Agent fills JSON: `fixed`, `open`, `tool`, `model`    | Low   |
 | 3     | Skill prose only: "edit only listed files"      | None  |
 
-Most gates today read level 2 or level 3 data. The rule for new work:
+Some gates still read level 2 or level 3 data. The rule for new work:
 
 - When `atry` can measure a value, `atry` measures it. The agent does not
   report it.
@@ -77,40 +77,37 @@ Implemented in P13:
 - Policy lives in a committed file at the repo root, read from `base`.
   Example: `{ "requireReviews": ["self"], "smallChange": 20 }`.
 
-## N2. Agent-reported data can bypass gates
+## N2. Agent-reported data can bypass gates — done in P14
 
 Problem:
 
-- `review done` takes `tool` and `model` from the review JSON. The agent can
-  edit them to avoid the diversity warning.
-- `model` defaults to `unknown`. That family never matches, so no warning
-  appears.
-- `modelFamily` cuts at the first digit. `claude-opus-5-5` and
-  `claude-sonnet-5-5` count as different families. Blind spots come from the
-  vendor's training, not from the model line.
-- `tests` is agent-reported.
-- The open-question gate reads only `open` in JSON. An empty array passes
-  while the Markdown still has question cards.
+- Review JSON previously supplied tool, model, and test results without
+  checks against measured events.
+- Open-question checks previously trusted only JSON and ignored Markdown.
 
 Intent: gates read measured data.
 
-Fix:
+Implemented:
 
 1. Lock provenance at `review new`. `review done` refuses when the JSON
    `tool` or `model` differs from the started event.
-2. Require `--model` for cross-review, or show "diversity not checked".
+2. Require `--model` for cross-review.
 3. Record a `detected` tool from environment markers next to the declared
    tool. Warn on mismatch.
-4. Check diversity at two levels: same vendor warns, same model line warns
-   louder. Keep the vendor map in `vocab.ts`.
+4. Check diversity at two levels: same vendor warns, and the same model line
+   adds a separate warning. The vendor map lives in `model.ts`.
 5. Add `testCommand` to policy, read from `base`. `review done` runs it and
-   records exit code, duration, and tree. The agent field becomes a claim.
+   records exit code, duration, and tree. The result leaves review JSON.
 6. Count `- Q<n>:` lines at column 0 in the review Markdown. Compare the
-   count with `open.length`.
-7. Add `atry decide <run> <Q> <a|b|text>` as an event. A question that leaves
-   `open` between reviews needs a decide event.
+   count with `open.length` and refuse a mismatch.
+7. Add `atry review decide <run> <Q> <a|b|text>` as an event. A question that leaves
+   `open` between reviews needs a decide event. Close treats a decided item
+   as resolved.
 
-## N3. A person and an agent look the same to `atry`
+The current environment detector recognizes Codex through `CODEX_THREAD_ID`.
+Other tools remain undetected until a marker is documented or observed.
+
+## N3. A person and an agent look the same to `atry` — in-repo part done in P14
 
 Problem: `--via confirm` and `--via arg` are labels. An agent in the same
 shell can run `atry approve <run> --via confirm`.
@@ -118,8 +115,10 @@ shell can run `atry approve <run> --via confirm`.
 Intent: approve and close carry an honest actor label now. Real human
 approval comes from tool config later.
 
-Fix in this repo: when `atry` detects an agent environment, record
-`actor: "agent-env"` on approve and close. `status` shows that label.
+Implemented in this repo: when `atry` detects the supported Codex environment,
+it records `actor: "agent-env"` on approve and close. Other environments
+record `unknown`. `status` shows the actor label. This still does not prove a
+person approved.
 
 Later (tool integration, not this repo yet): ship config that makes the tool
 ask the person before `atry approve` and `atry close`. Example for Claude

@@ -19,7 +19,7 @@ export async function completeReview(
 ): Promise<void> {
   await mustCli(["review", "new", run, kind, "--tool", tool, "--model", model], dir);
   const folder = kind === "self" ? "30-self-review" : "40-cross-review";
-  const body = { schema: 1, kind, tool, model, fixed: 0, tests: "pass", open: [] };
+  const body = { schema: 1, kind, tool, model, fixed: 0, open: [] };
   await writeFile(join(run, folder, "01.json"), `${JSON.stringify(body)}\n`);
   await mustCli(["review", "done", run, kind], dir);
 }

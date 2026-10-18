@@ -15,12 +15,26 @@ export const sizeSchema = z.object({
   deleted: z.number().int().nonnegative(),
 }).strict();
 
+export const testsSchema = z.union([
+  z.literal("not-configured"),
+  z.object({
+    exit: z.number().int(),
+    ms: z.number().int().nonnegative(),
+    tree: z.string().min(1),
+  }).strict(),
+]);
+
 export const eventLineSchema = z.object({
   schema: z.literal(schemaVersion),
   ts: utcTimestampSchema,
   stage: stageSchema,
   action: actionSchema,
   tool: toolSchema.optional(),
+  detected: toolSchema.optional(),
+  actor: z.enum(["agent-env", "unknown"]).optional(),
+  tests: testsSchema.optional(),
+  question: z.string().min(1).optional(),
+  answer: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   via: viaSchema.optional(),
   head: z.string().min(1).optional(),

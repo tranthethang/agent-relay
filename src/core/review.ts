@@ -1,16 +1,19 @@
-import { mkdir, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { atomicWrite, isEnoent, readJson } from "./files.js";
-import { gitHead, treeDiffSize, workTree } from "./git.js";
+import { gitHead, gitRoot, treeDiffSize, workTree } from "./git.js";
+import { modelLine, modelVendor } from "./model.js";
 import { appendEvent, withRunLock } from "./mutate.js";
+import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
+import { runTestCommand } from "./testrun.js";
 import { schemaVersion, toolSchema } from "./vocab.js";
 
 export const reviewKinds = ["self", "cross"] as const;
-export const testResults = ["pass", "fail", "not-run"] as const;
 
 const openChoiceSchema = z.object({
   q: z.string().min(1),
@@ -29,7 +32,6 @@ export const reviewJsonSchema = z.object({
   tool: toolSchema,
   model: z.string().min(1),
   fixed: z.number().int().nonnegative(),
-  tests: z.enum(testResults),
   open: z.array(z.union([openChoiceSchema, openNeedSchema])),
 }).strict();
 
@@ -39,7 +41,7 @@ export function parseReviewJson(value: unknown): ReviewJson {
   return reviewJsonSchema.parse(value);
 }
 
-const reviewPlaces = {
+export const reviewPlaces = {
   self: { dir: "30-self-review", stage: "self-review" },
   cross: { dir: "40-cross-review", stage: "cross-review" },
 } as const;
@@ -91,7 +93,6 @@ export function reviewScaffold(kind: ReviewKind, tool: string, model: string): R
     tool,
     model,
     fixed: 0,
-    tests: "not-run",
     open: [],
   });
   if (!parsed.success) throw new RelayError("validation", "invalid tool", "tool");
@@ -109,8 +110,6 @@ export async function reviewNew(input: {
   model?: string;
 }): Promise<ReviewNewResult> {
   const kind = parseKind(input.kind);
-  const model = input.model === undefined ? "unknown" : parseModel(input.model);
-  const scaffold = reviewScaffold(kind, input.tool, model);
   const place = reviewPlaces[kind];
   return withRunLock(input.runDir, async (loaded) => {
     if (loaded.run.state.lifecycle !== "reviewing") {
@@ -118,6 +117,17 @@ export async function reviewNew(input: {
         "gate",
         `review refused: run is ${loaded.run.state.lifecycle}`,
         "state.lifecycle",
+      );
+    }
+    if (kind === "cross" && (input.model === undefined || input.model.trim().length === 0)) {
+      throw new RelayError("usage", "cross review requires --model", "model");
+    }
+    const model = input.model === undefined ? "unknown" : parseModel(input.model);
+    const scaffold = reviewScaffold(kind, input.tool, model);
+    const detected = detectTool(process.env);
+    if (detected !== undefined && detected !== scaffold.tool) {
+      process.stderr.write(
+        `warning: detected tool ${detected} differs from declared ${scaffold.tool}\n`,
       );
     }
     const dir = join(input.runDir, place.dir);
@@ -134,6 +144,7 @@ export async function reviewNew(input: {
       tree,
       tool: scaffold.tool,
       model: scaffold.model,
+      ...(detected === undefined ? {} : { detected }),
     });
     return {
       schema: schemaVersion,
@@ -150,6 +161,7 @@ export async function reviewNew(input: {
 export async function reviewDone(input: {
   runDir: string;
   kind: string;
+  testTimeoutMs?: number;
 }): Promise<ReviewDoneResult & { warnings: string[] }> {
   const kind = parseKind(input.kind);
   const place = reviewPlaces[kind];
@@ -162,6 +174,40 @@ export async function reviewDone(input: {
       );
     }
     const review = await readLatestReview(input.runDir, place.dir, kind);
+    const started = lastReviewStart(loaded.events, place.stage);
+    if (started?.tool !== review.value.tool) {
+      throw new RelayError("validation", "tool differs from review start", `${review.rel}:tool`);
+    }
+    if (started?.model !== review.value.model) {
+      throw new RelayError("validation", "model differs from review start", `${review.rel}:model`);
+    }
+    const markdownRel = review.rel.replace(/\.json$/, ".md");
+    const markdown = await readFile(join(input.runDir, markdownRel), "utf8");
+    const cardCount = markdown.match(/^- Q[0-9]+: /gm)?.length ?? 0;
+    if (cardCount !== review.value.open.length) {
+      throw new RelayError(
+        "validation",
+        `review Markdown has ${cardCount} question cards but JSON has ${review.value.open.length} open items`,
+        `${review.rel}:open`,
+      );
+    }
+    const previous = latestCompletedReview(loaded.events);
+    if (previous?.ref !== undefined) {
+      const previousReview = await readReviewAt(input.runDir, previous);
+      for (const item of previousReview.open) {
+        if (review.value.open.some((next) => next.q === item.q)) continue;
+        const decided = loaded.events.some((event) =>
+          event.action === "decided" && event.ref === previous.ref && event.question === item.q
+        );
+        if (!decided) {
+          throw new RelayError(
+            "validation",
+            `open question was dropped without a decision: ${item.q}`,
+            `${review.rel}:open`,
+          );
+        }
+      }
+    }
     const warnings = kind === "cross"
       ? diversityWarnings(
         review.value,
@@ -169,6 +215,12 @@ export async function reviewDone(input: {
         lastProvenance(loaded.events, "self-review"),
       )
       : [];
+    const policy = await readPolicy(input.runDir, loaded.run.base);
+    const execution = await runTestCommand(
+      await gitRoot(input.runDir),
+      policy.testCommand,
+      input.testTimeoutMs,
+    );
     const head = await gitHead(input.runDir);
     const tree = await workTree(input.runDir);
     const size = await treeDiffSize(input.runDir, loaded.run.base, tree);
@@ -176,6 +228,14 @@ export async function reviewDone(input: {
     const delta = startedTree !== undefined && startedTree !== tree
       ? await treeDiffSize(input.runDir, startedTree, tree)
       : undefined;
+    const label = String(reviewNumber(review.rel)).padStart(2, "0");
+    const logPath = join(input.runDir, place.dir, `${label}.test.log`);
+    const log = execution.tests === "not-configured"
+      ? "test command not configured\n"
+      : `stdout (last 200 lines):\n${tailLines(execution.stdout)}\n\nstderr (last 200 lines):\n${
+        tailLines(execution.stderr)
+      }\n`;
+    await atomicWrite(logPath, log);
     const saved = await appendEvent(loaded, input.runDir, {
       stage: place.stage,
       action: "completed",
@@ -185,6 +245,9 @@ export async function reviewDone(input: {
       tree,
       size,
       ...(delta === undefined ? {} : { delta }),
+      tests: execution.tests === "not-configured"
+        ? execution.tests
+        : { ...execution.tests, tree },
       ref: review.rel,
     });
     return {
@@ -214,10 +277,20 @@ function lastReviewStartTree(
   return undefined;
 }
 
-export function modelFamily(model: string): string {
-  const index = model.search(/[0-9]/);
-  if (index <= 0) return model;
-  return model.slice(0, index);
+function lastReviewStart(
+  events: readonly EventLine[],
+  stage: ReviewStage,
+): EventLine | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (
+      event?.stage === stage
+      && event.action === "started"
+      && event.tool !== undefined
+      && event.model !== undefined
+    ) return event;
+  }
+  return undefined;
 }
 
 export function diversityWarnings(
@@ -232,14 +305,28 @@ export function diversityWarnings(
   if (selfReview?.tool !== undefined && review.tool === selfReview.tool) {
     warnings.push("cross tool matches self-review tool");
   }
-  const family = modelFamily(review.model);
-  if (implement?.model !== undefined && family === modelFamily(implement.model)) {
-    warnings.push("cross model family matches implement model");
-  }
-  if (selfReview?.model !== undefined && family === modelFamily(selfReview.model)) {
-    warnings.push("cross model family matches self-review model");
-  }
+  addModelWarnings(warnings, review.model, implement?.model, "implement");
+  addModelWarnings(warnings, review.model, selfReview?.model, "self-review");
   return warnings;
+}
+
+function addModelWarnings(
+  warnings: string[],
+  reviewModel: string,
+  earlierModel: string | undefined,
+  earlierStage: "implement" | "self-review",
+): void {
+  if (earlierModel === undefined) return;
+  const reviewVendor = modelVendor(reviewModel);
+  const earlierVendor = modelVendor(earlierModel);
+  if (reviewVendor === "unknown" || earlierVendor === "unknown") {
+    warnings.push(`cross model vendor unknown for ${earlierStage} model`);
+  } else if (reviewVendor === earlierVendor) {
+    warnings.push(`cross model vendor matches ${earlierStage} model`);
+  }
+  if (modelLine(reviewModel) === modelLine(earlierModel)) {
+    warnings.push(`cross model line matches ${earlierStage} model`);
+  }
 }
 
 function lastProvenance(
@@ -250,7 +337,8 @@ function lastProvenance(
   for (const event of events) {
     if (event.stage !== stage) continue;
     if (event.tool === undefined && event.model === undefined) continue;
-    found = { tool: event.tool, model: event.model };
+    // `stage done` may omit --model; keep the model from the start event.
+    found = { tool: event.tool ?? found?.tool, model: event.model ?? found?.model };
   }
   return found;
 }
@@ -294,7 +382,48 @@ async function readLatestReview(
 }
 
 function reviewNumber(name: string): number {
-  return Number(name.slice(0, name.length - ".json".length));
+  const basename = name.slice(name.lastIndexOf("/") + 1);
+  return Number(basename.slice(0, basename.length - ".json".length));
+}
+
+function tailLines(text: string): string {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines.slice(-200).join("\n");
+}
+
+function latestCompletedReview(events: readonly EventLine[]): EventLine | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (
+      event?.action === "completed"
+      && (event.stage === "self-review" || event.stage === "cross-review")
+    ) return event;
+  }
+  return undefined;
+}
+
+async function readReviewAt(
+  runDir: string,
+  event: EventLine,
+): Promise<ReviewJson> {
+  const dir = event.stage === "self-review" ? reviewPlaces.self.dir : reviewPlaces.cross.dir;
+  const rel = event.ref;
+  if (rel === undefined || !new RegExp(`^${dir}/[0-9]+\\.json$`).test(rel)) {
+    throw new RelayError("validation", "invalid review ref", rel ?? "review.ref");
+  }
+  let value: unknown;
+  try {
+    value = await readJson(join(runDir, rel));
+  } catch {
+    throw new RelayError("validation", "could not read completed review", rel);
+  }
+  const parsed = reviewJsonSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = fromZod(parsed.error);
+    throw new RelayError("validation", issue.message, `${rel}:${issue.fieldPath}`);
+  }
+  return parsed.data;
 }
 
 async function nextLabel(dir: string): Promise<string> {

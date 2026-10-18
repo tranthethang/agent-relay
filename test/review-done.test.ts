@@ -1,8 +1,13 @@
+import { execFile, spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
-import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
+import { cliPath, gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
 import { createRun } from "./plan-helper.js";
+
+const execFileAsync = promisify(execFile);
 
 test("atry review done validates the latest JSON and records head and size", async () => {
   await withTempGitRepo(async (dir) => {
@@ -20,7 +25,6 @@ test("atry review done validates the latest JSON and records head and size", asy
           tool: "codex",
           model: "gpt-5.4",
           fixed: 1,
-          tests: "pass",
           open: [],
         })
       }\n`,
@@ -59,6 +63,137 @@ test("atry review done validates the latest JSON and records head and size", asy
       ref: "30-self-review/02.json",
     });
     expect(completed[0]).not.toHaveProperty("delta");
+  });
+});
+
+test("atry review done runs the base policy command and writes its output tail", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self"],
+        smallChange: 100,
+        testCommand: `node -e "for(let i=1;i<=205;i++) console.log(i)"`,
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-test-command");
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    const done = await runCli(["review", "done", run, "self"], dir);
+    expect(done.code).toBe(0);
+    const events = (await readFile(join(run, "events.jsonl"), "utf8"))
+      .trim().split("\n").map((line) =>
+        JSON.parse(line) as {
+          action?: string;
+          stage?: string;
+          tests?: { exit: number; ms: number; tree: string } | string;
+        }
+      );
+    const completed = events.find((event) =>
+      event.action === "completed" && event.stage === "self-review"
+    );
+    expect(completed?.tests).toMatchObject({
+      exit: 0,
+      tree: expect.stringMatching(/^[0-9a-f]{40}$/),
+    });
+    const log = await readFile(join(run, "30-self-review", "01.test.log"), "utf8");
+    expect(log).toContain("stdout (last 200 lines):");
+    expect(log).toContain("6\n7\n8\n");
+    expect(log).toContain("204\n205");
+    expect(log).not.toContain("\n5\n");
+  });
+});
+
+test("atry review done runs the policy command at the repo root", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self"],
+        smallChange: 100,
+        testCommand: `node -e "process.stdout.write(process.cwd())"`,
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-test-cwd");
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    expect((await runCli(["review", "done", run, "self"], dir)).code).toBe(0);
+    const log = await readFile(join(run, "30-self-review", "01.test.log"), "utf8");
+    expect(log).toContain(`stdout (last 200 lines):\n${dir}\n`);
+  });
+});
+
+test("atry review done refuses a tool changed after review new", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-provenance-mismatch");
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor", "--model", "m1"], dir);
+    await writeFile(
+      join(run, "30-self-review", "01.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          kind: "self",
+          tool: "codex",
+          model: "m1",
+          fixed: 0,
+          open: [],
+        })
+      }\n`,
+    );
+    const done = await runCli(["review", "done", run, "self"], dir);
+    expect(done.code).toBe(2);
+    expect(done.stderr).toContain("30-self-review/01.json:tool: tool differs from review start");
+  });
+});
+
+test("atry review done requires column-zero question cards to match open items", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-question-count");
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    await writeFile(
+      join(run, "30-self-review", "01.md"),
+      "# self\n\n  - Q1: indented\n- Q2: column zero\n",
+    );
+    await writeFile(
+      join(run, "30-self-review", "01.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          kind: "self",
+          tool: "cursor",
+          model: "unknown",
+          fixed: 0,
+          open: [],
+        })
+      }\n`,
+    );
+    const done = await runCli(["review", "done", run, "self"], dir);
+    expect(done.code).toBe(2);
+    expect(done.stderr).toContain("review Markdown has 1 question cards but JSON has 0 open items");
+    await writeFile(
+      join(run, "30-self-review", "01.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          kind: "self",
+          tool: "cursor",
+          model: "unknown",
+          fixed: 0,
+          open: [{ q: "Column-zero card", need: "one open item" }],
+        })
+      }\n`,
+    );
+    expect((await runCli(["review", "done", run, "self"], dir)).code).toBe(0);
   });
 });
 
@@ -125,6 +260,10 @@ test("atry close reads the completed review, not a later unfinished scaffold", a
     await reachReview(run, dir);
     await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
     await writeFile(
+      join(run, "30-self-review", "01.md"),
+      "# self\n\n- Q1: Keep it?\n  - Need: usage data\n",
+    );
+    await writeFile(
       join(run, "30-self-review", "01.json"),
       `${
         JSON.stringify({
@@ -133,7 +272,6 @@ test("atry close reads the completed review, not a later unfinished scaffold", a
           tool: "cursor",
           model: "unknown",
           fixed: 0,
-          tests: "pass",
           open: [{ q: "Keep it?", need: "usage data" }],
         })
       }\n`,
@@ -168,7 +306,6 @@ test("atry review done names the invalid field and a missing review", async () =
           tool: "cursor",
           model: "unknown",
           fixed: 0,
-          tests: "not-run",
           open: [],
         })
       }\n`,
@@ -182,3 +319,52 @@ test("atry review done names the invalid field and a missing review", async () =
     expect(refused.stderr).toContain("review refused: run is planned");
   });
 });
+
+test.skipIf(process.platform === "win32")(
+  "atry review done passes SIGINT to the test command group",
+  async () => {
+    await withTempGitRepo(async (dir) => {
+      await writeFile(
+        join(dir, ".agent-relay.json"),
+        JSON.stringify({
+          schema: 1,
+          requireReviews: ["self"],
+          smallChange: 100,
+          testCommand:
+            `node -e "require('fs').writeFileSync('child.pid', String(process.pid)); setTimeout(() => {}, 30000)"; echo after`,
+        }),
+      );
+      await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+      await gitCommit(dir);
+      const run = await createRun(dir, "review-test-signal");
+      await reachReview(run, dir);
+      await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+      const atry = spawn(process.execPath, [cliPath, "review", "done", run, "self"], {
+        cwd: dir,
+        stdio: "ignore",
+      });
+      const exited = new Promise<NodeJS.Signals | null>((resolve) => {
+        atry.on("exit", (_code, signal) => resolve(signal));
+      });
+      let pid: number | undefined;
+      for (let attempt = 0; attempt < 100 && pid === undefined; attempt += 1) {
+        await delay(50);
+        pid = await readFile(join(dir, "child.pid"), "utf8").then(Number, () => undefined);
+      }
+      expect(pid).toBeDefined();
+      atry.kill("SIGINT");
+      expect(await exited).toBe("SIGINT");
+      let alive = true;
+      for (let attempt = 0; attempt < 40 && alive; attempt += 1) {
+        await delay(50);
+        try {
+          process.kill(pid as number, 0);
+        } catch {
+          alive = false;
+        }
+      }
+      expect(alive).toBe(false);
+    });
+  },
+  20000,
+);

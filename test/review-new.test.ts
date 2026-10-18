@@ -33,7 +33,6 @@ test("atry review new writes the next pair and a full JSON scaffold", async () =
       tool: "cursor",
       model: "composer",
       fixed: 0,
-      tests: "not-run",
       open: [],
     });
     const second = await runCli(["review", "new", run, "self", "--tool", "codex"], dir);
@@ -79,5 +78,21 @@ test("atry review new rejects an empty model and an unknown tool", async () => {
     const tool = await runCli(["review", "new", run, "self", "--tool", "claude"], dir);
     expect(tool.code).toBe(2);
     expect(tool.stderr).toContain("tool: invalid tool");
+  });
+});
+
+test("atry review new requires a model for cross review but defaults self to unknown", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-model-required");
+    await reachReview(run, dir);
+    const cross = await runCli(["review", "new", run, "cross", "--tool", "cursor"], dir);
+    expect(cross.code).toBe(1);
+    expect(cross.stderr).toContain("model: cross review requires --model");
+    const self = await runCli(["review", "new", run, "self", "--tool", "cursor", "--json"], dir);
+    expect(self.code).toBe(0);
+    expect(JSON.parse(self.stdout).json).toContain("01.json");
+    const jsonPath = JSON.parse(self.stdout).json as string;
+    expect(JSON.parse(await readFile(jsonPath, "utf8")).model).toBe("unknown");
   });
 });

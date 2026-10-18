@@ -16,6 +16,7 @@ export const actions = [
   "created",
   "started",
   "completed",
+  "decided",
   "approved",
   "closed",
   "waived",
@@ -37,6 +38,8 @@ export const tools = [
   "kiro",
   "unknown",
 ] as const;
+
+export type Tool = (typeof tools)[number];
 
 export const viaValues = ["confirm", "arg"] as const;
 

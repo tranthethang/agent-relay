@@ -40,13 +40,17 @@ Use a different tool than implement and self-review when you can.
 2. Read the plan files, the implement files, and the self-review pair.
 3. Diff the work from `run.base` to the current HEAD.
 4. Ask where each earlier claim can be wrong. Then check that place.
-5. Run `atry review new <run> cross --tool <tool>`.
-6. Add `--model <model>` when you know the model.
-7. Run the project tests when the repo has them.
-8. Fill the printed markdown file with the edit tool.
-9. Set `fixed`, `tests`, and `open` in the printed JSON file.
-10. Use `pass`, `fail`, or `not-run` for `tests`.
-11. Run `atry review done <run> cross`.
+5. Run `atry review new <run> cross --tool <tool> --model <model>`.
+6. Let `atry review done` run the configured `testCommand` from the run's base policy.
+7. Fill the printed markdown file with the edit tool.
+8. Set `fixed` and `open` in the printed JSON file.
+9. Run `atry review done <run> cross`.
+
+`review new cross` requires `--model`. After the user answers an open
+question, record the answer with `atry review decide <run> Q<n> <answer>`.
+Use `a` or `b` for a choice card and the user's text for a `Need:` card.
+`review done` stores the configured test command's exit code, duration, and
+tree in the event and writes its last 200 output lines to `.test.log`.
 
 Fix a confirmed bug before `review done`.
 Leave a style-only note in the markdown file. Do not change code for style.
@@ -55,13 +59,14 @@ Write a genuine tradeoff as a question card and in `open`.
 
 ## Close
 
-After `review done`, show `fixed`, each `open` item, and `tests`.
+After `review done`, show `fixed`, each `open` item, and the measured test
+result from `atry status <run> --json` under `reviews.cross.measured.tests`.
 Run `atry status <run> --json` and read `reviews.delta`. Show the delta when
 it is present. Explain that it counts edits made after the latest review
 started. Ask the user whether to accept those fixes before closing. Add
 `--ack-fixes` only after the user answers yes.
-Recommend `n` when `open` is not empty.
-Recommend `n` when `tests` is `fail`.
+Recommend `n` when some open items have no recorded decision.
+Recommend `n` when the measured test result has a non-zero exit code.
 When the skill call includes a `yes` token and `open` is empty, run `atry close <run> --via arg`.
 When that token is present and `open` is not empty, ask the user. Do not close yet.
 When a delta is present, ask the user to accept it even when the skill call includes a `yes` token.

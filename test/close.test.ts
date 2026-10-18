@@ -9,7 +9,6 @@ const review = {
   tool: "cursor",
   model: "unknown",
   fixed: 0,
-  tests: "pass",
   open: [{ q: "Which gate?", a: "Keep exit 4", b: "Warn only" }],
 };
 
@@ -35,6 +34,11 @@ test("atry close gates on open questions and abandon skips the gate", async () =
     const plain = await runCli(["close", run.path, "--via", "arg", "--json"], dir);
     expect(plain.code).toBe(0);
     expect(JSON.parse(plain.stdout)).toMatchObject({ lifecycle: "closed" });
+    const events = (await readFile(join(run.path, "events.jsonl"), "utf8"))
+      .trim().split("\n").map((line) => JSON.parse(line) as { action?: string; actor?: string });
+    expect(["agent-env", "unknown"]).toContain(
+      events.find((event) => event.action === "closed")?.actor,
+    );
 
     const second = await runCli([
       "run",

@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { isEnoent, readJson } from "./files.js";
@@ -8,7 +9,7 @@ import { gitHead, treeDiffSize, workTree } from "./git.js";
 import { appendEvent, withRunLock } from "./mutate.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
-import { reviewJsonSchema } from "./review.js";
+import { parseReviewJson, reviewJsonSchema } from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
 import { schemaVersion, toolSchema, viaSchema } from "./vocab.js";
 
@@ -119,12 +120,14 @@ export async function approveRun(input: {
   via: string;
 }): Promise<ApproveResult> {
   const via = parseVia(input.via);
+  const actor = detectTool(process.env) === undefined ? "unknown" : "agent-env";
   return withRunLock(input.runDir, async (loaded) => {
     assertMove(loaded.run.state, "approve");
     const saved = await appendEvent(loaded, input.runDir, {
       stage: "plan",
       action: "approved",
       via,
+      actor,
     });
     return {
       schema: schemaVersion,
@@ -144,6 +147,7 @@ export async function closeRun(input: {
   waiveReview?: string;
 }): Promise<CloseResult> {
   const via = input.via === undefined ? undefined : parseVia(input.via);
+  const actor = detectTool(process.env) === undefined ? "unknown" : "agent-env";
   const waiveReason = input.waiveReview?.trim();
   if (input.waiveReview !== undefined && waiveReason?.length === 0) {
     throw new RelayError("validation", "reason is empty", "waive-review");
@@ -156,6 +160,7 @@ export async function closeRun(input: {
         stage: "run",
         action: "abandoned",
         reason,
+        actor,
         ...(via === undefined ? {} : { via }),
       });
       if (saved.run.state.lifecycle !== "abandoned") {
@@ -170,6 +175,7 @@ export async function closeRun(input: {
         stage: "run",
         action: "waived",
         reason: waiveReason,
+        actor,
         ...(via === undefined ? {} : { via }),
       });
     } else {
@@ -183,6 +189,7 @@ export async function closeRun(input: {
     const saved = await appendEvent(loaded, input.runDir, {
       stage: "run",
       action: "closed",
+      actor,
       ...(via === undefined ? {} : { via }),
     });
     if (saved.run.state.lifecycle !== "closed") {
@@ -274,6 +281,10 @@ async function recordStage(
   const stage = parseStage(input.stage);
   const tool = parseTool(input.tool);
   const model = parseModel(input.model);
+  const detected = action === "started" ? detectTool(process.env) : undefined;
+  if (detected !== undefined && detected !== tool) {
+    process.stderr.write(`warning: detected tool ${detected} differs from declared ${tool}\n`);
+  }
   return withRunLock(input.runDir, async (loaded) => {
     assertMove(loaded.run.state, stageMove(stage, action));
     const measured = action === "completed" && sizedStages.has(stage)
@@ -283,6 +294,7 @@ async function recordStage(
       stage,
       action,
       tool,
+      ...(detected === undefined ? {} : { detected }),
       ...(model === undefined ? {} : { model }),
       ...(measured === undefined ? {} : {
         head: measured.head,
@@ -367,7 +379,11 @@ async function latestReview(
     if (dir === undefined || !new RegExp(`^${dir}/[0-9]+\\.json$`).test(newest.ref)) {
       throw new RelayError("validation", "invalid review ref", newest.ref);
     }
-    return { path: newest.ref, open: await readReview(runDir, newest.ref) };
+    const openItems = await readReview(runDir, newest.ref);
+    return {
+      path: newest.ref,
+      open: unresolvedOpenCount(newest.ref, openItems, events),
+    };
   }
   const hits: { done: number; rank: number; n: number; rel: string }[] = [];
   for (const review of reviewDirs) {
@@ -391,11 +407,17 @@ async function latestReview(
   hits.sort((left, right) => left.done - right.done || left.rank - right.rank || left.n - right.n);
   const latest = hits[hits.length - 1];
   if (latest === undefined) return null;
-  const value = await readReview(runDir, latest.rel);
-  return { path: latest.rel, open: value };
+  const openItems = await readReview(runDir, latest.rel);
+  return {
+    path: latest.rel,
+    open: unresolvedOpenCount(latest.rel, openItems, events),
+  };
 }
 
-async function readReview(runDir: string, rel: string): Promise<number> {
+async function readReview(
+  runDir: string,
+  rel: string,
+): Promise<Awaited<ReturnType<typeof parseReviewJson>>["open"]> {
   let value: unknown;
   try {
     value = await readJson(join(runDir, rel));
@@ -411,7 +433,20 @@ async function readReview(runDir: string, rel: string): Promise<number> {
     const fieldPath = issue.fieldPath.length === 0 ? rel : `${rel}:${issue.fieldPath}`;
     throw new RelayError("validation", issue.message, fieldPath);
   }
-  return parsed.data.open.length;
+  return parsed.data.open;
+}
+
+function unresolvedOpenCount(
+  rel: string,
+  open: Awaited<ReturnType<typeof parseReviewJson>>["open"],
+  events: readonly EventLine[],
+): number {
+  const decided = new Set(
+    events.filter((event) =>
+      event.action === "decided" && event.ref === rel && event.question !== undefined
+    ).map((event) => event.question),
+  );
+  return open.filter((item) => !decided.has(item.q)).length;
 }
 
 function parseStage(value: string): (typeof workflowStages)[number] {

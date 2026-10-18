@@ -7,7 +7,6 @@ const validReview = {
   tool: "cursor",
   model: "unknown",
   fixed: 0,
-  tests: "pass",
   open: [],
 };
 
@@ -15,7 +14,6 @@ test("parseReviewJson accepts both open-item shapes", () => {
   const review = parseReviewJson({
     ...validReview,
     kind: "cross",
-    tests: "not-run",
     open: [
       { q: "Which exit code?", a: "Keep 3", b: "Split the codes" },
       { q: "Which timestamp?", need: "A sample events.jsonl line" },
