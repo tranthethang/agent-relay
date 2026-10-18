@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { RelayError } from "./error.js";
 
 export type DiffSize = {
@@ -31,8 +32,78 @@ export async function gitHead(cwd: string): Promise<string> {
 // Run artifacts under .agent-relay/ are not part of the change.
 const outsideRuns = [".", ":(exclude).agent-relay"];
 
-export async function diffSize(cwd: string, base: string, head: string): Promise<DiffSize> {
-  void head;
+export async function workTree(cwd: string): Promise<string> {
+  let root: string;
+  let indexPath: string;
+  try {
+    root = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
+    indexPath = resolve(root, (await git(root, ["rev-parse", "--git-path", "index"])).trim());
+  } catch {
+    throw new RelayError("validation", "git index not found", "base");
+  }
+  const tempDir = await mkdtemp(join(tmpdir(), "atry-index-"));
+  const tempIndex = join(tempDir, "index");
+  try {
+    const env = { ...process.env, GIT_INDEX_FILE: tempIndex };
+    try {
+      await copyFile(indexPath, tempIndex);
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    }
+    // `git add -A` errors when `.agent-relay` is ignored. `git add -A -f` also
+    // hashes other ignored files, so update tracked paths and add untracked
+    // paths that are not ignored.
+    const tracked = await git(root, ["ls-files", "-z"], env);
+    if (tracked.length > 0) await git(root, ["add", "-u", "--", ...outsideRuns], env);
+    const untracked = await git(root, [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "--",
+      ...outsideRuns,
+    ], env);
+    if (untracked.length > 0) {
+      await git(
+        root,
+        ["add", "--pathspec-from-file=-", "--pathspec-file-nul", "--"],
+        env,
+        untracked,
+      );
+    }
+    return (await git(root, ["write-tree"], env)).trim();
+  } catch {
+    throw new RelayError("validation", "git working tree hash failed", "base");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+export async function treeDiffSize(cwd: string, from: string, to: string): Promise<DiffSize> {
+  let text: string;
+  try {
+    text = await git(cwd, ["diff", "--numstat", from, to]);
+  } catch {
+    throw new RelayError("validation", "git diff failed", "base");
+  }
+  let files = 0;
+  let added = 0;
+  let deleted = 0;
+  for (const line of text.split("\n")) {
+    if (line.length === 0) continue;
+    const [add, del] = line.split("\t");
+    files += 1;
+    added += count(add);
+    deleted += count(del);
+  }
+  return { files, added, deleted };
+}
+
+export async function diffSize(
+  cwd: string,
+  base: string,
+  ..._previousHead: string[]
+): Promise<DiffSize> {
   let text: string;
   let untracked: string;
   let root: string;
@@ -89,11 +160,22 @@ function count(value: string | undefined): number {
   return Number(value);
 }
 
-function git(cwd: string, args: string[]): Promise<string> {
+function git(
+  cwd: string,
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+  input?: string,
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile("git", args, { cwd }, (error, stdout) => {
-      if (error !== null) reject(error);
-      else resolve(stdout);
-    });
+    const child = execFile(
+      "git",
+      args,
+      { cwd, ...(env === undefined ? {} : { env }) },
+      (error, stdout) => {
+        if (error !== null) reject(error);
+        else resolve(stdout);
+      },
+    );
+    if (input !== undefined) child.stdin?.end(input);
   });
 }

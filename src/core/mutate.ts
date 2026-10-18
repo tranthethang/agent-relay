@@ -1,3 +1,5 @@
+import { mkdir, open, rm, stat } from "node:fs/promises";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { commitState, type RebuildResult, rebuildRun } from "./cache.js";
 import { RelayError } from "./error.js";
@@ -20,6 +22,61 @@ export async function openRun(runDir: string): Promise<RebuildResult> {
   const loaded = await rebuildRun(runDir);
   assertWritable(loaded.run.state);
   return loaded;
+}
+
+export async function withRunLock<T>(
+  runDir: string,
+  fn: (loaded: RebuildResult) => Promise<T>,
+): Promise<T> {
+  const lockDir = join(runDir, "locks");
+  const lockPath = join(lockDir, "run.lock");
+  const deadline = Date.now() + 10_000;
+  await mkdir(lockDir, { recursive: true });
+  for (;;) {
+    let handle;
+    let created = false;
+    try {
+      handle = await open(lockPath, "wx");
+      created = true;
+      await handle.writeFile(
+        JSON.stringify({
+          pid: process.pid,
+          host: hostname() || "unknown",
+          ts: new Date().toISOString(),
+        }) + "\n",
+      );
+      await handle.close();
+      break;
+    } catch (error) {
+      await handle?.close().catch(() => undefined);
+      const code = error instanceof Error && "code" in error ? error.code : "";
+      // Only remove a lock file this call created. Windows reports EPERM while
+      // another holder's lock file is pending delete, so treat it as busy.
+      if (created) await rm(lockPath, { force: true });
+      if (created || (code !== "EEXIST" && code !== "EPERM")) throw error;
+      if (Date.now() >= deadline) {
+        throw new RelayError("lock", "run lock timed out", "locks/run.lock");
+      }
+      try {
+        const info = await stat(lockPath);
+        if (Date.now() - info.mtimeMs >= 30_000) {
+          await rm(lockPath, { force: true });
+          continue;
+        }
+      } catch (staleError) {
+        if (staleError instanceof Error && "code" in staleError && staleError.code === "ENOENT") {
+          continue;
+        }
+        throw staleError;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  try {
+    return await fn(await openRun(runDir));
+  } finally {
+    await rm(lockPath, { force: true });
+  }
 }
 
 export async function appendEvent(

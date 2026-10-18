@@ -1,4 +1,5 @@
 import { type Command } from "commander";
+import { decideQuestion, decideText } from "../core/decide.js";
 import { RelayError } from "../core/error.js";
 import { reviewDone, reviewDoneText, reviewNew, reviewNewText } from "../core/review.js";
 import { oneToken, selectRun } from "../core/select.js";
@@ -6,6 +7,22 @@ import { withWarnings, writeResult } from "./output.js";
 
 export function registerReview(program: Command): void {
   const review = program.command("review").description("Scaffold and finish a review");
+  review
+    .command("decide")
+    .description("Record a decision for an open review question")
+    .argument("<run>", "run id, slug, name, or path")
+    .argument("<question>", "question id such as Q1")
+    .argument("<answer>", "choice or text answer")
+    .action(
+      async (run: string, question: string, answer: string, _opts: unknown, command: Command) => {
+        const runDir = await takeRun(command, run);
+        writeResult(
+          await decideQuestion({ runDir, questionId: question, answer }),
+          commandJson(command),
+          decideText,
+        );
+      },
+    );
   review
     .command("new")
     .description("Scaffold the next numbered review pair")

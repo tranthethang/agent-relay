@@ -11,8 +11,16 @@ const selfReview = {
   tool: "cursor",
   model: "unknown",
   fixed: 0,
-  tests: "pass",
   open: [{ q: "Keep the path?", a: "Relative", b: "Absolute" }],
+};
+
+const crossReview = {
+  schema: 1,
+  kind: "cross",
+  tool: "antigravity",
+  model: "gemini-2.5",
+  fixed: 0,
+  open: [{ q: "Confirm metrics?", need: "sample data" }],
 };
 
 async function seedContext(root: string): Promise<string> {
@@ -22,6 +30,8 @@ async function seedContext(root: string): Promise<string> {
     runName,
     runCache({
       ...plannedState,
+      lifecycle: "reviewing",
+      stage: "cross-review",
       tasks: [{ id: "T1", status: "done" }, { id: "T2", status: "in-progress", session: "s1" }],
     }),
     [
@@ -40,6 +50,60 @@ async function seedContext(root: string): Promise<string> {
         action: "claimed",
         task: "T2",
         session: "s1",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:03:00.000Z",
+        stage: "self-review",
+        action: "started",
+        tool: "cursor",
+        model: "unknown",
+        detected: "codex",
+        tree: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:04:00.000Z",
+        stage: "self-review",
+        action: "completed",
+        tool: "cursor",
+        model: "unknown",
+        tests: {
+          exit: 0,
+          ms: 14,
+          tree: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        },
+        delta: { files: 1, added: 2, deleted: 1 },
+        ref: "30-self-review/02.json",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:05:00.000Z",
+        stage: "self-review",
+        action: "decided",
+        question: "Keep the path?",
+        answer: "a",
+        ref: "30-self-review/02.json",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:06:00.000Z",
+        stage: "cross-review",
+        action: "started",
+        tool: "antigravity",
+        model: "gemini-2.5",
+        detected: "codex",
+        tree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:07:00.000Z",
+        stage: "cross-review",
+        action: "completed",
+        tool: "antigravity",
+        model: "gemini-2.5",
+        tests: "not-configured",
+        ref: "40-cross-review/01.json",
       },
     ],
   );
@@ -66,6 +130,8 @@ async function seedContext(root: string): Promise<string> {
     `${JSON.stringify({ ...selfReview, open: [] })}\n`,
   );
   await writeFile(join(runDir, "30-self-review", "02.json"), `${JSON.stringify(selfReview)}\n`);
+  await mkdir(join(runDir, "40-cross-review"), { recursive: true });
+  await writeFile(join(runDir, "40-cross-review", "01.json"), `${JSON.stringify(crossReview)}\n`);
   return runDir;
 }
 
@@ -90,9 +156,20 @@ test("contextFor returns run fields, tasks, the latest review, and stage paths",
     });
     expect(result.reviews.self).toMatchObject({
       path: "30-self-review/02.json",
-      open: selfReview.open,
+      kind: "self",
+      claimed: { tool: "cursor", model: "unknown", open: 1 },
+      measured: {
+        detected: "codex",
+        tests: { exit: 0, ms: 14 },
+        delta: { files: 1, added: 2, deleted: 1 },
+        decided: 1,
+      },
     });
-    expect(result.reviews.cross).toBeNull();
+    expect(result.reviews.cross).toMatchObject({
+      path: "40-cross-review/01.json",
+      claimed: { tool: "antigravity", model: "gemini-2.5", open: 1 },
+      measured: { detected: "codex", tests: "not-configured", decided: 0 },
+    });
     expect(result.paths.plan).toContain("10-plan/overview.md");
     expect(result.paths.distill).toEqual(["90-distill/manifest.json"]);
     expect(result.paths.run).toEqual(["run.json", "events.jsonl"]);
@@ -111,10 +188,11 @@ test("atry context --json returns the same fields", async () => {
     expect(result.code).toBe(0);
     const body = JSON.parse(result.stdout) as {
       task: { plan: string };
-      reviews: { self: { open: unknown[] } };
+      reviews: { self: { claimed: { open: number } }; cross: { claimed: { tool: string } } };
     };
     expect(body.task.plan).toBe("10-plan/T1.md");
-    expect(body.reviews.self.open).toEqual(selfReview.open);
+    expect(body.reviews.self.claimed.open).toBe(1);
+    expect(body.reviews.cross.claimed.tool).toBe("antigravity");
     const missing = await runCli(["context", "--json"], root);
     expect(missing.code).toBe(1);
     expect(JSON.parse(missing.stderr)).toMatchObject({ error: { code: "usage", path: "run" } });

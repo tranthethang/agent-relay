@@ -1,11 +1,15 @@
-import { stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { rebuildRun } from "./cache.js";
 import { listRunNames } from "./discover.js";
 import { RelayError } from "./error.js";
-import { isEnoent } from "./files.js";
+import { fromZod } from "./error.js";
+import { type EventLine } from "./event.js";
+import { isEnoent, readJson } from "./files.js";
+import { type ReviewIntegrity, reviewIntegrity } from "./lifecycle.js";
 import { formatAge, nextStep } from "./next.js";
 import { type RunState } from "./reduce.js";
+import { type ReviewJson, reviewJsonSchema } from "./review.js";
 import { type RunJson } from "./run.js";
 import { schemaVersion } from "./vocab.js";
 
@@ -16,6 +20,8 @@ export type StatusRow = {
   lifecycle: RunState["lifecycle"];
   age: string;
   next: string;
+  reviews: StatusReviews;
+  actors: RunActors;
 };
 
 export type StatusList = {
@@ -39,8 +45,29 @@ export type StatusDetail = {
   age: string;
   tasks: RunState["tasks"];
   next: string;
+  reviews: StatusReviews;
+  actors: RunActors;
   warnings?: string[];
 };
+
+export type ReviewEvidence = {
+  path: string;
+  kind: "self" | "cross";
+  claimed: { tool: string; model: string; open: number };
+  measured: {
+    detected: string | null;
+    tests: NonNullable<EventLine["tests"]> | null;
+    delta: NonNullable<EventLine["delta"]> | null;
+    decided: number;
+  };
+};
+
+export type StatusReviews = ReviewIntegrity & {
+  self: ReviewEvidence | null;
+  cross: ReviewEvidence | null;
+};
+
+export type RunActors = { approve?: string; close?: string };
 
 export async function statusList(relayDir: string, nowMs: number): Promise<StatusList> {
   const names = await listRunNames(relayDir);
@@ -52,7 +79,19 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
     try {
       const loaded = await rebuildRun(runDir);
       if (loaded.warning !== null) warnings.push(`${name}: ${loaded.warning}`);
-      runs.push(rowFrom(name, loaded.run, loaded.events, await cacheMtime(runDir), nowMs));
+      const integrity = await safeReviewIntegrity(runDir, loaded.run.base, loaded.events);
+      const reviews = await statusReviews(runDir, loaded.events, integrity);
+      runs.push(
+        rowFrom(
+          name,
+          loaded.run,
+          loaded.events,
+          reviews,
+          runActors(loaded.events),
+          await cacheMtime(runDir),
+          nowMs,
+        ),
+      );
     } catch (error) {
       if (!(error instanceof RelayError)) throw error;
       const warning = `${name}: ${error.message}`;
@@ -68,6 +107,8 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
 export async function statusDetail(runDir: string, nowMs: number): Promise<StatusDetail> {
   const loaded = await rebuildRun(runDir);
   const run = loaded.run;
+  const integrity = await safeReviewIntegrity(runDir, run.base, loaded.events);
+  const reviews = await statusReviews(runDir, loaded.events, integrity);
   const detail: StatusDetail = {
     schema: schemaVersion,
     name: basename(runDir),
@@ -81,18 +122,68 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
     approved: run.state.approved,
     age: ageOf(loaded.events, await cacheMtime(runDir), nowMs),
     tasks: run.state.tasks,
-    next: nextStep(run.id, run.state, loaded.events),
+    next: nextStep(run.id, run.state, loaded.events, reviews),
+    reviews,
+    actors: runActors(loaded.events),
   };
   if (run.from !== undefined) detail.from = run.from;
   if (loaded.warning !== null) detail.warnings = [loaded.warning];
   return detail;
 }
 
+async function safeReviewIntegrity(
+  runDir: string,
+  base: string,
+  events: EventLine[],
+): Promise<ReviewIntegrity> {
+  try {
+    return await reviewIntegrity(runDir, base, events);
+  } catch (error) {
+    if (
+      error instanceof RelayError
+      && (error.message === "could not read policy from base"
+        || error.message === "git index not found")
+    ) {
+      const done: ReviewIntegrity["done"] = [];
+      let latest: EventLine | undefined;
+      for (const event of events) {
+        if (event.action !== "completed") continue;
+        if (event.stage !== "self-review" && event.stage !== "cross-review") continue;
+        const kind = event.stage === "self-review" ? "self" : "cross";
+        if (!done.includes(kind)) done.push(kind);
+        latest = event;
+      }
+      return {
+        required: ["self"],
+        done,
+        treeMatch: null,
+        ...(latest?.delta === undefined ? {} : { delta: latest.delta }),
+        waived: events.some((event) => event.action === "waived"),
+      };
+    }
+    throw error;
+  }
+}
+
+async function statusReviews(
+  runDir: string,
+  events: readonly EventLine[],
+  integrity: ReviewIntegrity,
+): Promise<StatusReviews> {
+  return {
+    ...integrity,
+    self: await reviewEvidenceFor(runDir, events, "self"),
+    cross: await reviewEvidenceFor(runDir, events, "cross"),
+  };
+}
+
 export function statusListText(result: StatusList): string {
   if (result.runs.length === 0) return "runs: none\n";
   return `${
     result.runs.map((run) =>
-      `${run.name} ${run.stage} ${run.lifecycle} ${run.age}\nnext: ${run.next}`
+      `${run.name} ${run.stage} ${run.lifecycle} ${run.age}\nnext: ${run.next}\n${
+        reviewsLine(run.reviews)
+      }\n${actorsLine(run.actors)}`
     ).join("\n\n")
   }\n`;
 }
@@ -107,14 +198,30 @@ export function statusDetailText(result: StatusDetail): string {
     `age: ${result.age}`,
     `tasks: ${taskLine(result.tasks)}`,
     `next: ${result.next}`,
+    reviewsLine(result.reviews),
+    actorsLine(result.actors),
   ];
   return `${lines.join("\n")}\n`;
+}
+
+function reviewsLine(reviews: StatusReviews): string {
+  const tree = reviews.treeMatch === null ? "unknown" : reviews.treeMatch ? "yes" : "no";
+  const delta = reviews.delta === undefined
+    ? "none"
+    : `${reviews.delta.files} ${reviews.delta.added} ${reviews.delta.deleted}`;
+  const base = `reviews required=${reviews.required.join(",") || "none"} done=${
+    reviews.done.join(",") || "none"
+  } tree-match=${tree} delta=${delta} waived=${reviews.waived ? "yes" : "no"}`;
+  return [base, reviewEvidenceLine(reviews.self), reviewEvidenceLine(reviews.cross)]
+    .filter((line) => line.length > 0).join("\n");
 }
 
 function rowFrom(
   name: string,
   run: RunJson,
-  events: Parameters<typeof nextStep>[2],
+  events: EventLine[],
+  reviews: StatusReviews,
+  actors: RunActors,
   mtimeMs: number,
   nowMs: number,
 ): StatusRow {
@@ -124,8 +231,98 @@ function rowFrom(
     stage: run.state.stage,
     lifecycle: run.state.lifecycle,
     age: ageOf(events, mtimeMs, nowMs),
-    next: nextStep(run.id, run.state, events),
+    next: nextStep(run.id, run.state, events, reviews),
+    reviews,
+    actors,
   };
+}
+
+export async function reviewEvidenceFor(
+  runDir: string,
+  events: readonly EventLine[],
+  kind: "self" | "cross",
+): Promise<ReviewEvidence | null> {
+  const dirName = kind === "self" ? "30-self-review" : "40-cross-review";
+  let names: string[];
+  try {
+    names = await readdir(join(runDir, dirName));
+  } catch (error) {
+    if (isEnoent(error)) return null;
+    throw error;
+  }
+  const files = names.filter((name) => /^[0-9]+\.json$/.test(name));
+  files.sort((left, right) => Number.parseInt(left, 10) - Number.parseInt(right, 10));
+  const latest = files.at(-1);
+  if (latest === undefined) return null;
+  const path = `${dirName}/${latest}`;
+  let value: unknown;
+  try {
+    value = await readJson(join(runDir, path));
+  } catch {
+    throw new RelayError("validation", "could not read review", path);
+  }
+  const parsed = reviewJsonSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = fromZod(parsed.error);
+    throw new RelayError("validation", issue.message, path);
+  }
+  const stage = kind === "self" ? "self-review" : "cross-review";
+  const start = [...events].reverse().find((event) =>
+    event.stage === stage && event.action === "started" && event.tree !== undefined
+  );
+  const completed = [...events].reverse().find((event) =>
+    event.stage === stage && event.action === "completed" && event.ref === path
+  );
+  const decided = new Set(
+    events.filter((event) =>
+      event.action === "decided" && event.ref === path && event.question !== undefined
+    ).map((event) => event.question),
+  );
+  const openQuestions = new Set(parsed.data.open.map((item) => item.q));
+  return {
+    path,
+    kind,
+    claimed: { tool: parsed.data.tool, model: parsed.data.model, open: parsed.data.open.length },
+    measured: {
+      detected: start?.detected ?? null,
+      tests: completed?.tests ?? null,
+      delta: completed?.delta ?? null,
+      decided:
+        [...decided].filter((question): question is string =>
+          question !== undefined && openQuestions.has(question)
+        ).length,
+    },
+  };
+}
+
+function reviewEvidenceLine(evidence: ReviewEvidence | null): string {
+  if (evidence === null) return "";
+  const tests = evidence.measured.tests === null
+    ? "unknown"
+    : typeof evidence.measured.tests === "string"
+    ? evidence.measured.tests
+    : `exit=${evidence.measured.tests.exit} ms=${evidence.measured.tests.ms}`;
+  const delta = evidence.measured.delta === null
+    ? "none"
+    : `${evidence.measured.delta.files} ${evidence.measured.delta.added} ${evidence.measured.delta.deleted}`;
+  return `review ${evidence.kind} tool=${evidence.claimed.tool} (claimed) model=${evidence.claimed.model} (claimed) detected=${
+    evidence.measured.detected ?? "none"
+  } (measured) tests=${tests} (measured) delta=${delta} (measured) open=${evidence.claimed.open} (claimed) decided=${evidence.measured.decided} (measured)`;
+}
+
+function runActors(events: readonly EventLine[]): RunActors {
+  const approved = [...events].reverse().find((event) => event.action === "approved");
+  const closed = [...events].reverse().find((event) =>
+    event.action === "closed" || event.action === "abandoned"
+  );
+  const actors: RunActors = {};
+  if (approved?.actor !== undefined) actors.approve = approved.actor;
+  if (closed?.actor !== undefined) actors.close = closed.actor;
+  return actors;
+}
+
+function actorsLine(actors: RunActors): string {
+  return `actors approve=${actors.approve ?? "unknown"} close=${actors.close ?? "unknown"}`;
 }
 
 function ageOf(events: readonly { ts: string }[], mtimeMs: number, nowMs: number): string {

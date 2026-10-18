@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { statusDetail, statusList } from "../src/core/status.js";
+import { statusDetail, statusDetailText, statusList, statusListText } from "../src/core/status.js";
 import { runCli, withTempDir } from "./helper.js";
 import { createdEvent, plannedState, runCache, runName, seedRelay, seedRun } from "./seed.js";
 
@@ -85,5 +85,127 @@ test("statusList names the run in a cache rebuild warning", async () => {
     ]);
     const list = await statusList(relay, now);
     expect(list.warnings).toEqual([`${runName}: run.json disagreed with events.jsonl; rebuilt`]);
+  });
+});
+
+test("status shows claimed and measured data for self and cross reviews", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const reviewing = { ...plannedState, lifecycle: "closed", stage: "cross-review" };
+    const self = {
+      schema: 1,
+      kind: "self",
+      tool: "cursor",
+      model: "claude-opus-4",
+      fixed: 0,
+      open: [{ q: "Keep?", a: "Yes", b: "No" }],
+    };
+    const cross = {
+      schema: 1,
+      kind: "cross",
+      tool: "codex",
+      model: "gpt-5.4",
+      fixed: 0,
+      open: [{ q: "Check?", need: "sample" }],
+    };
+    const runDir = await seedRun(relay, runName, runCache(reviewing), [
+      createdEvent,
+      {
+        schema: 1,
+        ts: "2026-10-17T00:01:00.000Z",
+        stage: "plan",
+        action: "approved",
+        actor: "agent-env",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:02:00.000Z",
+        stage: "self-review",
+        action: "started",
+        tool: "cursor",
+        model: "claude-opus-4",
+        detected: "codex",
+        tree: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:03:00.000Z",
+        stage: "self-review",
+        action: "completed",
+        tool: "cursor",
+        model: "claude-opus-4",
+        tests: { exit: 3, ms: 80, tree: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        delta: { files: 1, added: 1, deleted: 0 },
+        ref: "30-self-review/01.json",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:04:00.000Z",
+        stage: "self-review",
+        action: "decided",
+        question: "Keep?",
+        answer: "a",
+        ref: "30-self-review/01.json",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:05:00.000Z",
+        stage: "cross-review",
+        action: "started",
+        tool: "codex",
+        model: "gpt-5.4",
+        detected: "codex",
+        tree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:06:00.000Z",
+        stage: "cross-review",
+        action: "completed",
+        tool: "codex",
+        model: "gpt-5.4",
+        tests: "not-configured",
+        ref: "40-cross-review/01.json",
+      },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:07:00.000Z",
+        stage: "run",
+        action: "closed",
+        actor: "unknown",
+      },
+    ]);
+    await mkdir(join(runDir, "30-self-review"), { recursive: true });
+    await mkdir(join(runDir, "40-cross-review"), { recursive: true });
+    await writeFile(join(runDir, "30-self-review", "01.json"), `${JSON.stringify(self)}\n`);
+    await writeFile(join(runDir, "40-cross-review", "01.json"), `${JSON.stringify(cross)}\n`);
+    const detail = await statusDetail(runDir, now);
+    expect(detail.reviews.self).toMatchObject({
+      claimed: { tool: "cursor", model: "claude-opus-4", open: 1 },
+      measured: { detected: "codex", tests: { exit: 3, ms: 80 }, decided: 1 },
+    });
+    expect(detail.reviews.cross).toMatchObject({
+      claimed: { tool: "codex", model: "gpt-5.4", open: 1 },
+      measured: { detected: "codex", tests: "not-configured", decided: 0 },
+    });
+    expect(detail.actors).toMatchObject({ approve: "agent-env", close: "unknown" });
+    const text = statusDetailText(detail);
+    expect(text).toContain("tool=cursor (claimed)");
+    expect(text).toContain("tests=exit=3 ms=80 (measured)");
+    expect(text).toContain("open=1 (claimed) decided=1 (measured)");
+    const list = await statusList(relay, now);
+    expect(statusListText(list)).toContain("review cross tool=codex (claimed)");
+    const cliText = await runCli(["status"], root);
+    expect(cliText.stdout).toContain("review self tool=cursor (claimed)");
+    expect(cliText.stdout).toContain("actors approve=agent-env close=unknown");
+    const cliJson = await runCli(["status", "--json", "--run", "1792208725"], root);
+    expect(cliJson.code).toBe(0);
+    expect(JSON.parse(cliJson.stdout)).toMatchObject({
+      reviews: {
+        self: { claimed: { tool: "cursor", open: 1 }, measured: { decided: 1 } },
+        cross: { claimed: { tool: "codex" }, measured: { tests: "not-configured" } },
+      },
+      actors: { approve: "agent-env", close: "unknown" },
+    });
   });
 });

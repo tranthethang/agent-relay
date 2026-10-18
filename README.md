@@ -19,7 +19,8 @@ Does:
 Does not:
 
 - Run, order, or watch stages. An agent can skip a step or ignore a skill.
-- Prove which tool or model ran. `tool` and `model` are records.
+- Prove which tool or model ran. `tool` and `model` remain agent claims;
+  supported environment markers can add a measured `detected` tool.
 - Read v1 run directories. Delete those yourself.
 - Prompt on a terminal. Questions happen in the agent chat.
 
@@ -69,17 +70,51 @@ atry stage start <run> implement --tool <tool>
 atry task start <run> T1
 atry task done <run> T1
 atry stage done <run> implement --tool <tool>
-atry review new <run> self|cross --tool <tool>
+atry review new <run> self --tool <tool> [--model <model>]
+atry review new <run> cross --tool <tool> --model <model>
 atry review done <run> self|cross
-atry close <run> --via confirm|arg
+atry review decide <run> Q<n> <answer>
+atry close <run> --via confirm|arg [--ack-open] [--ack-fixes]
+atry close <run> --waive-review "<reason>" [--ack-open]
 atry distill <run>
 ```
 
 `atry approve` and `atry close` are for the person who coordinates the run.
 The skills ask before they run those verbs. Implement start refuses when the
-plan is not approved. Close refuses while the latest review has open questions,
-unless you pass `--ack-open`. `atry close --abandon <reason>` stops a run from
-any open state.
+plan is not approved. Close requires completed reviews for its policy and
+checks the latest completed review against the current code tree. It refuses
+while the latest review has open questions unless you pass `--ack-open`.
+Changes made after the latest review started require user acceptance and
+`--ack-fixes`. `--waive-review <reason>` records a review waiver and skips
+review integrity checks; it does not skip the open-question check.
+`atry close --abandon <reason>` stops a run from any open state.
+
+### Review policy
+
+The committed `.agent-relay.json` at the run's base commit controls review
+requirements. A missing file uses these defaults:
+
+```json
+{
+  "schema": 1,
+  "requireReviews": ["self", "cross"],
+  "smallChange": 20
+}
+```
+
+Changes below `smallChange` lines, counting additions and deletions from base
+to the current tree, require only a self-review. Policy can also include an
+optional `testCommand`. `review done` runs it at the repo root through the
+platform shell, records its exit code, duration, and tree, and writes the last
+200 stdout and stderr lines to `NN.test.log`. A non-zero exit records failure
+but does not refuse `review done`.
+
+Review JSON contains `schema`, `kind`, `tool`, `model`, `fixed`, and `open`.
+The `tool` and `model` values must match the review start event. Cross-review
+requires `--model`. Question cards at column zero must match `open.length`.
+After a user answers a completed review's open item, record the answer with
+`atry review decide <run> Q<n> <answer>`. A decision is stored in
+`events.jsonl`; a later review can then close that question.
 
 ### Parallel tasks
 
@@ -103,8 +138,8 @@ It does not create worktrees.
     10-plan/index.json
     10-plan/T1.md
     20-implement/T1.md
-    30-self-review/01.md, 01.json
-    40-cross-review/01.md, 01.json
+    30-self-review/01.md, 01.json, 01.test.log
+    40-cross-review/01.md, 01.json, 01.test.log
     90-distill/manifest.json
     run.json
     events.jsonl
@@ -116,9 +151,26 @@ scaffold that already has every key. Task status lives in events.
 
 ## Known limits
 
+- The tree snapshot uses a temporary copy of the Git index and excludes
+  `.agent-relay/`. It does not change the real index.
+- `locks/run.lock` serializes CLI state changes. It does not lock direct file
+  edits made outside `atry`.
+- A review waiver is recorded with its reason. It does not prove who approved
+  the waiver.
 - Cross-review independence is a request. `atry review done` warns when the
-  cross-review tool or model family matches implement or self-review. It does
-  not refuse.
+  cross-review tool or model vendor matches implement or self-review. A
+  second warning marks a matching model line. These warnings do not refuse.
+- `tool` and `model` are agent claims locked to the review start. `detected`
+  reports only supported environment markers; it does not prove which model
+  generated the review. Currently, Codex detection uses `CODEX_THREAD_ID`.
+- `approve` and `close` record `actor` as `agent-env` when a supported marker
+  is present and `unknown` otherwise. `atry` does not claim a human approved.
+- `--via confirm` records the agent's report that a person confirmed. It does
+  not prove a person typed the answer. Tool approval prompts and bypass modes
+  are outside this repo.
+- `testCommand` comes from the policy at the run's base and runs through a
+  platform shell at the repository root. Review completion records its result;
+  a non-zero result does not itself refuse `review done`.
 - `claim` checks recorded file paths. It does not stop two agents from editing
   the same file outside those paths.
 - There is no migration from the bash CLI or from v1 run files.

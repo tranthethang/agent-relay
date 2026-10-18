@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
 
@@ -22,6 +24,60 @@ test("implement start without approval exits 4", async () => {
     expect(refused.stderr).toContain("plan is not approved");
     const events = await runCli(["status", "--json", run.path], dir);
     expect(JSON.parse(events.stdout)).toMatchObject({ lifecycle: "planned", approved: false });
+  });
+});
+
+test("close requires policy reviews and matching review trees", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self", "cross"],
+        smallChange: 0,
+      }),
+    );
+    const { execFile } = await import("node:child_process");
+    await new Promise<void>((resolve, reject) => {
+      execFile("git", ["add", ".agent-relay.json"], { cwd: dir }, (error) => {
+        if (error !== null) reject(error);
+        else resolve();
+      });
+    });
+    await gitCommit(dir);
+    const created = await runCli([
+      "run",
+      "new",
+      "--slug",
+      "review-integrity",
+      "--title",
+      "Review integrity",
+      "--json",
+    ], dir);
+    const run = (JSON.parse(created.stdout) as { path: string }).path;
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    expect((await runCli(["review", "done", run, "self"], dir)).code).toBe(0);
+    const status = await runCli(["status", run, "--json"], dir);
+    expect(JSON.parse(status.stdout)).toMatchObject({
+      next: expect.stringContaining(" cross"),
+      reviews: {
+        required: ["self", "cross"],
+        done: ["self"],
+      },
+    });
+    const missing = await runCli(["close", run], dir);
+    expect(missing.code).toBe(4);
+    expect(missing.stderr).toContain("required cross review is missing");
+
+    await runCli(["review", "new", run, "cross", "--tool", "codex", "--model", "gpt-5.4"], dir);
+    await writeFile(join(dir, "during-review.txt"), "edited after review started\n");
+    expect((await runCli(["review", "done", run, "cross"], dir)).code).toBe(0);
+    const delta = await runCli(["close", run], dir);
+    expect(delta.code).toBe(4);
+    expect(delta.stderr).toContain("unacknowledged fixes");
+    const closed = await runCli(["close", run, "--ack-fixes"], dir);
+    expect(closed.code).toBe(0);
   });
 });
 

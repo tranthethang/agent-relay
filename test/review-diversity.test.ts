@@ -1,12 +1,38 @@
 import { expect, test } from "vitest";
-import { modelFamily } from "../src/core/review.js";
+import { modelLine, modelVendor } from "../src/core/model.js";
+import { diversityWarnings } from "../src/core/review.js";
 import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
 import { createRun } from "./plan-helper.js";
 
-test("model family is the prefix before the first digit", () => {
-  expect(modelFamily("claude-opus-5-5")).toBe("claude-opus-");
-  expect(modelFamily("unknown")).toBe("unknown");
-  expect(modelFamily("5-opus")).toBe("5-opus");
+test("model vendor and line use a shared vendor map", () => {
+  expect(modelVendor("claude-opus-4")).toBe("anthropic");
+  expect(modelVendor("gpt-5.4")).toBe("openai");
+  expect(modelVendor("o3-mini")).toBe("openai");
+  expect(modelVendor("codex-mini")).toBe("openai");
+  expect(modelVendor("gemini-2.5")).toBe("google");
+  expect(modelVendor("composer-1")).toBe("cursor");
+  expect(modelVendor("custom-model")).toBe("unknown");
+  expect(modelLine("claude-opus-5-5")).toBe("claude-opus");
+  expect(modelLine("gpt-5.4")).toBe("gpt");
+  expect(modelLine("custom-model")).toBe("custom-model");
+});
+
+test("an unknown vendor is not a vendor match and still checks the model line", () => {
+  const review = {
+    schema: 1 as const,
+    kind: "cross" as const,
+    tool: "codex" as const,
+    model: "custom-1",
+    fixed: 0,
+    open: [],
+  };
+  expect(diversityWarnings(review, { model: "custom-2" }, undefined)).toEqual([
+    "cross model vendor unknown for implement model",
+    "cross model line matches implement model",
+  ]);
+  expect(diversityWarnings(review, { model: "other-model" }, undefined)).toEqual([
+    "cross model vendor unknown for implement model",
+  ]);
 });
 
 test("atry review done warns when a cross review matches earlier tools or families", async () => {
@@ -43,11 +69,38 @@ test("atry review done warns when a cross review matches earlier tools or famili
     const done = await runCli(["review", "done", run, "cross", "--json"], dir);
     expect(done.code).toBe(0);
     expect(done.stderr).toContain("warning: cross tool matches implement tool");
-    expect(done.stderr).toContain("warning: cross model family matches self-review model");
+    expect(done.stderr).toContain("warning: cross model vendor matches self-review model");
+    expect(done.stderr).toContain("warning: cross model line matches self-review model");
     expect(done.stderr).not.toContain("self-review tool");
     expect(JSON.parse(done.stdout).warnings).toEqual([
       "cross tool matches implement tool",
-      "cross model family matches self-review model",
+      "cross model vendor matches self-review model",
+      "cross model line matches self-review model",
+    ]);
+  });
+});
+
+test("atry review done keeps the implement model when stage done omits it", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-implement-model");
+    for (
+      const args of [
+        ["approve", run, "--via", "arg"],
+        ["stage", "start", run, "implement", "--tool", "codex", "--model", "gpt-5.4"],
+        ["stage", "done", run, "implement", "--tool", "codex"],
+        ["review", "new", run, "self", "--tool", "cursor", "--model", "composer-1"],
+        ["review", "done", run, "self"],
+        ["review", "new", run, "cross", "--tool", "claude-code", "--model", "gpt-5.5"],
+      ]
+    ) {
+      expect((await runCli(args, dir)).code).toBe(0);
+    }
+    const done = await runCli(["review", "done", run, "cross", "--json"], dir);
+    expect(done.code).toBe(0);
+    expect(JSON.parse(done.stdout).warnings).toEqual([
+      "cross model vendor matches implement model",
+      "cross model line matches implement model",
     ]);
   });
 });

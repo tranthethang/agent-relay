@@ -14,6 +14,7 @@ root [`README.md`](../README.md). Agent constraints for editing the repo are in
 | [testing.md](testing.md)                   | Run or extend the vitest suites                  |
 | [release.md](release.md)                   | Cut an `X.M.Z` release and publish npm `latest`  |
 | [security.md](security.md)                 | Understand trust boundaries                      |
+| [next-features.md](next-features.md)       | Read planned gaps, intent, and fix direction     |
 | [troubleshooting.md](troubleshooting.md)   | Triage install, gate, and lock failures          |
 
 Related root files: [`CONTRIBUTING.md`](../CONTRIBUTING.md)
