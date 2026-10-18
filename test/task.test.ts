@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { gitCommit, runCli, withTempGitRepo } from "./helper.js";
@@ -57,9 +57,116 @@ test("atry task start done and skip record events and check deps", async () => {
     expect(bad.code).toBe(2);
     expect(bad.stderr).toContain("task: invalid task id");
     const events = await readFile(join(run, "events.jsonl"), "utf8");
+    const startedEvents = events.trim().split("\n").map((line) =>
+      JSON.parse(line) as { action: string; tree?: string }
+    )
+      .filter((event) => event.action === "task-started");
+    expect(startedEvents.length).toBeGreaterThan(0);
+    for (const event of startedEvents) expect(event.tree).toMatch(/^[0-9a-f]{40}$/);
     expect(events).toContain("\"action\":\"task-started\"");
     expect(events).toContain("\"action\":\"task-done\"");
     expect(events).toContain("\"action\":\"task-skipped\"");
     expect(events).toContain("\"reason\":\"not needed\"");
+  });
+});
+
+test("task done checks edits against task files", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "task-scope");
+    await writeTasks(run, [
+      { title: "Own file", files: ["src/own.ts"] },
+      { title: "Directory", files: ["src/dir"] },
+      { title: "Peer", files: ["src/peer.ts"] },
+    ]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
+    expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+    await mkdir(join(dir, "src/dir"), { recursive: true });
+
+    expect((await runCli(["task", "start", run, "T1"], dir)).code).toBe(0);
+    await writeFile(join(dir, "src/own.ts"), "export const own = 1;\n");
+    expect((await runCli(["task", "done", run, "T1"], dir)).code).toBe(0);
+
+    expect((await runCli(["task", "start", run, "T2"], dir)).code).toBe(0);
+    await writeFile(join(dir, "src/dir/nested.ts"), "export const nested = 1;\n");
+    expect((await runCli(["task", "done", run, "T2"], dir)).code).toBe(0);
+
+    await writeTasks(run, [
+      { title: "Own file", files: ["src/own.ts"] },
+      { title: "Directory", files: ["src/dir"] },
+      { title: "Peer", files: ["src/peer.ts"] },
+      { title: "Kept", files: ["src/kept.ts"] },
+    ]);
+    expect((await runCli(["plan", "amend", run], dir)).code).toBe(0);
+    expect((await runCli(["task", "start", run, "T4"], dir)).code).toBe(0);
+    await writeFile(join(dir, "src/outside.ts"), "export const outside = 1;\n");
+    const refused = await runCli(["task", "done", run, "T4"], dir);
+    expect(refused.code).toBe(4);
+    expect(refused.stderr).toContain("src/outside.ts");
+    await rm(join(dir, "src/outside.ts"));
+    expect((await runCli(["claim", run, "T3", "--session", "bob"], dir)).code).toBe(0);
+    await writeFile(join(dir, "src/peer.ts"), "export const peer = 1;\n");
+    expect((await runCli(["task", "done", run, "T4"], dir)).code).toBe(0);
+
+    const many = await createRun(dir, "task-scope-extra");
+    await writeTasks(many, [{ title: "Wide", files: ["src/kept.ts"] }]);
+    expect((await runCli(["plan", "done", many], dir)).code).toBe(0);
+    expect((await runCli(["approve", many, "--via", "arg"], dir)).code).toBe(0);
+    expect((await runCli(["stage", "start", many, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+    expect((await runCli(["task", "start", many, "T1"], dir)).code).toBe(0);
+    for (let index = 0; index < 11; index += 1) {
+      const name = `src/out-${String(index).padStart(2, "0")}.ts`;
+      await writeFile(join(dir, name), "export {};\n");
+    }
+    const capped = await runCli(["task", "done", many, "T1"], dir);
+    expect(capped.code).toBe(4);
+    expect(capped.stderr).toContain("src/out-09.ts");
+    expect(capped.stderr).not.toContain("src/out-10.ts");
+    const allowed = await runCli([
+      "task",
+      "done",
+      many,
+      "T1",
+      "--allow-extra",
+      "shared types",
+      "--json",
+    ], dir);
+    expect(allowed.code).toBe(0);
+    const events = await readFile(join(many, "events.jsonl"), "utf8");
+    const done = events.trim().split("\n").map((line) =>
+      JSON.parse(line) as {
+        action: string;
+        extra?: string[];
+        reason?: string;
+      }
+    ).find((event) => event.action === "task-done");
+    expect(done?.reason).toBe("shared types");
+    expect(done?.extra).toHaveLength(11);
+    expect(done?.extra).toContain("src/out-10.ts");
+  });
+});
+
+test("task done ignores files of a task that finished during the window", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "task-scope-peer-done");
+    await writeTasks(run, [
+      { title: "Alice", files: ["src/alice.ts"] },
+      { title: "Bob", files: ["src/bob.ts"] },
+    ]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
+    expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+    await mkdir(join(dir, "src"), { recursive: true });
+    expect((await runCli(["claim", run, "T1", "--session", "alice"], dir)).code).toBe(0);
+    expect((await runCli(["claim", run, "T2", "--session", "bob"], dir)).code).toBe(0);
+    await writeFile(join(dir, "src/bob.ts"), "export const bob = 1;\n");
+    expect((await runCli(["task", "done", run, "T2", "--session", "bob"], dir)).code).toBe(0);
+    await writeFile(join(dir, "src/alice.ts"), "export const alice = 1;\n");
+    expect((await runCli(["task", "done", run, "T1", "--session", "alice"], dir)).code).toBe(0);
   });
 });

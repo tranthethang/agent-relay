@@ -3,10 +3,13 @@ import { join } from "node:path";
 import { type ZodType } from "zod";
 import { assertClaimOwner, releaseClaimLock } from "./claim.js";
 import { fromZod, RelayError } from "./error.js";
+import { type EventLine } from "./event.js";
 import { atomicWrite, isEnoent, readJson } from "./files.js";
+import { changedPaths, workTree } from "./git.js";
 import { appendEvent, openRun, withRunLock } from "./mutate.js";
 import { normalizePath } from "./overlap.js";
 import { type RunState } from "./reduce.js";
+import { outsidePaths } from "./scope.js";
 import { type PlanIndex, planIndexSchema, type TasksInput, tasksInputSchema } from "./tasks.js";
 import { schemaVersion, taskIdSchema } from "./vocab.js";
 
@@ -185,7 +188,13 @@ export async function taskStart(runDir: string, task: string): Promise<TaskMoveR
       }
     }
     const implement = await writeImplementScaffold(runDir, item.id, item.title);
-    await appendEvent(loaded, runDir, { stage: "implement", action: "task-started", task: id });
+    const tree = await workTree(runDir);
+    await appendEvent(loaded, runDir, {
+      stage: "implement",
+      action: "task-started",
+      task: id,
+      tree,
+    });
     return moveResult(runDir, id, "in-progress", implement);
   });
 }
@@ -194,18 +203,34 @@ export async function taskDone(
   runDir: string,
   task: string,
   session?: string,
+  allowExtra?: string,
 ): Promise<TaskMoveResult> {
   const id = parseTaskId(task);
   return withRunLock(runDir, async (loaded) => {
     assertLifecycle(loaded.run.state, ["implementing"], "task done");
     const index = await readIndex(runDir);
-    requireTask(index, id);
+    const item = requireTask(index, id);
     const current = taskStatus(loaded.run.state, id);
     if (current !== "in-progress") {
       throw new RelayError("gate", `task done refused: ${id} is ${current}`, id);
     }
     await assertClaimOwner(runDir, id, session);
-    await appendEvent(loaded, runDir, { stage: "implement", action: "task-done", task: id });
+    const from = startTree(loaded.events, id);
+    if (from === undefined) {
+      throw new RelayError("gate", `task done refused: ${id} has no start tree`, id);
+    }
+    const outside = outsidePaths(
+      await changedPaths(runDir, from, await workTree(runDir)),
+      item.files,
+      otherFiles(index, loaded.run.state, loaded.events, id),
+    );
+    const extra = extraFields(id, outside, allowExtra);
+    await appendEvent(loaded, runDir, {
+      stage: "implement",
+      action: "task-done",
+      task: id,
+      ...extra,
+    });
     await releaseClaimLock(runDir, id, session);
     return moveResult(runDir, id, "done", join(runDir, "20-implement", `${id}.md`));
   });
@@ -240,6 +265,60 @@ export async function taskSkip(
     result.reason = text;
     return result;
   });
+}
+
+function startTree(events: readonly EventLine[], id: string): string | undefined {
+  let tree: string | undefined;
+  for (const event of events) {
+    if (event.task !== id) continue;
+    if (event.action !== "task-started" && event.action !== "stolen") continue;
+    if (event.tree !== undefined) tree = event.tree;
+  }
+  return tree;
+}
+
+function otherFiles(
+  index: PlanIndex,
+  state: RunState,
+  events: readonly EventLine[],
+  id: string,
+): string[] {
+  const active = new Set(
+    state.tasks.filter((task) => task.id !== id && task.status === "in-progress").map((task) =>
+      task.id
+    ),
+  );
+  let startAt = -1;
+  events.forEach((event, at) => {
+    if (event.task === id && (event.action === "task-started" || event.action === "stolen")) {
+      startAt = at;
+    }
+  });
+  events.forEach((event, at) => {
+    if (at > startAt && event.action === "task-done" && event.task !== id && event.task) {
+      active.add(event.task);
+    }
+  });
+  return index.tasks.filter((task) => active.has(task.id)).flatMap((task) => task.files);
+}
+
+function extraFields(
+  id: string,
+  outside: readonly string[],
+  allowExtra: string | undefined,
+): { extra?: string[]; reason?: string } {
+  if (outside.length === 0) return {};
+  if (allowExtra === undefined) {
+    const shown = outside.slice(0, 10).join(", ");
+    throw new RelayError(
+      "gate",
+      `task done refused: ${id} has edits outside its files: ${shown}`,
+      id,
+    );
+  }
+  const reason = allowExtra.trim();
+  if (reason.length === 0) throw new RelayError("validation", "reason is empty", "allow-extra");
+  return { extra: [...outside], reason };
 }
 
 function doneResult(runDir: string, index: PlanIndex): PlanDoneResult {

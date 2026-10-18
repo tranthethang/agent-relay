@@ -70,6 +70,7 @@ export function registerLifecycle(program: Command): void {
     .argument("<stage>", "plan, implement, self-review, or cross-review")
     .requiredOption("--tool <tool>", "tool name")
     .option("--model <model>", "model id")
+    .option("--allow-extra <reason>", "accept edits outside the task files")
     .action(stageAction("completed"));
 
   program
@@ -122,7 +123,7 @@ function stageAction(action: "started" | "completed") {
   return async (
     run: string,
     stageName: string,
-    opts: { tool: string; model?: string },
+    opts: { tool: string; model?: string; allowExtra?: string },
     command: Command,
   ) => {
     const runDir = await takeRun(command, run);
@@ -132,7 +133,9 @@ function stageAction(action: "started" | "completed") {
       tool: opts.tool,
       model: opts.model,
     };
-    const result = action === "started" ? await startStage(input) : await doneStage(input);
+    const result = action === "started"
+      ? await startStage(input)
+      : await doneStage({ ...input, allowExtra: opts.allowExtra });
     writeResult(result, commandJson(command), stageText);
   };
 }

@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
+import { createRun, writeTasks } from "./plan-helper.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -64,6 +65,8 @@ test("atry stage start and done record tool, model, head, and size", async () =>
       "cursor",
       "--model",
       "unknown",
+      "--allow-extra",
+      "tracked note",
       "--json",
     ], dir);
     expect(done.code).toBe(0);
@@ -79,6 +82,56 @@ test("atry stage start and done record tool, model, head, and size", async () =>
     const bad = await runCli(["stage", "start", run.path, "implement", "--tool", "claude"], dir);
     expect(bad.code).toBe(2);
     expect(bad.stderr).toContain("tool:");
+  });
+});
+
+test("implement done refuses a file edited after the last task done", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const clean = await createRun(dir, "clean-scope");
+    expect((await runCli(["approve", clean, "--via", "arg"], dir)).code).toBe(0);
+    expect((await runCli(["stage", "start", clean, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+    expect((await runCli(["stage", "done", clean, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+
+    const run = await createRun(dir, "late-edit");
+    await writeTasks(run, [{ title: "Kept", files: ["src/kept.ts"] }]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
+    expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+    expect((await runCli(["task", "start", run, "T1"], dir)).code).toBe(0);
+    await mkdir(join(dir, "src"), { recursive: true });
+    await writeFile(join(dir, "src/kept.ts"), "export const kept = 1;\n");
+    expect((await runCli(["task", "done", run, "T1"], dir)).code).toBe(0);
+    await writeFile(join(dir, "src/later.ts"), "export const later = 1;\n");
+    const refused = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(refused.code).toBe(4);
+    expect(refused.stderr).toContain("src/later.ts");
+    const allowed = await runCli([
+      "stage",
+      "done",
+      run,
+      "implement",
+      "--tool",
+      "cursor",
+      "--allow-extra",
+      "late note",
+      "--json",
+    ], dir);
+    expect(allowed.code).toBe(0);
+    const events = await readFile(join(run, "events.jsonl"), "utf8");
+    const completed = events.trim().split("\n").map((line) =>
+      JSON.parse(line) as {
+        action: string;
+        stage: string;
+        extra?: string[];
+        reason?: string;
+      }
+    ).find((event) => event.action === "completed" && event.stage === "implement");
+    expect(completed?.reason).toBe("late note");
+    expect(completed?.extra).toEqual(["src/later.ts"]);
   });
 });
 

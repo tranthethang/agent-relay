@@ -21,3 +21,15 @@ gets exit code 5 and no lock file.
 
 `atry list` shows status, owner, and blocked deps. A task stays blocked until
 every dep is `done` or `skipped`.
+
+The sessions share one working tree. `task done` diffs the tree recorded at
+start with the current tree. A path outside that task's `files` refuses unless
+`--allow-extra <reason>` is set. A path covered by another in-progress task's
+`files` does not count. A directory entry covers every path under it. Paths
+under `.agent-relay/` do not count.
+
+`atry guard <run> <path> [--session <tag>]` answers before an edit. It exits 0
+when the path is under `.agent-relay/` or inside an in-progress task. With
+`--session`, only that session's task counts. Otherwise it exits 4. It reads
+events and `index.json`. It does not hash the tree. A tool hook can call it
+later. This repo does not ship the hook.

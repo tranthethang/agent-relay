@@ -12,6 +12,21 @@ steps are in [`README.md`](README.md).
 - A person invokes each stage in a tool. Nothing here schedules agents or
   checks `tool` and `model` records.
 
+## Installed tools vs. repo source
+
+When you use an `atry-*` skill or run `atry` while working in this repo, use
+the version installed on this machine:
+
+- CLI: the global `atry` on `PATH` (check with `which atry`). Do not run
+  `node dist/atry.js` or `npm run` scripts in place of it.
+- Skills: the installed bundles (for Claude Code, `~/.claude/skills/atry-*`).
+  Do not load or follow `skills/<name>/SKILL.md` from this checkout as the
+  active skill.
+
+`src/`, `dist/`, and `skills/` in this repo are the source you edit. They are
+not the tools you run. Changes there take effect only after a build and a new
+install.
+
 ## Hard constraints
 
 - Node.js 22 or newer for the CLI and the tests.

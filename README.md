@@ -69,7 +69,7 @@ atry approve <run> --via confirm|arg
 atry stage start <run> implement --tool <tool>
 atry task start <run> T1
 atry task done <run> T1
-atry stage done <run> implement --tool <tool>
+atry stage done <run> implement --tool <tool> [--allow-extra "<reason>"]
 atry review new <run> self --tool <tool> [--model <model>]
 atry review new <run> cross --tool <tool> --model <model>
 atry review done <run> self|cross
@@ -125,7 +125,10 @@ atry list <run>
 ```
 
 `claim` refuses a task whose `files` overlap a lock held by another session.
-It does not create worktrees.
+It does not create worktrees. The sessions share one tree. `task done` ignores
+a path that another in-progress task's `files` covers. `atry guard <run> <path>`
+exits 0 when that path is inside an in-progress task. `--session <tag>` limits
+the check to that session.
 
 ## Run layout
 
@@ -171,8 +174,12 @@ scaffold that already has every key. Task status lives in events.
 - `testCommand` comes from the policy at the run's base and runs through a
   platform shell at the repository root. Review completion records its result;
   a non-zero result does not itself refuse `review done`.
-- `claim` checks recorded file paths. It does not stop two agents from editing
-  the same file outside those paths.
+- `task done` refuses a changed path outside that task's `files` unless
+  `--allow-extra <reason>` is set. `stage done implement` does the same for
+  paths outside the union of task `files` and recorded `extra` paths.
+- `claim` checks recorded file paths before work starts. It does not stop an
+  edit while the task is in progress. `atry guard` can check one path. This
+  repo does not install a tool hook.
 - There is no migration from the bash CLI or from v1 run files.
 - CI runs `npm test` on macOS, Linux, and Windows. It does not show that an
   agent follows a skill.

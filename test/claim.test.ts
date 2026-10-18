@@ -75,6 +75,19 @@ test("claim release and steal record events and honor the lock", async () => {
     const noReason = await runCli(["release", run, "T1", "--session", "alice", "--force"], dir);
     expect(noReason.code).toBe(2);
     const events = await readFile(join(run, "events.jsonl"), "utf8");
+    const lines = events.trim().split("\n").map((line) =>
+      JSON.parse(line) as {
+        action: string;
+        tree?: string;
+      }
+    );
+    const started = lines.filter((event) => event.action === "task-started");
+    const stolenEvents = lines.filter((event) => event.action === "stolen");
+    expect(started.length).toBeGreaterThan(0);
+    expect(stolenEvents.length).toBeGreaterThan(0);
+    for (const event of [...started, ...stolenEvents]) {
+      expect(event.tree).toMatch(/^[0-9a-f]{40}$/);
+    }
     expect(events).toContain("\"action\":\"claimed\"");
     expect(events).toContain("\"action\":\"task-started\"");
     expect(events).toContain("\"action\":\"stolen\"");

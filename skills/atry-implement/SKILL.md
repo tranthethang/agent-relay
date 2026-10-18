@@ -59,9 +59,12 @@ Add `--model <model>` when you know the model.
 7. Fill `20-implement/<task>.md` with the edit tool.
 8. Record the files, the assumptions, and the risks in that file.
 9. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.
-10. When a task is not feasible, run `atry task skip <run> <task> --reason <text>`.
-11. Add `--session <tag>` to `task skip` when you hold a claim.
-12. Run `atry release <run> <task> --session <tag>` only when you stop without done or skip.
+10. When `task done` refuses, read the paths in the message.
+11. Ask the user before you pass `--allow-extra <reason>`.
+12. Put that reason in the task report.
+13. When a task is not feasible, run `atry task skip <run> <task> --reason <text>`.
+14. Add `--session <tag>` to `task skip` when you hold a claim.
+15. Run `atry release <run> <task> --session <tag>` only when you stop without done or skip.
 
 `task done` and `task skip` drop the claim lock. Do not call `release` after them.
 Do not invent a meaning the plan does not state. Skip that task and record the reason.
@@ -71,6 +74,8 @@ A stale lock can move with `atry steal <run> <task> --session <tag> --ttl <minut
 
 Run `atry list <run>` after each task.
 When every task is done or skipped, run `atry stage done <run> implement --tool <tool>`.
+When that command refuses, read the paths in the message.
+Ask the user before you pass `--allow-extra <reason>`.
 
 ## Rules
 

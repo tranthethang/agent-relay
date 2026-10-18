@@ -5,12 +5,14 @@ import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { isEnoent, readJson } from "./files.js";
-import { gitHead, treeDiffSize, workTree } from "./git.js";
+import { changedPaths, gitHead, treeDiffSize, workTree } from "./git.js";
 import { appendEvent, withRunLock } from "./mutate.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
 import { parseReviewJson, reviewJsonSchema } from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
+import { outsidePaths } from "./scope.js";
+import { planIndexSchema } from "./tasks.js";
 import { schemaVersion, toolSchema, viaSchema } from "./vocab.js";
 
 const workflowStages = ["plan", "implement", "self-review", "cross-review"] as const;
@@ -111,6 +113,7 @@ export async function doneStage(input: {
   stage: string;
   tool: string;
   model?: string;
+  allowExtra?: string;
 }): Promise<StageResult> {
   return recordStage(input, "completed");
 }
@@ -275,6 +278,7 @@ async function recordStage(
     stage: string;
     tool: string;
     model?: string;
+    allowExtra?: string;
   },
   action: "started" | "completed",
 ): Promise<StageResult> {
@@ -290,6 +294,15 @@ async function recordStage(
     const measured = action === "completed" && sizedStages.has(stage)
       ? await measure(input.runDir, loaded.run.base)
       : undefined;
+    const scope = action === "completed" && stage === "implement"
+      ? await implementScope(
+        input.runDir,
+        loaded.run.base,
+        loaded.events,
+        measured?.tree ?? await workTree(input.runDir),
+        input.allowExtra,
+      )
+      : undefined;
     const saved = await appendEvent(loaded, input.runDir, {
       stage,
       action,
@@ -301,6 +314,7 @@ async function recordStage(
         tree: measured.tree,
         size: measured.size,
       }),
+      ...(scope?.extra === undefined ? {} : { extra: scope.extra, reason: scope.reason }),
     });
     const result: StageResult = {
       schema: schemaVersion,
@@ -342,6 +356,51 @@ function assertMove(state: RunState, move: Move): void {
       "state.lifecycle",
     );
   }
+}
+
+async function implementScope(
+  runDir: string,
+  base: string,
+  events: readonly EventLine[],
+  tree: string,
+  allowExtra: string | undefined,
+): Promise<{ extra?: string[]; reason?: string }> {
+  const own = await plannedFiles(runDir);
+  const recorded = events.flatMap((event) => event.extra ?? []);
+  const outside = outsidePaths(
+    await changedPaths(runDir, base, tree),
+    own,
+    recorded,
+  );
+  if (outside.length === 0) return {};
+  if (allowExtra === undefined) {
+    const shown = outside.slice(0, 10).join(", ");
+    throw new RelayError(
+      "gate",
+      `implement done refused: edits outside task files: ${shown}`,
+      "files",
+    );
+  }
+  const reason = allowExtra.trim();
+  if (reason.length === 0) throw new RelayError("validation", "reason is empty", "allow-extra");
+  return { extra: outside, reason };
+}
+
+async function plannedFiles(runDir: string): Promise<string[]> {
+  const rel = "10-plan/index.json";
+  let value: unknown;
+  try {
+    value = await readJson(join(runDir, rel));
+  } catch (error) {
+    if (isEnoent(error)) return [];
+    throw error;
+  }
+  const parsed = planIndexSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = fromZod(parsed.error);
+    throw new RelayError("validation", issue.message, rel);
+  }
+  return parsed.data.tasks.flatMap((task) => task.files);
 }
 
 async function measure(

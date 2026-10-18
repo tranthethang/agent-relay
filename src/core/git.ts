@@ -79,6 +79,16 @@ export async function workTree(cwd: string): Promise<string> {
   }
 }
 
+export async function changedPaths(cwd: string, from: string, to: string): Promise<string[]> {
+  let text: string;
+  try {
+    text = await git(cwd, ["diff", "--name-only", "--no-renames", "-z", from, to]);
+  } catch {
+    throw new RelayError("validation", "git diff failed", "base");
+  }
+  return text.split("\0").filter((name) => name.length > 0);
+}
+
 export async function treeDiffSize(cwd: string, from: string, to: string): Promise<DiffSize> {
   let text: string;
   try {

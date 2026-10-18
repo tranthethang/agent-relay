@@ -125,21 +125,25 @@ ask the person before `atry approve` and `atry close`. Example for Claude
 Code: `"permissions": { "ask": ["Bash(atry approve:*)", "Bash(atry close:*)"] }`.
 Bypass modes defeat this. The README must say so.
 
-## N4. Implement scope is not checked
+## N4. Implement scope is not checked — in-repo part done
 
 Problem: `task done` does not read the diff. "Edit only the listed files" is
 prose. `claim` checks only declared `files`.
 
 Intent: edits outside a task's `files` are visible and need a reason.
 
-Fix in this repo:
+Implemented in this repo:
 
-- Record `tree` on `task-started`.
+- `task start`, `claim`, and `steal` record `tree` inside the run lock.
 - `task done` diffs the start tree with the current tree. A path outside
-  `files` refuses unless `--allow-extra <reason>` is set.
-- Add `atry guard <run> <path> [--session <tag>]`. It exits non-zero when the path
-  is outside the claimed or started task. A tool hook can call it later.
+  `files` refuses unless `--allow-extra <reason>` is set. Another in-progress
+  task's `files` covers a path in the shared tree.
+- `stage done implement` diffs base with the current tree. Allowed paths are
+  the union of task `files` and recorded `extra` paths.
+- `atry guard <run> <path> [--session <tag>]` exits 0 when the path is inside
+  an in-progress task, and exits 4 otherwise. It does not hash the tree.
 
+Later (tool integration, not this repo yet): a hook that calls `atry guard`.
 In parallel mode on one working tree, a diff cannot say which session made a
 change. Worktree per claim fixes that. It is later work.
 
@@ -216,5 +220,5 @@ These depend on the work above. Do not start them yet.
 
 1. N5 and N1, the base for the other gates.
 2. N2 and the in-repo part of N3.
-3. N4. It can run next to step 2, because the files differ.
+3. N4 in-repo part is done. A hook and a worktree per claim remain later.
 4. N6, last, so skill text is rewritten once.
