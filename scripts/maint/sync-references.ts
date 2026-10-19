@@ -181,7 +181,7 @@ function removeSkillScripts(scriptsDir: string, checkOnly: boolean): boolean {
 }
 
 function syncWriting(root: string, checkOnly: boolean): boolean {
-  const writing = join(root, "docs/partials/writing.md");
+  const writing = join(root, "specs/80-skills-integration/00-skill-bridge/writing.md");
   if (!existsSync(writing)) fail(`Error: ${writing} not found`);
   const writingBody = readFileSync(writing, "utf8");
   let drift = false;
@@ -248,7 +248,7 @@ function reviewTemplateMatches(src: string, dest: string): boolean {
 }
 
 function syncPreflight(root: string, dirs: readonly string[], checkOnly: boolean): boolean {
-  const preflight = join(root, "docs/partials/preflight.md");
+  const preflight = join(root, "specs/80-skills-integration/00-skill-bridge/preflight.md");
   if (!existsSync(preflight)) fail(`Error: ${preflight} not found`);
   const preflightBody = trimBlankLines(readFileSync(preflight, "utf8"));
   const preflightHash = sha256(preflightBody);
@@ -283,7 +283,7 @@ function syncSkillPreflight(
   if (sha256(trimBlankLines(existing)) === preflightHash) return true;
   if (checkOnly) {
     process.stderr.write(
-      `Out of sync: ${skillMd} preflight block differs from docs/partials/preflight.md\n`,
+      `Out of sync: ${skillMd} preflight block differs from sync source\n`,
     );
     return false;
   }
@@ -294,13 +294,10 @@ function syncSkillPreflight(
 
 function main(): void {
   const { checkOnly, root } = parseArgs(process.argv.slice(2));
-  const convDir = join(root, "docs/conventions");
+  const convDir = join(root, "specs/70-storage-and-git/00-directory-conventions");
   requireConventionParts(convDir);
 
   let drift = false;
-  const full = concatParts(convDir, ALL_PARTS);
-  if (!writeOrCheck(checkOnly, join(root, "docs/file-conventions.md"), full)) drift = true;
-
   const dirs = skillDirs(root);
   if (dirs.length === 0) fail("Error: no skills/*/ directories");
   if (syncSkillBundles(root, convDir, dirs, checkOnly)) drift = true;

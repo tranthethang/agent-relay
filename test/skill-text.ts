@@ -15,7 +15,10 @@ export function assertNoShellSnippet(text: string): string | undefined {
 }
 
 export function preflightBody(): string {
-  return readFileSync(new URL("../docs/partials/preflight.md", import.meta.url), "utf8").trim();
+  return readFileSync(
+    new URL("../specs/80-skills-integration/00-skill-bridge/preflight.md", import.meta.url),
+    "utf8",
+  ).trim();
 }
 
 const skillNames = [

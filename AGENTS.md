@@ -39,21 +39,29 @@ install.
 
 ## Layout
 
-| Path                               | Role                                                         |
-| ---------------------------------- | ------------------------------------------------------------ |
-| `src/`                             | CLI and core                                                 |
-| `test/`                            | Vitest                                                       |
-| `skills/<name>/`                   | Skill bundles (`SKILL.md` plus `references/`; no `scripts/`) |
-| `docs/`                            | Maintainer docs. Start at [`docs/INDEX.md`](docs/INDEX.md)   |
-| `docs/file-conventions.md`         | Generated from `docs/conventions/` and synced into bundles   |
-| `scripts/maint/sync-references.ts` | Copies convention parts and partials into skills             |
-| `scripts/maint/next-version.ts`    | Next `X.M.Z` version from tags and the month                 |
+| Path                               | Role                                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `src/`                             | CLI and core                                                                                                 |
+| `test/`                            | Vitest                                                                                                       |
+| `skills/<name>/`                   | Skill bundles (`SKILL.md` plus `references/`; no `scripts/`)                                                 |
+| `specs/`                           | Technical specifications, detail-design, and diagrams                                                        |
+| `specs/90-maintainer/`             | Maintainer guides. Start at [`specs/90-maintainer/00-index/index.md`](specs/90-maintainer/00-index/index.md) |
+| `scripts/maint/sync-references.ts` | Copies convention parts and partials into skills                                                             |
+| `scripts/maint/next-version.ts`    | Next `X.M.Z` version from tags and the month                                                                 |
 
-## Editing skills and docs
+## Documentation and specs
 
-1. Edit `docs/conventions/` for run layout. Edit `docs/partials/preflight.md`
-   and `docs/partials/writing.md` for shared skill text. Do not hand-edit
-   `docs/file-conventions.md` or `skills/*/references/file-conventions.md`.
+- All documentation and specifications must be written in English (`en`).
+- Folders and sub-folders under `specs/` must follow the `xx-yyy` numbering convention, where `xx` is a two-digit number from `00` to `99` incrementing by 10 (e.g. `00-overview`, `10-cli-runtime`).
+- Sub-folders within them follow the exact same rule (e.g. `specs/00-overview/00-architecture/`).
+- Markdown files within sub-folders must not use numeric prefixes. Use descriptive kebab-case names (e.g. `system-overview.md`).
+
+## Editing skills and specs
+
+1. Edit `specs/70-storage-and-git/00-directory-conventions/` for run layout.
+   Edit `specs/80-skills-integration/00-skill-bridge/preflight.md` and
+   `specs/80-skills-integration/00-skill-bridge/writing.md` for shared skill text. Do not hand-edit
+   `skills/*/references/file-conventions.md` or `skills/*/references/writing.md`.
 2. Run `npm run sync`. CI fails on drift (`npm run sync:check`).
 3. Skill text calls `atry` verbs. Do not tell the agent to run files under
    `scripts/`.
@@ -75,7 +83,7 @@ npm run sync:check
 - `M` is the month in `Asia/Ho_Chi_Minh`. It is `1` to `12`, with no zero padding.
 - `Z` is the release count in that month. It is `0` to `99`.
 - `package.json` in git stays `0.0.0`. The workflow sets the version before publish.
-- Full steps: [`docs/release.md`](docs/release.md).
+- Full steps: [`specs/90-maintainer/30-release/release.md`](specs/90-maintainer/30-release/release.md).
 
 ## Release checklist
 

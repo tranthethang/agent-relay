@@ -18,7 +18,10 @@ test("sync:check passes on a clean tree", () => {
   const run = runSync(["--check"], repo);
   expect(run.status, run.stderr).toBe(0);
 
-  const writing = readFileSync(new URL("../docs/partials/writing.md", import.meta.url), "utf8");
+  const writing = readFileSync(
+    new URL("../specs/80-skills-integration/00-skill-bridge/writing.md", import.meta.url),
+    "utf8",
+  );
   const conduct = readFileSync(
     new URL("../skills/atry-self-review/references/reviewer-conduct.md", import.meta.url),
     "utf8",
@@ -49,15 +52,15 @@ test("sync:check passes on a clean tree", () => {
 test("sync:check fails after one edit to a bundle copy", () => {
   const root = mkdtempSync(join(tmpdir(), "sync-check-"));
   try {
-    cpSync(new URL("../docs/conventions", import.meta.url), join(root, "docs/conventions"), {
-      recursive: true,
-    });
-    cpSync(new URL("../docs/partials", import.meta.url), join(root, "docs/partials"), {
-      recursive: true,
-    });
     cpSync(
-      new URL("../docs/file-conventions.md", import.meta.url),
-      join(root, "docs/file-conventions.md"),
+      new URL("../specs/70-storage-and-git/00-directory-conventions", import.meta.url),
+      join(root, "specs/70-storage-and-git/00-directory-conventions"),
+      { recursive: true },
+    );
+    cpSync(
+      new URL("../specs/80-skills-integration/00-skill-bridge", import.meta.url),
+      join(root, "specs/80-skills-integration/00-skill-bridge"),
+      { recursive: true },
     );
     cpSync(new URL("../skills", import.meta.url), join(root, "skills"), { recursive: true });
     const copy = join(root, "skills/atry-plan/references/writing.md");

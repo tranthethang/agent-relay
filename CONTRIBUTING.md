@@ -1,7 +1,7 @@
 # Contributing
 
 Constraints for editing this repo are in [`AGENTS.md`](AGENTS.md). Maintainer
-guides start at [`docs/INDEX.md`](docs/INDEX.md).
+guides start at [`specs/90-maintainer/00-index/index.md`](specs/90-maintainer/00-index/index.md).
 
 ## Quick start
 
@@ -13,11 +13,11 @@ npm test
 ```
 
 Install the skills into a tool with `npx skills add` when you want to dogfood
-them. See [`docs/installer.md`](docs/installer.md).
+them. See [`specs/90-maintainer/10-install/installer.md`](specs/90-maintainer/10-install/installer.md).
 
 ## Tests
 
-Detail: [`docs/testing.md`](docs/testing.md).
+Detail: [`specs/90-maintainer/20-testing/testing.md`](specs/90-maintainer/20-testing/testing.md).
 
 ```bash
 npm test
@@ -37,7 +37,8 @@ make fmt-check
 ```
 
 `dprint.json` formats TypeScript, markdown, and yaml. Edit convention parts
-under `docs/conventions/`, then run `make fmt`, so the generated copies match.
+under `specs/70-storage-and-git/00-directory-conventions/`, then run `make fmt`
+and `npm run sync`, so the skill copies match.
 
 ## Where things live
 
