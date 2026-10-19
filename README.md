@@ -126,6 +126,17 @@ After a user answers a completed review's open item, record the answer with
 `atry review decide <run> Q<n> <answer>`. A decision is stored in
 `events.jsonl`; a later review can then close that question.
 
+`atry policy init` writes a template `.agent-relay.json` at the git root. The
+template holds the defaults and `"worktree": { "enabled": false }`. The command
+refuses when the file exists. It does not stage or commit the file. You must
+commit it, because runs read policy only at their base commit.
+
+`atry policy check` validates `.agent-relay.json` in the working tree. Run it
+before you commit the file. It uses the same schema and field paths as runs do.
+
+The schema accepts an optional `worktree` key with `enabled` and `dir`. The CLI
+does not use this key yet.
+
 ### Parallel tasks
 
 ```bash

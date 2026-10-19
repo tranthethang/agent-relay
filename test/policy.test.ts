@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { RelayError } from "../src/core/error.js";
-import { readPolicy } from "../src/core/policy.js";
+import { parsePolicy, readPolicy } from "../src/core/policy.js";
 import { gitCommit, withTempGitRepo } from "./helper.js";
 
 const execFileAsync = promisify(execFile);
@@ -86,4 +86,67 @@ test("readPolicy ignores a policy that exists only in the working tree", async (
       smallChange: 20,
     });
   });
+});
+
+async function commitPolicy(dir: string, value: unknown): Promise<string> {
+  await writeFile(join(dir, ".agent-relay.json"), JSON.stringify(value));
+  await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+  await gitCommit(dir);
+  return base(dir);
+}
+
+test("readPolicy reads the worktree key from the base", async () => {
+  await withTempGitRepo(async (dir) => {
+    const commit = await commitPolicy(dir, {
+      schema: 1,
+      requireReviews: ["self"],
+      smallChange: 0,
+      worktree: { enabled: true, dir: "../wt" },
+    });
+    expect(await readPolicy(dir, commit)).toEqual({
+      schema: 1,
+      requireReviews: ["self"],
+      smallChange: 0,
+      worktree: { enabled: true, dir: "../wt" },
+    });
+  });
+});
+
+test("readPolicy rejects a worktree.enabled value that is not a boolean", async () => {
+  await withTempGitRepo(async (dir) => {
+    const commit = await commitPolicy(dir, {
+      schema: 1,
+      requireReviews: ["self"],
+      smallChange: 0,
+      worktree: { enabled: "yes" },
+    });
+    await expect(readPolicy(dir, commit)).rejects.toMatchObject(
+      {
+        code: "validation",
+        fieldPath: ".agent-relay.json:worktree.enabled",
+      } satisfies Partial<RelayError>,
+    );
+  });
+});
+
+test("parsePolicy rejects an unknown key in worktree", () => {
+  const text = JSON.stringify({
+    schema: 1,
+    requireReviews: ["self"],
+    smallChange: 0,
+    worktree: { enabled: false, extra: 1 },
+  });
+  expect(() => parsePolicy(text)).toThrow(
+    expect.objectContaining({ code: "validation", fieldPath: ".agent-relay.json:worktree" }),
+  );
+});
+
+test("parsePolicy reports invalid JSON", () => {
+  expect(() => parsePolicy("{")).toThrow(
+    expect.objectContaining({
+      code: "validation",
+      message: "invalid JSON",
+      fieldPath: ".agent-relay.json",
+    }),
+  );
 });

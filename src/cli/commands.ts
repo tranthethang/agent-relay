@@ -19,6 +19,7 @@ import { registerDistill } from "./distill.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
 import { registerPlan } from "./plan.js";
+import { registerPolicy } from "./policy.js";
 import { registerReview } from "./review.js";
 
 export function registerCommands(program: Command): void {
@@ -111,6 +112,7 @@ export function registerCommands(program: Command): void {
   registerClaim(program);
   registerReview(program);
   registerDistill(program);
+  registerPolicy(program);
 }
 
 function commandJson(command: Command): boolean {

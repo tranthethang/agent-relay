@@ -22,6 +22,7 @@ Command registration is modularized under `src/cli/`:
 | `claim.ts`     | Concurrency & locks   | `claim`, `release`, `steal`, `guard`, `list`                                                    |
 | `review.ts`    | Verification & review | `review new`, `review done`, `review decide`                                                    |
 | `distill.ts`   | Artifact manifest     | `distill`                                                                                       |
+| `policy.ts`    | Repository policy     | `policy init`, `policy check`                                                                   |
 
 ## Token Resolution Convention
 
