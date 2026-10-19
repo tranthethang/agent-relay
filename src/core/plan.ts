@@ -12,6 +12,7 @@ import { type RunState } from "./reduce.js";
 import { outsidePaths } from "./scope.js";
 import { type PlanIndex, planIndexSchema, type TasksInput, tasksInputSchema } from "./tasks.js";
 import { schemaVersion, taskIdSchema } from "./vocab.js";
+import { runGitCwd } from "./worktree.js";
 
 const maxPlanTasks = 8;
 
@@ -188,7 +189,7 @@ export async function taskStart(runDir: string, task: string): Promise<TaskMoveR
       }
     }
     const implement = await writeImplementScaffold(runDir, item.id, item.title);
-    const tree = await workTree(runDir);
+    const tree = await workTree(await runGitCwd(runDir, loaded.run));
     await appendEvent(loaded, runDir, {
       stage: "implement",
       action: "task-started",
@@ -219,8 +220,9 @@ export async function taskDone(
     if (from === undefined) {
       throw new RelayError("gate", `task done refused: ${id} has no start tree`, id);
     }
+    const cwd = await runGitCwd(runDir, loaded.run);
     const outside = outsidePaths(
-      await changedPaths(runDir, from, await workTree(runDir)),
+      await changedPaths(cwd, from, await workTree(cwd)),
       item.files,
       otherFiles(index, loaded.run.state, loaded.events, id),
     );

@@ -134,8 +134,30 @@ commit it, because runs read policy only at their base commit.
 `atry policy check` validates `.agent-relay.json` in the working tree. Run it
 before you commit the file. It uses the same schema and field paths as runs do.
 
-The schema accepts an optional `worktree` key with `enabled` and `dir`. The CLI
-does not use this key yet.
+### Worktree isolation
+
+Set `"worktree": { "enabled": true }` in `.agent-relay.json` and commit it.
+`run new` reads policy at `HEAD`, so an uncommitted change has no effect.
+`worktree.dir` sets the folder for worktrees. A relative `dir` resolves from
+the git root. Without `dir`, the folder is `<repo>_work-tree` next to the repo.
+
+With worktree on, `run new` runs `git worktree add -b <run> <dir>/<run> HEAD`.
+`HEAD` must be on a branch. `run.json` records the worktree path and the
+original branch. The worktree gets `.agent-relay` as a link to the main repo
+folder (a junction on Windows), and `.agent-relay` goes into the shared
+`info/exclude`. Work, commit, and run `atry` in that worktree. Every git check
+for the run uses the worktree. `atry context --json` shows `run.worktree`.
+
+The merge stays manual. Merge the run branch into the original branch before
+`close`. `close` removes the worktree only when the run branch is an ancestor
+of the original branch and the worktree has no uncommitted changes. Otherwise it
+keeps the worktree and says why. A squash merge does not make the run branch an
+ancestor. `close` never deletes the run branch, and the run history stays in
+the main repo.
+
+With worktree off, `stage start implement` refuses a tree with changes outside
+`.agent-relay/`. On a clean tree, it moves `base` to `HEAD` and records a `run`
+`rebased` event.
 
 ### Parallel tasks
 
@@ -146,7 +168,8 @@ atry list <run>
 ```
 
 `claim` refuses a task whose `files` overlap a lock held by another session.
-It does not create worktrees. The sessions share one tree. `task done` ignores
+`claim` does not create worktrees. The sessions on one run share one tree.
+With worktree isolation on, each run has its own tree. `task done` ignores
 a path that another in-progress task's `files` covers. `atry guard <run> <path>`
 exits 0 when that path is inside an in-progress task. `--session <tag>` limits
 the check to that session.

@@ -20,6 +20,7 @@ Run `atry preflight --requires "<requires-atry>"` before any other command in th
 Stop when that command exits non-zero.
 When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
+When the context JSON has `run.worktree`, edit files and run git in `run.worktree.path`.
 
 <!-- END PREFLIGHT -->
 
@@ -47,7 +48,7 @@ Repeat from the first step in this section.
 
 1. Read `run.base`, the plan paths, and the implement paths from the context JSON.
 2. Read `10-plan/overview.md`, each task file, and each `20-implement/` file.
-3. Diff the work from `run.base` to the current HEAD.
+3. Diff the work from `run.base` to the current HEAD. When `run.worktree` exists, diff in `run.worktree.path`.
 
 After the user answers an open question, record the answer with
 `atry review decide <run> Q<n> <answer>`. Use `a` or `b` for a choice card.

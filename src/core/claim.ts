@@ -20,6 +20,7 @@ import { overlappingTask } from "./overlap.js";
 import { type RunState } from "./reduce.js";
 import { type PlanIndex, planIndexSchema } from "./tasks.js";
 import { schemaVersion, taskIdSchema, taskStatuses } from "./vocab.js";
+import { runGitCwd } from "./worktree.js";
 
 type TaskStatus = (typeof taskStatuses)[number];
 
@@ -102,7 +103,7 @@ export async function claimTask(
       throw error;
     }
     const implement = await ensureImplement(runDir, item.id, item.title);
-    const tree = await workTree(runDir);
+    const tree = await workTree(await runGitCwd(runDir, loaded.run));
     await appendAll(loaded, runDir, [
       { stage: "implement", action: "claimed", task: id, session },
       { stage: "implement", action: "task-started", task: id, session, tree },
@@ -183,7 +184,7 @@ export async function stealTask(
       await assertNoOverlap(runDir, index, id, session);
       await stealLock(runDir, id, session, ttlMinutes * 60_000);
       const implement = await ensureImplement(runDir, item.id, item.title);
-      const tree = await workTree(runDir);
+      const tree = await workTree(await runGitCwd(runDir, loaded.run));
       await appendEvent(loaded, runDir, {
         stage: "implement",
         action: "stolen",

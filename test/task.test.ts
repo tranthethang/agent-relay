@@ -109,6 +109,8 @@ test("task done checks edits against task files", async () => {
     expect((await runCli(["claim", run, "T3", "--session", "bob"], dir)).code).toBe(0);
     await writeFile(join(dir, "src/peer.ts"), "export const peer = 1;\n");
     expect((await runCli(["task", "done", run, "T4"], dir)).code).toBe(0);
+    // Implement starts only on a clean tree.
+    await rm(join(dir, "src"), { recursive: true });
 
     const many = await createRun(dir, "task-scope-extra");
     await writeTasks(many, [{ title: "Wide", files: ["src/kept.ts"] }]);
@@ -117,6 +119,7 @@ test("task done checks edits against task files", async () => {
     expect((await runCli(["stage", "start", many, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
     expect((await runCli(["task", "start", many, "T1"], dir)).code).toBe(0);
+    await mkdir(join(dir, "src"), { recursive: true });
     for (let index = 0; index < 11; index += 1) {
       const name = `src/out-${String(index).padStart(2, "0")}.ts`;
       await writeFile(join(dir, name), "export {};\n");

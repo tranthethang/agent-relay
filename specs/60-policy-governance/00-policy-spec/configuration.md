@@ -21,10 +21,18 @@ Repository governance policies are committed in `.agent-relay.json` at the root 
 | `requireReviews`   | `string[]` | `["self", "cross"]`            | Review kinds required before a run can be closed.                                                     |
 | `smallChange`      | `number`   | `20`                           | Combined line threshold (additions + deletions). Changes below this count require only `self` review. |
 | `testCommand`      | `string`   | `undefined`                    | Test command executed automatically during `atry review done`.                                        |
-| `worktree.enabled` | `boolean`  | off when `worktree` is missing | Reserved for a later worktree plan. Only the type is validated.                                       |
-| `worktree.dir`     | `string`   | `undefined`                    | Optional and non-empty. Reserved for a later worktree plan. Only the type is validated.               |
+| `worktree.enabled` | `boolean`  | off when `worktree` is missing | When `true`, `run new` creates a git worktree and a branch for each run.                              |
+| `worktree.dir`     | `string`   | `<repo>_work-tree`             | Optional and non-empty. The folder for run worktrees. A relative path resolves from the git root.     |
 
-The `worktree` object is strict, so an unknown key in it fails validation. A later worktree plan defines what `worktree.enabled` and `worktree.dir` do. The current CLI does not read them.
+The `worktree` object is strict, so an unknown key in it fails validation.
+
+## Worktree Settings
+
+- `run new` reads policy at `HEAD`. An uncommitted policy change has no effect. Other commands read policy at the run `base`.
+- With `worktree.enabled` set to `true`, `run new` creates `<dir>/<run name>` on a new branch named after the run. It fails with `gate` (exit `4`) on a detached `HEAD`, or when the branch or the path exists.
+- The default `dir` is `<repo>_work-tree`, a sibling of the main repo folder.
+- With worktree off, `stage start implement` requires a clean tree outside `.agent-relay/` and moves `base` to `HEAD`.
+- See [`run-layout.md`](../../70-storage-and-git/00-directory-conventions/run-layout.md) for the `run.json` record and [`parallel.md`](../../70-storage-and-git/00-directory-conventions/parallel.md) for parallel runs.
 
 ## Policy Commands
 

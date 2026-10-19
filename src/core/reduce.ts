@@ -27,7 +27,8 @@ function applyEvent(state: RunState, event: EventLine): void {
 }
 
 function applyLifecycle(state: RunState, event: EventLine): void {
-  if (event.action === "waived") return;
+  // A `rebased` run event moves `base` only. It does not change lifecycle, stage, or tasks.
+  if (event.action === "waived" || event.action === "rebased") return;
   if (event.action === "abandoned") {
     state.lifecycle = "abandoned";
     return;

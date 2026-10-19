@@ -1,4 +1,4 @@
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { z } from "zod";
 import { findRelayDir, listRunNames, runIdFromName } from "./discover.js";
@@ -15,6 +15,7 @@ import {
   slugSchema,
   ymdSchema,
 } from "./vocab.js";
+import { addWorktree, type WorktreeRecord, worktreeSettings } from "./worktree.js";
 
 const stageDirs = ["10-plan", "20-implement", "30-self-review", "40-cross-review"] as const;
 
@@ -38,6 +39,7 @@ export type RunNewResult = {
   title: string;
   base: string;
   from?: string;
+  worktree?: WorktreeRecord;
 };
 
 export type BrainstormNewResult = {
@@ -48,7 +50,8 @@ export type BrainstormNewResult = {
 };
 
 export function runNewText(result: RunNewResult): string {
-  return `${result.path}\n`;
+  if (result.worktree === undefined) return `${result.path}\n`;
+  return `${result.path}\nworktree: ${result.worktree.path}\n`;
 }
 
 export function brainstormNewText(result: BrainstormNewResult): string {
@@ -69,6 +72,7 @@ export async function createRun(input: {
   const ymd = utcYmd(nowMs);
   requireMatch(ymdSchema, ymd, "ymd", "invalid ymd");
   const head = await gitHead(input.cwd);
+  const settings = await worktreeSettings(input.cwd, head);
   const relayDir = await ensureRelay(input.cwd);
   const from = input.from === undefined ? undefined : await resolveBrainstorm(relayDir, input.from);
   const id = await allocateId(relayDir, nowMs);
@@ -76,6 +80,13 @@ export async function createRun(input: {
   const runDir = join(relayDir, name);
   await mkdir(runDir, { recursive: true });
   for (const dir of stageDirs) await mkdir(join(runDir, dir));
+  let worktree: WorktreeRecord | undefined;
+  try {
+    if (settings !== null) worktree = await addWorktree(settings, { relayDir, name, head });
+  } catch (error) {
+    await rm(runDir, { recursive: true, force: true });
+    throw error;
+  }
   const event: EventLine = eventLineSchema.parse({
     schema: schemaVersion,
     ts: new Date(nowMs).toISOString(),
@@ -91,6 +102,7 @@ export async function createRun(input: {
     title,
     base: head,
     ...(from === undefined ? {} : { from }),
+    ...(worktree === undefined ? {} : { worktree }),
     state: reduceEvents([event]),
   });
   await atomicWrite(join(runDir, "run.json"), `${JSON.stringify(run)}\n`);
@@ -106,6 +118,7 @@ export async function createRun(input: {
     base: head,
   };
   if (from !== undefined) result.from = from;
+  if (worktree !== undefined) result.worktree = worktree;
   return result;
 }
 

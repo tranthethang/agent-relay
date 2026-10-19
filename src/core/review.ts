@@ -12,6 +12,7 @@ import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
 import { runTestCommand } from "./testrun.js";
 import { schemaVersion, toolSchema } from "./vocab.js";
+import { runGitCwd } from "./worktree.js";
 
 export const reviewKinds = ["self", "cross"] as const;
 
@@ -133,7 +134,7 @@ export async function reviewNew(input: {
     const dir = join(input.runDir, place.dir);
     await mkdir(dir, { recursive: true });
     const label = await nextLabel(dir);
-    const tree = await workTree(input.runDir);
+    const tree = await workTree(await runGitCwd(input.runDir, loaded.run));
     const markdown = join(dir, `${label}.md`);
     const json = join(dir, `${label}.json`);
     await atomicWrite(markdown, reviewMarkdown(kind));
@@ -185,18 +186,19 @@ export async function reviewDone(input: {
         lastProvenance(loaded.events, "self-review"),
       )
       : [];
-    const policy = await readPolicy(input.runDir, loaded.run.base);
+    const cwd = await runGitCwd(input.runDir, loaded.run);
+    const policy = await readPolicy(cwd, loaded.run.base);
     const execution = await runTestCommand(
-      await gitRoot(input.runDir),
+      await gitRoot(cwd),
       policy.testCommand,
       input.testTimeoutMs,
     );
-    const head = await gitHead(input.runDir);
-    const tree = await workTree(input.runDir);
-    const size = await treeDiffSize(input.runDir, loaded.run.base, tree);
+    const head = await gitHead(cwd);
+    const tree = await workTree(cwd);
+    const size = await treeDiffSize(cwd, loaded.run.base, tree);
     const startedTree = lastReviewStartTree(loaded.events, place.stage);
     const delta = startedTree !== undefined && startedTree !== tree
-      ? await treeDiffSize(input.runDir, startedTree, tree)
+      ? await treeDiffSize(cwd, startedTree, tree)
       : undefined;
     const label = String(reviewNumber(review.rel)).padStart(2, "0");
     const logPath = join(input.runDir, place.dir, `${label}.test.log`);

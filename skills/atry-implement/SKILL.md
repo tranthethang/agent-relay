@@ -20,6 +20,7 @@ Run `atry preflight --requires "<requires-atry>"` before any other command in th
 Stop when that command exits non-zero.
 When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
+When the context JSON has `run.worktree`, edit files and run git in `run.worktree.path`.
 
 <!-- END PREFLIGHT -->
 
@@ -52,7 +53,7 @@ Repeat from the first step in this section.
 3. When several sessions share the run, run `atry claim <run> <task> --session <tag>`.
 4. When the claim fails, pick a different task or stop.
 5. When you work alone, run `atry task start <run> <task>`.
-6. Change only the files listed for that task.
+6. Change only the files listed for that task. When `run.worktree` exists, change them in `run.worktree.path`.
 7. Fill `20-implement/<task>.md` with the edit tool.
 8. Record the files, the assumptions, and the risks in that file.
 9. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.

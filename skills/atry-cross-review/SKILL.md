@@ -20,6 +20,7 @@ Run `atry preflight --requires "<requires-atry>"` before any other command in th
 Stop when that command exits non-zero.
 When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
+When the context JSON has `run.worktree`, edit files and run git in `run.worktree.path`.
 
 <!-- END PREFLIGHT -->
 
@@ -48,7 +49,7 @@ Repeat from the first step in this section.
 
 1. Read `run.base`, `reviews.self`, and the stage paths from the context JSON.
 2. Read the plan files, the implement files, and the self-review pair.
-3. Diff the work from `run.base` to the current HEAD.
+3. Diff the work from `run.base` to the current HEAD. When `run.worktree` exists, diff in `run.worktree.path`.
 4. Ask where each earlier claim can be wrong. Then check that place.
 
 `review new cross` requires `--model`. After the user answers an open

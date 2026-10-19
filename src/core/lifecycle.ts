@@ -1,12 +1,12 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { z } from "zod";
-import { rebuildRun } from "./cache.js";
+import { type RebuildResult, rebuildRun } from "./cache.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { isEnoent, readJson } from "./files.js";
-import { changedPaths, gitHead, treeDiffSize, workTree } from "./git.js";
+import { changedPaths, gitHead, treeDiffSize, treeStatus, workTree } from "./git.js";
 import { appendEvent, withRunLock } from "./mutate.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
@@ -15,6 +15,14 @@ import { brainstormOpenSchema } from "./scaffold.js";
 import { outsidePaths } from "./scope.js";
 import { openPlanTasks, planIndexSchema, readPlanIndex } from "./tasks.js";
 import { schemaVersion, toolSchema, viaSchema } from "./vocab.js";
+import {
+  gitCwd,
+  keepReason,
+  mainRoot,
+  removeMergedWorktree,
+  runGitCwd,
+  type WorktreeRemoval,
+} from "./worktree.js";
 
 const workflowStages = ["plan", "implement", "self-review", "cross-review"] as const;
 const workflowStageSchema = z.enum(workflowStages);
@@ -59,6 +67,7 @@ export type CloseResult = {
   schema: 1;
   path: string;
   lifecycle: "closed" | "abandoned";
+  worktree?: WorktreeRemoval;
 };
 
 export type ReviewIntegrity = {
@@ -93,7 +102,12 @@ export function approveText(result: ApproveResult): string {
 }
 
 export function closeText(result: CloseResult): string {
-  return `lifecycle: ${result.lifecycle}\n`;
+  const lines = [`lifecycle: ${result.lifecycle}`];
+  if (result.worktree?.removed === true) lines.push("worktree: removed");
+  if (result.worktree?.reason !== undefined) {
+    lines.push(`worktree: kept (${result.worktree.reason})`);
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 export type ApprovePreview = {
@@ -107,6 +121,7 @@ export type ClosePreview = {
   schema: 1;
   recommend: "y" | "n";
   reasons: string[];
+  worktree?: { remove: boolean; reason?: string };
 };
 
 export function approvePreviewText(result: ApprovePreview): string {
@@ -115,7 +130,12 @@ export function approvePreviewText(result: ApprovePreview): string {
 
 export function closePreviewText(result: ClosePreview): string {
   const reasons = result.reasons.length === 0 ? "" : `${result.reasons.join("\n")}\n`;
-  return `recommend: ${result.recommend}\n${reasons}`;
+  let worktree = "";
+  if (result.worktree?.remove === true) worktree = "worktree: close will remove it\n";
+  if (result.worktree?.reason !== undefined) {
+    worktree = `worktree: close will keep it (${result.worktree.reason})\n`;
+  }
+  return `recommend: ${result.recommend}\n${reasons}${worktree}`;
 }
 
 export function sectionText(markdown: string, heading: string): string {
@@ -166,11 +186,20 @@ export async function closePreview(runDir: string): Promise<ClosePreview> {
   ) {
     reasons.push("failed tests");
   }
-  return {
+  const preview: ClosePreview = {
     schema: schemaVersion,
     recommend: reasons.length === 0 ? "y" : "n",
     reasons,
   };
+  if (loaded.run.worktree !== undefined) {
+    const reason = await keepReason(
+      await mainRoot(runDir),
+      basename(runDir),
+      loaded.run.worktree,
+    );
+    preview.worktree = reason === null ? { remove: true } : { remove: false, reason };
+  }
+  return preview;
 }
 
 export function brainstormDoneText(result: BrainstormDoneResult): string {
@@ -276,7 +305,18 @@ export async function closeRun(input: {
     if (saved.run.state.lifecycle !== "closed") {
       throw new RelayError("validation", "close did not close the run", "state.lifecycle");
     }
-    return { schema: schemaVersion, path: input.runDir, lifecycle: saved.run.state.lifecycle };
+    const result: CloseResult = {
+      schema: schemaVersion,
+      path: input.runDir,
+      lifecycle: saved.run.state.lifecycle,
+    };
+    if (loaded.run.worktree !== undefined) {
+      result.worktree = await removeMergedWorktree(await mainRoot(input.runDir), {
+        name: basename(input.runDir),
+        worktree: loaded.run.worktree,
+      });
+    }
+    return result;
   });
 }
 
@@ -301,9 +341,11 @@ export async function reviewIntegrity(
   base: string,
   events: readonly EventLine[],
 ): Promise<ReviewIntegrity> {
-  const policy = await readPolicy(runDir, base);
-  const tree = await workTree(runDir);
-  const size = await treeDiffSize(runDir, base, tree);
+  const cwd = await integrityCwd(runDir, events);
+  if (cwd === null) return removedIntegrity(runDir, base, events);
+  const policy = await readPolicy(cwd, base);
+  const tree = await workTree(cwd);
+  const size = await treeDiffSize(cwd, base, tree);
   const required = size.added + size.deleted < policy.smallChange
     ? ["self"] as const
     : policy.requireReviews;
@@ -312,6 +354,41 @@ export async function reviewIntegrity(
     required: [...required],
     done,
     treeMatch: latest === undefined ? null : latest.tree === tree,
+    ...(latest?.delta === undefined ? {} : { delta: latest.delta }),
+    waived: events.some((event) => event.action === "waived"),
+  };
+}
+
+// `null` means `close` removed the worktree of this closed run.
+async function integrityCwd(runDir: string, events: readonly EventLine[]): Promise<string | null> {
+  try {
+    return await gitCwd(runDir);
+  } catch (error) {
+    const removed = error instanceof RelayError && error.fieldPath === "run.json:worktree.path"
+      && events.some((event) => event.action === "closed");
+    if (removed) return null;
+    throw error;
+  }
+}
+
+// A closed run without its worktree has no live tree. Size comes from the latest review tree.
+async function removedIntegrity(
+  runDir: string,
+  base: string,
+  events: readonly EventLine[],
+): Promise<ReviewIntegrity> {
+  const policy = await readPolicy(runDir, base);
+  const { done, latest } = reviewProgress(events);
+  const size = latest?.tree === undefined
+    ? { added: 0, deleted: 0 }
+    : await treeDiffSize(runDir, base, latest.tree);
+  const required = size.added + size.deleted < policy.smallChange
+    ? ["self"] as const
+    : policy.requireReviews;
+  return {
+    required: [...required],
+    done,
+    treeMatch: null,
     ...(latest?.delta === undefined ? {} : { delta: latest.delta }),
     waived: events.some((event) => event.action === "waived"),
   };
@@ -374,8 +451,12 @@ async function recordStage(
   if (detected !== undefined && detected !== tool) {
     process.stderr.write(`warning: detected tool ${detected} differs from declared ${tool}\n`);
   }
-  return withRunLock(input.runDir, async (loaded) => {
-    assertMove(loaded.run.state, stageMove(stage, action));
+  return withRunLock(input.runDir, async (locked) => {
+    assertMove(locked.run.state, stageMove(stage, action));
+    const loaded = action === "started" && stage === "implement"
+        && locked.run.worktree === undefined
+      ? await rebaseRun(input.runDir, locked)
+      : locked;
     if (action === "completed" && stage === "implement") {
       const index = await readPlanIndex(input.runDir);
       if (index === null) {
@@ -390,15 +471,17 @@ async function recordStage(
         );
       }
     }
-    const measured = action === "completed" && sizedStages.has(stage)
-      ? await measure(input.runDir, loaded.run.base)
+    const cwd = action === "completed" && sizedStages.has(stage)
+      ? await runGitCwd(input.runDir, loaded.run)
       : undefined;
-    const scope = action === "completed" && stage === "implement"
+    const measured = cwd === undefined ? undefined : await measure(cwd, loaded.run.base);
+    const scope = cwd !== undefined && measured !== undefined && stage === "implement"
       ? await implementScope(
         input.runDir,
+        cwd,
         loaded.run.base,
         loaded.events,
-        measured?.tree ?? await workTree(input.runDir),
+        measured.tree,
         input.allowExtra,
       )
       : undefined;
@@ -431,6 +514,20 @@ async function recordStage(
   });
 }
 
+// Without a worktree, implement starts from a clean tree, and `base` moves to HEAD.
+async function rebaseRun(runDir: string, loaded: RebuildResult): Promise<RebuildResult> {
+  if ((await treeStatus(runDir)).length > 0) {
+    throw new RelayError("gate", "working tree has changes", "tree");
+  }
+  const head = await gitHead(runDir);
+  const saved = await appendEvent({ ...loaded, run: { ...loaded.run, base: head } }, runDir, {
+    stage: "run",
+    action: "rebased",
+    ref: head,
+  });
+  return { ...loaded, run: saved.run, events: [...loaded.events, saved.event] };
+}
+
 function stageMove(
   stage: (typeof workflowStages)[number],
   action: "started" | "completed",
@@ -459,6 +556,7 @@ function assertMove(state: RunState, move: Move): void {
 
 async function implementScope(
   runDir: string,
+  cwd: string,
   base: string,
   events: readonly EventLine[],
   tree: string,
@@ -467,7 +565,7 @@ async function implementScope(
   const own = await plannedFiles(runDir);
   const recorded = events.flatMap((event) => event.extra ?? []);
   const outside = outsidePaths(
-    await changedPaths(runDir, base, tree),
+    await changedPaths(cwd, base, tree),
     own,
     recorded,
   );
@@ -516,16 +614,16 @@ async function plannedFiles(runDir: string): Promise<string[]> {
 }
 
 async function measure(
-  runDir: string,
+  cwd: string,
   base: string,
 ): Promise<{
   head: string;
   tree: string;
   size: { files: number; added: number; deleted: number };
 }> {
-  const head = await gitHead(runDir);
-  const tree = await workTree(runDir);
-  return { head, tree, size: await treeDiffSize(runDir, base, tree) };
+  const head = await gitHead(cwd);
+  const tree = await workTree(cwd);
+  return { head, tree, size: await treeDiffSize(cwd, base, tree) };
 }
 
 async function assertNoOpenQuestions(runDir: string, events: readonly EventLine[]): Promise<void> {
