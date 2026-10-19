@@ -9,9 +9,12 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { RelayError } from "../../src/core/error.ts";
 
-const tagPattern = /^v(0|[1-9][0-9]*)\.([1-9]|1[0-2])\.([0-9]|[1-9][0-9])$/;
-const schemePattern = /^(0|[1-9][0-9]*)\.([1-9]|1[0-2])\.([0-9]|[1-9][0-9])$/;
+const tagPattern = /^v(0|[1-9]\d*)\.([1-9]|1[0-2])\.(\d|[1-9]\d)$/;
+const schemePattern = /^(0|[1-9]\d*)\.([1-9]|1[0-2])\.(\d|[1-9]\d)$/;
 const timeZone = "Asia/Ho_Chi_Minh";
+const gitProgram = process.platform === "win32"
+  ? String.raw`C:\Program Files\Git\cmd\git.exe`
+  : "/usr/bin/git";
 
 export type VersionParts = {
   x: number;
@@ -75,15 +78,12 @@ export function nextVersion(input: {
   const month = monthInHoChiMinh(input.now);
   const next = candidate(parsed, month, input.major);
   if (next.z > 99) throw new RelayError("validation", "Z would pass 99", "z");
-  if (parsed.length > 0) {
-    const highest = parsed.reduce((best, item) => compareVersion(item, best) > 0 ? item : best);
-    if (compareVersion(next, highest) <= 0) {
-      throw new RelayError(
-        "validation",
-        "version is not higher than the highest tag; set major: true",
-        "version",
-      );
-    }
+  if (parsed.length > 0 && compareVersion(next, highestVersion(parsed)) <= 0) {
+    throw new RelayError(
+      "validation",
+      "version is not higher than the highest tag; set major: true",
+      "version",
+    );
   }
   const version = formatVersion(next);
   return { version, tag: `v${version}` };
@@ -105,9 +105,17 @@ export function assertRequires(root: string, version: string): void {
   }
 }
 
+function highestVersion(parsed: readonly VersionParts[]): VersionParts {
+  const first = parsed[0];
+  if (first === undefined) {
+    throw new RelayError("validation", "tag list is empty", "version");
+  }
+  return parsed.reduce((best, item) => compareVersion(item, best) > 0 ? item : best, first);
+}
+
 function candidate(parsed: VersionParts[], month: number, major: boolean): VersionParts {
   if (parsed.length === 0) return { x: 0, m: month, z: 0 };
-  const highest = parsed.reduce((best, item) => compareVersion(item, best) > 0 ? item : best);
+  const highest = highestVersion(parsed);
   if (major) return { x: highest.x + 1, m: month, z: 0 };
   if (highest.m === month) return { x: highest.x, m: month, z: highest.z + 1 };
   return { x: highest.x, m: month, z: 0 };
@@ -120,8 +128,14 @@ function fail(error: unknown): never {
 }
 
 function gitTags(): string[] {
-  const output = execFileSync("git", ["tag", "-l", "v*"], { encoding: "utf8" });
+  const output = execFileSync(gitProgram, ["tag", "-l", "v*"], { encoding: "utf8" });
   return output.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+}
+
+function takeArg(argv: readonly string[], index: number, name: string): string {
+  const value = argv[index + 1];
+  if (value === undefined) throw new RelayError("validation", `${name} is missing`, name);
+  return value;
 }
 
 function parseArgs(
@@ -137,9 +151,7 @@ function parseArgs(
       continue;
     }
     if (arg === "--now") {
-      const value = argv[index + 1];
-      if (value === undefined) throw new RelayError("validation", "now is missing", "now");
-      now = new Date(value);
+      now = new Date(takeArg(argv, index, "now"));
       if (Number.isNaN(now.getTime())) {
         throw new RelayError("validation", "now is not a date", "now");
       }
@@ -147,11 +159,7 @@ function parseArgs(
       continue;
     }
     if (arg === "--check-requires") {
-      const value = argv[index + 1];
-      if (value === undefined) {
-        throw new RelayError("validation", "version is missing", "version");
-      }
-      checkRequires = value;
+      checkRequires = takeArg(argv, index, "version");
       index += 1;
       continue;
     }

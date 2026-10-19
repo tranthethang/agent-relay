@@ -25,7 +25,7 @@ test("normalizePath compares equal paths and directory prefixes", () => {
     { id: "T3", title: "C", deps: [], files: ["src/cli/plan.ts"], path: "10-plan/T3.md" },
   ];
   expect(overlappingTask(tasks, "T2", new Set(["T1"]))).toBe("T1");
-  expect(overlappingTask(tasks, "T3", new Set(["T1"]))).toBe(null);
+  expect(overlappingTask(tasks, "T3", new Set(["T1"]))).toBeNull();
 });
 
 test("claim refuses a file overlap with another session and exits 5", async () => {

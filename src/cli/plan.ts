@@ -1,5 +1,4 @@
 import { type Command } from "commander";
-import { assertClaimOwner, releaseClaimLock } from "../core/claim.js";
 import { RelayError } from "../core/error.js";
 import {
   planAmend,

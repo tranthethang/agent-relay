@@ -116,7 +116,7 @@ function skillDirs(root: string): string[] {
   return readdirSync(skills, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => join(skills, entry.name))
-    .sort();
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function replacePreflight(source: string, body: string): string {
@@ -139,22 +139,21 @@ function replacePreflight(source: string, body: string): string {
   return ended ? `${out.join("\n")}\n` : out.join("\n");
 }
 
-function main(): void {
-  const { checkOnly, root } = parseArgs(process.argv.slice(2));
-  const convDir = join(root, "docs/conventions");
+function requireConventionParts(convDir: string): void {
   if (!existsSync(convDir)) fail(`Error: ${convDir} not found`);
   for (const part of ALL_PARTS) {
     const file = join(convDir, `${part}.md`);
     if (!existsSync(file)) fail(`Error: missing convention part ${file}`);
   }
+}
 
+function syncSkillBundles(
+  root: string,
+  convDir: string,
+  dirs: readonly string[],
+  checkOnly: boolean,
+): boolean {
   let drift = false;
-  const full = concatParts(convDir, ALL_PARTS);
-  if (!writeOrCheck(checkOnly, join(root, "docs/file-conventions.md"), full)) drift = true;
-
-  const dirs = skillDirs(root);
-  if (dirs.length === 0) fail("Error: no skills/*/ directories");
-
   for (const dir of dirs) {
     const name = basename(dir);
     const parts = SKILL_PARTS[name];
@@ -165,112 +164,158 @@ function main(): void {
     }
     const body = concatParts(convDir, parts);
     if (!writeOrCheck(checkOnly, join(dir, "references/file-conventions.md"), body)) drift = true;
-
-    const scriptsDir = join(dir, "scripts");
-    if (existsSync(scriptsDir)) {
-      if (checkOnly) {
-        process.stderr.write(`Orphan: ${scriptsDir}/ must not exist (use atry CLI)\n`);
-        drift = true;
-      } else {
-        rmSync(scriptsDir, { recursive: true, force: true });
-        process.stdout.write(`removed ${scriptsDir}/\n`);
-      }
-    }
+    if (removeSkillScripts(join(dir, "scripts"), checkOnly)) drift = true;
   }
+  return drift;
+}
 
+function removeSkillScripts(scriptsDir: string, checkOnly: boolean): boolean {
+  if (!existsSync(scriptsDir)) return false;
+  if (checkOnly) {
+    process.stderr.write(`Orphan: ${scriptsDir}/ must not exist (use atry CLI)\n`);
+    return true;
+  }
+  rmSync(scriptsDir, { recursive: true, force: true });
+  process.stdout.write(`removed ${scriptsDir}/\n`);
+  return false;
+}
+
+function syncWriting(root: string, checkOnly: boolean): boolean {
   const writing = join(root, "docs/partials/writing.md");
   if (!existsSync(writing)) fail(`Error: ${writing} not found`);
   const writingBody = readFileSync(writing, "utf8");
+  let drift = false;
   for (const skill of WRITING_SKILLS) {
     const dest = join(root, "skills", skill, "references/writing.md");
-    if (checkOnly) {
-      if (!existsSync(dest)) {
-        process.stderr.write(`Missing: ${dest}\n`);
-        drift = true;
-      } else if (readFileSync(dest, "utf8") !== writingBody) {
-        process.stderr.write(`Drift: ${dest} differs from ${writing}\n`);
-        drift = true;
-      }
-    } else {
-      mkdirSync(dirname(dest), { recursive: true });
-      writeFileSync(dest, writingBody);
-      process.stdout.write(`synced ${dest}\n`);
-    }
+    if (!syncOneFile(dest, writingBody, writing, checkOnly)) drift = true;
   }
+  return drift;
+}
 
+function syncOneFile(dest: string, body: string, source: string, checkOnly: boolean): boolean {
+  if (checkOnly) {
+    if (!existsSync(dest)) {
+      process.stderr.write(`Missing: ${dest}\n`);
+      return false;
+    }
+    if (readFileSync(dest, "utf8") !== body) {
+      process.stderr.write(`Drift: ${dest} differs from ${source}\n`);
+      return false;
+    }
+    return true;
+  }
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, body);
+  process.stdout.write(`synced ${dest}\n`);
+  return true;
+}
+
+function syncReviewTemplates(root: string, checkOnly: boolean): boolean {
   const selfReview = join(root, "skills/atry-self-review/references");
   const crossReview = join(root, "skills/atry-cross-review/references");
+  let drift = false;
   for (const name of REVIEW_TEMPLATES) {
-    const src = join(selfReview, name);
-    const dest = join(crossReview, name);
-    if (checkOnly) {
-      if (!existsSync(src)) {
-        process.stderr.write(`Missing: ${src}\n`);
-        drift = true;
-        continue;
-      }
-      if (!existsSync(dest)) {
-        process.stderr.write(`Missing: ${dest}\n`);
-        drift = true;
-        continue;
-      }
-      if (!readFileSync(src).equals(readFileSync(dest))) {
-        process.stderr.write(`Drift: ${dest} differs from ${src}\n`);
-        drift = true;
-      }
-    } else {
-      if (!existsSync(src)) fail(`Error: canonical review template missing: ${src}`);
-      mkdirSync(crossReview, { recursive: true });
-      writeFileSync(dest, readFileSync(src));
-      process.stdout.write(`synced ${dest}\n`);
+    if (!syncReviewTemplate(join(selfReview, name), join(crossReview, name), checkOnly)) {
+      drift = true;
     }
   }
+  return drift;
+}
 
+function syncReviewTemplate(src: string, dest: string, checkOnly: boolean): boolean {
+  if (checkOnly) return reviewTemplateMatches(src, dest);
+  if (!existsSync(src)) fail(`Error: canonical review template missing: ${src}`);
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, readFileSync(src));
+  process.stdout.write(`synced ${dest}\n`);
+  return true;
+}
+
+function reviewTemplateMatches(src: string, dest: string): boolean {
+  if (!existsSync(src)) {
+    process.stderr.write(`Missing: ${src}\n`);
+    return false;
+  }
+  if (!existsSync(dest)) {
+    process.stderr.write(`Missing: ${dest}\n`);
+    return false;
+  }
+  if (!readFileSync(src).equals(readFileSync(dest))) {
+    process.stderr.write(`Drift: ${dest} differs from ${src}\n`);
+    return false;
+  }
+  return true;
+}
+
+function syncPreflight(root: string, dirs: readonly string[], checkOnly: boolean): boolean {
   const preflight = join(root, "docs/partials/preflight.md");
   if (!existsSync(preflight)) fail(`Error: ${preflight} not found`);
   const preflightBody = trimBlankLines(readFileSync(preflight, "utf8"));
   const preflightHash = sha256(preflightBody);
+  let drift = false;
   for (const dir of dirs) {
-    const skillMd = join(dir, "SKILL.md");
-    if (!existsSync(skillMd)) {
-      process.stderr.write(`Missing: ${skillMd}\n`);
+    if (!syncSkillPreflight(join(dir, "SKILL.md"), preflightBody, preflightHash, checkOnly)) {
       drift = true;
-      continue;
-    }
-    const source = readFileSync(skillMd, "utf8");
-    if (
-      !source.includes("<!-- BEGIN PREFLIGHT -->") || !source.includes("<!-- END PREFLIGHT -->")
-    ) {
-      process.stderr.write(
-        `Error: Missing <!-- BEGIN PREFLIGHT --> / <!-- END PREFLIGHT --> markers in ${skillMd}\n`,
-      );
-      drift = true;
-      continue;
-    }
-    const existing = source.split("<!-- BEGIN PREFLIGHT -->")[1]?.split("<!-- END PREFLIGHT -->")[0]
-      ?? "";
-    if (sha256(trimBlankLines(existing)) !== preflightHash) {
-      if (checkOnly) {
-        process.stderr.write(
-          `Out of sync: ${skillMd} preflight block differs from docs/partials/preflight.md\n`,
-        );
-        drift = true;
-      } else {
-        writeFileSync(skillMd, replacePreflight(source, preflightBody));
-        process.stdout.write(`synced preflight into ${skillMd}\n`);
-      }
     }
   }
+  return drift;
+}
 
-  if (checkOnly) {
-    if (drift) {
-      process.stderr.write("sync-references --check failed\n");
-      process.exit(1);
-    }
-    process.stdout.write(
-      "sync-references: all bundle references match their sources (no skill scripts/)\n",
-    );
+function syncSkillPreflight(
+  skillMd: string,
+  preflightBody: string,
+  preflightHash: string,
+  checkOnly: boolean,
+): boolean {
+  if (!existsSync(skillMd)) {
+    process.stderr.write(`Missing: ${skillMd}\n`);
+    return false;
   }
+  const source = readFileSync(skillMd, "utf8");
+  if (!source.includes("<!-- BEGIN PREFLIGHT -->") || !source.includes("<!-- END PREFLIGHT -->")) {
+    process.stderr.write(
+      `Error: Missing <!-- BEGIN PREFLIGHT --> / <!-- END PREFLIGHT --> markers in ${skillMd}\n`,
+    );
+    return false;
+  }
+  const existing = source.split("<!-- BEGIN PREFLIGHT -->")[1]?.split("<!-- END PREFLIGHT -->")[0]
+    ?? "";
+  if (sha256(trimBlankLines(existing)) === preflightHash) return true;
+  if (checkOnly) {
+    process.stderr.write(
+      `Out of sync: ${skillMd} preflight block differs from docs/partials/preflight.md\n`,
+    );
+    return false;
+  }
+  writeFileSync(skillMd, replacePreflight(source, preflightBody));
+  process.stdout.write(`synced preflight into ${skillMd}\n`);
+  return true;
+}
+
+function main(): void {
+  const { checkOnly, root } = parseArgs(process.argv.slice(2));
+  const convDir = join(root, "docs/conventions");
+  requireConventionParts(convDir);
+
+  let drift = false;
+  const full = concatParts(convDir, ALL_PARTS);
+  if (!writeOrCheck(checkOnly, join(root, "docs/file-conventions.md"), full)) drift = true;
+
+  const dirs = skillDirs(root);
+  if (dirs.length === 0) fail("Error: no skills/*/ directories");
+  if (syncSkillBundles(root, convDir, dirs, checkOnly)) drift = true;
+  if (syncWriting(root, checkOnly)) drift = true;
+  if (syncReviewTemplates(root, checkOnly)) drift = true;
+  if (syncPreflight(root, dirs, checkOnly)) drift = true;
+
+  if (!checkOnly) return;
+  if (drift) {
+    process.stderr.write("sync-references --check failed\n");
+    process.exit(1);
+  }
+  process.stdout.write(
+    "sync-references: all bundle references match their sources (no skill scripts/)\n",
+  );
 }
 
 main();

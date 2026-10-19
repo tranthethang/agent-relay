@@ -2,14 +2,13 @@ import { readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { rebuildRun } from "./cache.js";
 import { listRunNames } from "./discover.js";
-import { RelayError } from "./error.js";
-import { fromZod } from "./error.js";
+import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { isEnoent, readJson } from "./files.js";
-import { type ReviewIntegrity, reviewIntegrity } from "./lifecycle.js";
+import { type ReviewIntegrity, reviewIntegrity, reviewProgress } from "./lifecycle.js";
 import { formatAge, nextStep } from "./next.js";
 import { type RunState } from "./reduce.js";
-import { type ReviewJson, reviewJsonSchema } from "./review.js";
+import { reviewJsonSchema } from "./review.js";
 import { type RunJson } from "./run.js";
 import { indexForImplement, type PlanIndex } from "./tasks.js";
 import { schemaVersion } from "./vocab.js";
@@ -85,18 +84,16 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
       const index = loaded.run.state.lifecycle === "implementing"
         ? await indexForImplement(runDir, loaded.run.state)
         : null;
-      runs.push(
-        rowFrom(
-          name,
-          loaded.run,
-          loaded.events,
-          reviews,
-          runActors(loaded.events),
-          await cacheMtime(runDir),
-          nowMs,
-          index,
-        ),
-      );
+      runs.push(rowFrom({
+        name,
+        run: loaded.run,
+        events: loaded.events,
+        reviews,
+        actors: runActors(loaded.events),
+        mtimeMs: await cacheMtime(runDir),
+        nowMs,
+        index,
+      }));
     } catch (error) {
       if (!(error instanceof RelayError)) throw error;
       const warning = `${name}: ${error.message}`;
@@ -152,15 +149,7 @@ async function safeReviewIntegrity(
       && (error.message === "could not read policy from base"
         || error.message === "git index not found")
     ) {
-      const done: ReviewIntegrity["done"] = [];
-      let latest: EventLine | undefined;
-      for (const event of events) {
-        if (event.action !== "completed") continue;
-        if (event.stage !== "self-review" && event.stage !== "cross-review") continue;
-        const kind = event.stage === "self-review" ? "self" : "cross";
-        if (!done.includes(kind)) done.push(kind);
-        latest = event;
-      }
+      const { done, latest } = reviewProgress(events);
       return {
         required: ["self"],
         done,
@@ -213,7 +202,7 @@ export function statusDetailText(result: StatusDetail): string {
 }
 
 function reviewsLine(reviews: StatusReviews): string {
-  const tree = reviews.treeMatch === null ? "unknown" : reviews.treeMatch ? "yes" : "no";
+  const tree = reviews.treeMatch === null ? "unknown" : yesNo(reviews.treeMatch);
   const delta = reviews.delta === undefined
     ? "none"
     : `${reviews.delta.files} ${reviews.delta.added} ${reviews.delta.deleted}`;
@@ -224,16 +213,21 @@ function reviewsLine(reviews: StatusReviews): string {
     .filter((line) => line.length > 0).join("\n");
 }
 
-function rowFrom(
-  name: string,
-  run: RunJson,
-  events: EventLine[],
-  reviews: StatusReviews,
-  actors: RunActors,
-  mtimeMs: number,
-  nowMs: number,
-  index: PlanIndex | null,
-): StatusRow {
+function yesNo(value: boolean): string {
+  return value ? "yes" : "no";
+}
+
+function rowFrom(input: {
+  name: string;
+  run: RunJson;
+  events: EventLine[];
+  reviews: StatusReviews;
+  actors: RunActors;
+  mtimeMs: number;
+  nowMs: number;
+  index: PlanIndex | null;
+}): StatusRow {
+  const { name, run, events, reviews, actors, mtimeMs, nowMs, index } = input;
   return {
     name,
     id: run.id,
@@ -259,7 +253,7 @@ export async function reviewEvidenceFor(
     if (isEnoent(error)) return null;
     throw error;
   }
-  const files = names.filter((name) => /^[0-9]+\.json$/.test(name));
+  const files = names.filter((name) => /^\d+\.json$/.test(name));
   files.sort((left, right) => Number.parseInt(left, 10) - Number.parseInt(right, 10));
   const latest = files.at(-1);
   if (latest === undefined) return null;
@@ -304,13 +298,15 @@ export async function reviewEvidenceFor(
   };
 }
 
+function measuredTests(tests: ReviewEvidence["measured"]["tests"]): string {
+  if (tests === null) return "unknown";
+  if (typeof tests === "string") return tests;
+  return `exit=${tests.exit} ms=${tests.ms}`;
+}
+
 function reviewEvidenceLine(evidence: ReviewEvidence | null): string {
   if (evidence === null) return "";
-  const tests = evidence.measured.tests === null
-    ? "unknown"
-    : typeof evidence.measured.tests === "string"
-    ? evidence.measured.tests
-    : `exit=${evidence.measured.tests.exit} ms=${evidence.measured.tests.ms}`;
+  const tests = measuredTests(evidence.measured.tests);
   const delta = evidence.measured.delta === null
     ? "none"
     : `${evidence.measured.delta.files} ${evidence.measured.delta.added} ${evidence.measured.delta.deleted}`;

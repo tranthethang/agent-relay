@@ -48,7 +48,7 @@ export async function listSourceFiles(root: string): Promise<string[]> {
       // A config file is absent in a fixture.
     }
   }
-  found.sort();
+  found.sort((left, right) => left.localeCompare(right));
   const unique = new Set(found);
   if (unique.size !== found.length) {
     throw new Error("source inventory lists a file more than once");
@@ -268,9 +268,11 @@ async function walk(dir: string, root: string, found: string[]): Promise<void> {
 
 const entry = process.argv[1];
 if (entry !== undefined && import.meta.url === pathToFileURL(entry).href) {
-  main().catch((error: unknown) => {
+  try {
+    await main();
+  } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "coverage report failed";
     process.stderr.write(`${message}\n`);
     process.exitCode = 1;
-  });
+  }
 }

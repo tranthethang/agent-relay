@@ -87,8 +87,7 @@ export function contextText(result: ContextResult): string {
     }`,
   ];
   if (result.task !== undefined) {
-    lines.push(`plan: ${result.task.plan}`);
-    lines.push(`implement: ${result.task.implement}`);
+    lines.push(`plan: ${result.task.plan}`, `implement: ${result.task.implement}`);
   }
   return `${lines.join("\n")}\n`;
 }

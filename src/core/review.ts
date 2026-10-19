@@ -175,39 +175,9 @@ export async function reviewDone(input: {
     }
     const review = await readLatestReview(input.runDir, place.dir, kind);
     const started = lastReviewStart(loaded.events, place.stage);
-    if (started?.tool !== review.value.tool) {
-      throw new RelayError("validation", "tool differs from review start", `${review.rel}:tool`);
-    }
-    if (started?.model !== review.value.model) {
-      throw new RelayError("validation", "model differs from review start", `${review.rel}:model`);
-    }
-    const markdownRel = review.rel.replace(/\.json$/, ".md");
-    const markdown = await readFile(join(input.runDir, markdownRel), "utf8");
-    const cardCount = markdown.match(/^- Q[0-9]+: /gm)?.length ?? 0;
-    if (cardCount !== review.value.open.length) {
-      throw new RelayError(
-        "validation",
-        `review Markdown has ${cardCount} question cards but JSON has ${review.value.open.length} open items`,
-        `${review.rel}:open`,
-      );
-    }
-    const previous = latestCompletedReview(loaded.events);
-    if (previous?.ref !== undefined) {
-      const previousReview = await readReviewAt(input.runDir, previous);
-      for (const item of previousReview.open) {
-        if (review.value.open.some((next) => next.q === item.q)) continue;
-        const decided = loaded.events.some((event) =>
-          event.action === "decided" && event.ref === previous.ref && event.question === item.q
-        );
-        if (!decided) {
-          throw new RelayError(
-            "validation",
-            `open question was dropped without a decision: ${item.q}`,
-            `${review.rel}:open`,
-          );
-        }
-      }
-    }
+    assertReviewMatchesStart(review, started);
+    await assertQuestionCards(input.runDir, review);
+    await assertPriorQuestionsDecided(input.runDir, loaded.events, review);
     const warnings = kind === "cross"
       ? diversityWarnings(
         review.value,
@@ -262,6 +232,57 @@ export async function reviewDone(input: {
       warnings,
     };
   });
+}
+
+function assertReviewMatchesStart(
+  review: { rel: string; value: ReviewJson },
+  started: { tool?: string; model?: string } | undefined,
+): void {
+  if (started?.tool !== review.value.tool) {
+    throw new RelayError("validation", "tool differs from review start", `${review.rel}:tool`);
+  }
+  if (started?.model !== review.value.model) {
+    throw new RelayError("validation", "model differs from review start", `${review.rel}:model`);
+  }
+}
+
+async function assertQuestionCards(
+  runDir: string,
+  review: { rel: string; value: ReviewJson },
+): Promise<void> {
+  const markdownRel = review.rel.replace(/\.json$/, ".md");
+  const markdown = await readFile(join(runDir, markdownRel), "utf8");
+  const cardCount = markdown.match(/^- Q\d+: /gm)?.length ?? 0;
+  if (cardCount !== review.value.open.length) {
+    throw new RelayError(
+      "validation",
+      `review Markdown has ${cardCount} question cards but JSON has ${review.value.open.length} open items`,
+      `${review.rel}:open`,
+    );
+  }
+}
+
+async function assertPriorQuestionsDecided(
+  runDir: string,
+  events: readonly EventLine[],
+  review: { rel: string; value: ReviewJson },
+): Promise<void> {
+  const previous = latestCompletedReview(events);
+  if (previous?.ref === undefined) return;
+  const previousReview = await readReviewAt(runDir, previous);
+  for (const item of previousReview.open) {
+    if (review.value.open.some((next) => next.q === item.q)) continue;
+    const decided = events.some((event) =>
+      event.action === "decided" && event.ref === previous.ref && event.question === item.q
+    );
+    if (!decided) {
+      throw new RelayError(
+        "validation",
+        `open question was dropped without a decision: ${item.q}`,
+        `${review.rel}:open`,
+      );
+    }
+  }
 }
 
 function lastReviewStartTree(
@@ -355,9 +376,9 @@ async function readLatestReview(
     if (isEnoent(error)) throw new RelayError("not_found", "review not found", dirName);
     throw error;
   }
-  const files = names.filter((name) => /^[0-9]+\.json$/.test(name));
+  const files = names.filter((name) => /^\d+\.json$/.test(name));
   files.sort((left, right) => reviewNumber(left) - reviewNumber(right));
-  const latest = files[files.length - 1];
+  const latest = files.at(-1);
   if (latest === undefined) throw new RelayError("not_found", "review not found", dirName);
   const rel = `${dirName}/${latest}`;
   let value: unknown;
@@ -387,8 +408,8 @@ function reviewNumber(name: string): number {
 }
 
 function tailLines(text: string): string {
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  if (lines[lines.length - 1] === "") lines.pop();
+  const lines = text.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split("\n");
+  if (lines.at(-1) === "") lines.pop();
   return lines.slice(-200).join("\n");
 }
 
@@ -409,7 +430,7 @@ async function readReviewAt(
 ): Promise<ReviewJson> {
   const dir = event.stage === "self-review" ? reviewPlaces.self.dir : reviewPlaces.cross.dir;
   const rel = event.ref;
-  if (rel === undefined || !new RegExp(`^${dir}/[0-9]+\\.json$`).test(rel)) {
+  if (rel === undefined || !new RegExp(String.raw`^${dir}/\d+\.json$`).test(rel)) {
     throw new RelayError("validation", "invalid review ref", rel ?? "review.ref");
   }
   let value: unknown;
@@ -435,7 +456,7 @@ async function nextLabel(dir: string): Promise<string> {
   }
   let max = 0;
   for (const name of names) {
-    const match = /^([0-9]+)\.(?:md|json)$/.exec(name);
+    const match = /^(\d+)\.(?:md|json)$/.exec(name);
     if (match?.[1] !== undefined) max = Math.max(max, Number(match[1]));
   }
   let number = max + 1;

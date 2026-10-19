@@ -1,9 +1,9 @@
 import { RelayError } from "./error.js";
 import { schemaVersion } from "./vocab.js";
 
-const part = "(0|[1-9][0-9]*)";
-const rangePattern = new RegExp(`^>=${part}\\.${part}\\.${part}$`);
-const versionPattern = new RegExp(`^${part}\\.${part}\\.${part}$`);
+const part = String.raw`(0|[1-9]\d*)`;
+const rangePattern = new RegExp(String.raw`^>=${part}\.${part}\.${part}$`);
+const versionPattern = new RegExp(String.raw`^${part}\.${part}\.${part}$`);
 
 export const installCommand = "npm i -g @tranthethang/agent-relay@latest";
 

@@ -9,7 +9,7 @@ export function runIdFromName(name: string): string {
 }
 
 export function runSlugFromName(name: string): string {
-  return name.replace(/^[0-9]{8}-[0-9]{10,11}-/, "");
+  return name.replace(/^\d{8}-\d{10,11}-/, "");
 }
 
 export async function findRelayDir(cwd: string): Promise<string> {
@@ -31,7 +31,7 @@ export async function listRunNames(relayDir: string): Promise<string[]> {
   return entries
     .filter((entry) => entry.isDirectory() && runDirNamePattern.test(entry.name))
     .map((entry) => entry.name)
-    .sort();
+    .sort((left, right) => left.localeCompare(right));
 }
 
 export async function resolveRun(relayDir: string, token: string, cwd: string): Promise<string> {
