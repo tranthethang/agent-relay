@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { requiredVersion, requiresFits, sharedRequires } from "./skill-text.js";
 
-const partial = readFileSync(new URL("../docs/partials/preflight.md", import.meta.url), "utf8");
+const partial = readFileSync(
+  new URL("../specs/80-skills-integration/00-skill-bridge/preflight.md", import.meta.url),
+  "utf8",
+);
 
 test("preflight asks for atry preflight and context", () => {
   expect(partial).toContain("requires-atry");

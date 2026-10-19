@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
-const partial = readFileSync(new URL("../docs/partials/writing.md", import.meta.url), "utf8");
+const partial = readFileSync(
+  new URL("../specs/80-skills-integration/00-skill-bridge/writing.md", import.meta.url),
+  "utf8",
+);
 
 test("glossary uses v2 terms and drops decide and stamp", () => {
   const glossary = partial.slice(
