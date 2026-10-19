@@ -13,7 +13,7 @@ import { type RunState } from "./reduce.js";
 import { parseReviewJson, reviewJsonSchema } from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
 import { outsidePaths } from "./scope.js";
-import { planIndexSchema } from "./tasks.js";
+import { openPlanTasks, planIndexSchema, readPlanIndex } from "./tasks.js";
 import { schemaVersion, toolSchema, viaSchema } from "./vocab.js";
 
 const workflowStages = ["plan", "implement", "self-review", "cross-review"] as const;
@@ -369,6 +369,20 @@ async function recordStage(
   }
   return withRunLock(input.runDir, async (loaded) => {
     assertMove(loaded.run.state, stageMove(stage, action));
+    if (action === "completed" && stage === "implement") {
+      const index = await readPlanIndex(input.runDir);
+      if (index === null) {
+        throw new RelayError("not_found", "index.json not found", "10-plan/index.json");
+      }
+      const open = openPlanTasks(index, loaded.run.state);
+      if (open.length > 0) {
+        throw new RelayError(
+          "gate",
+          `implement done refused: open tasks: ${open.join(", ")}`,
+          "tasks",
+        );
+      }
+    }
     const measured = action === "completed" && sizedStages.has(stage)
       ? await measure(input.runDir, loaded.run.base)
       : undefined;

@@ -1,5 +1,6 @@
 import { type EventLine } from "./event.js";
 import { type RunState } from "./reduce.js";
+import { openPlanTasks, type PlanIndex } from "./tasks.js";
 import { schemaVersion } from "./vocab.js";
 
 export type NextResult = {
@@ -24,15 +25,13 @@ export function nextStep(
   state: RunState,
   events: readonly EventLine[],
   reviews?: { required: readonly string[]; done: readonly string[] },
+  index?: PlanIndex | null,
 ): string {
   if (state.lifecycle === "abandoned" || state.lifecycle === "closed") return "none";
   if (state.lifecycle === "planned") return `atry approve ${id}`;
   if (state.lifecycle === "approved") return `atry stage start ${id} implement`;
   if (state.lifecycle === "implementing") {
-    const open = state.tasks.some((task) =>
-      task.status === "pending" || task.status === "in-progress"
-    );
-    if (open) return `atry task start ${id}`;
+    if (openPlanTasks(index ?? null, state).length > 0) return `atry task start ${id}`;
     return `atry stage done ${id} implement`;
   }
   if (lastStageAction(events, "self-review") === "started") return `atry review done ${id} self`;

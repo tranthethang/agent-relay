@@ -11,6 +11,7 @@ import { formatAge, nextStep } from "./next.js";
 import { type RunState } from "./reduce.js";
 import { type ReviewJson, reviewJsonSchema } from "./review.js";
 import { type RunJson } from "./run.js";
+import { indexForImplement, type PlanIndex } from "./tasks.js";
 import { schemaVersion } from "./vocab.js";
 
 export type StatusRow = {
@@ -81,6 +82,9 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
       if (loaded.warning !== null) warnings.push(`${name}: ${loaded.warning}`);
       const integrity = await safeReviewIntegrity(runDir, loaded.run.base, loaded.events);
       const reviews = await statusReviews(runDir, loaded.events, integrity);
+      const index = loaded.run.state.lifecycle === "implementing"
+        ? await indexForImplement(runDir, loaded.run.state)
+        : null;
       runs.push(
         rowFrom(
           name,
@@ -90,6 +94,7 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
           runActors(loaded.events),
           await cacheMtime(runDir),
           nowMs,
+          index,
         ),
       );
     } catch (error) {
@@ -109,6 +114,9 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
   const run = loaded.run;
   const integrity = await safeReviewIntegrity(runDir, run.base, loaded.events);
   const reviews = await statusReviews(runDir, loaded.events, integrity);
+  const index = run.state.lifecycle === "implementing"
+    ? await indexForImplement(runDir, run.state)
+    : null;
   const detail: StatusDetail = {
     schema: schemaVersion,
     name: basename(runDir),
@@ -122,7 +130,7 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
     approved: run.state.approved,
     age: ageOf(loaded.events, await cacheMtime(runDir), nowMs),
     tasks: run.state.tasks,
-    next: nextStep(run.id, run.state, loaded.events, reviews),
+    next: nextStep(run.id, run.state, loaded.events, reviews, index),
     reviews,
     actors: runActors(loaded.events),
   };
@@ -224,6 +232,7 @@ function rowFrom(
   actors: RunActors,
   mtimeMs: number,
   nowMs: number,
+  index: PlanIndex | null,
 ): StatusRow {
   return {
     name,
@@ -231,7 +240,7 @@ function rowFrom(
     stage: run.state.stage,
     lifecycle: run.state.lifecycle,
     age: ageOf(events, mtimeMs, nowMs),
-    next: nextStep(run.id, run.state, events, reviews),
+    next: nextStep(run.id, run.state, events, reviews, index),
     reviews,
     actors,
   };
