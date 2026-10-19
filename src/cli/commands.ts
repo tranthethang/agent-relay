@@ -11,6 +11,7 @@ import { installCommand, preflightResult } from "../core/preflight.js";
 import { type RunState } from "../core/reduce.js";
 import { oneToken, selectRun } from "../core/select.js";
 import { statusDetail, statusDetailText, statusList, statusListText } from "../core/status.js";
+import { indexForImplement } from "../core/tasks.js";
 import { schemaVersion } from "../core/vocab.js";
 import { packageVersion } from "../version.js";
 import { registerClaim } from "./claim.js";
@@ -76,7 +77,10 @@ export function registerCommands(program: Command): void {
         loaded.events,
         loaded.run.state.lifecycle,
       );
-      const step = nextStep(loaded.run.id, loaded.run.state, loaded.events, reviews);
+      const index = loaded.run.state.lifecycle === "implementing"
+        ? await indexForImplement(runDir, loaded.run.state)
+        : null;
+      const step = nextStep(loaded.run.id, loaded.run.state, loaded.events, reviews, index);
       writeResult(explainNext(step), commandJson(command), (row) => `${row.command}\n`);
     });
 

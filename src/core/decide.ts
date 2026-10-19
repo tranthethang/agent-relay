@@ -24,7 +24,7 @@ export async function decideQuestion(input: {
   questionId: string;
   answer: string;
 }): Promise<DecideResult> {
-  const questionMatch = /^Q([1-9][0-9]*)$/.exec(input.questionId);
+  const questionMatch = /^Q([1-9]\d*)$/.exec(input.questionId);
   if (questionMatch?.[1] === undefined) {
     throw new RelayError("validation", "invalid question id", "question");
   }
@@ -37,7 +37,7 @@ export async function decideQuestion(input: {
       throw new RelayError("not_found", "completed review not found", "review");
     }
     const location = reviewPlaces[completed.stage === "self-review" ? "self" : "cross"];
-    if (!new RegExp(`^${location.dir}/[0-9]+\\.json$`).test(completed.ref)) {
+    if (!new RegExp(String.raw`^${location.dir}/\d+\.json$`).test(completed.ref)) {
       throw new RelayError("validation", "invalid review ref", completed.ref);
     }
     let reviewValue: unknown;

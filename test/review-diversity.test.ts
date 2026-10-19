@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 import { modelLine, modelVendor } from "../src/core/model.js";
 import { diversityWarnings } from "../src/core/review.js";
@@ -88,6 +90,17 @@ test("atry review done keeps the implement model when stage done omits it", asyn
       const args of [
         ["approve", run, "--via", "arg"],
         ["stage", "start", run, "implement", "--tool", "codex", "--model", "gpt-5.4"],
+      ]
+    ) {
+      expect((await runCli(args, dir)).code).toBe(0);
+    }
+    await mkdir(join(run, "10-plan"), { recursive: true });
+    await writeFile(
+      join(run, "10-plan", "index.json"),
+      `${JSON.stringify({ schema: 1, tasks: [] })}\n`,
+    );
+    for (
+      const args of [
         ["stage", "done", run, "implement", "--tool", "codex"],
         ["review", "new", run, "self", "--tool", "cursor", "--model", "composer-1"],
         ["review", "done", run, "self"],

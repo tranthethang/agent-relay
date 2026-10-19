@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,7 @@ export function runCli(args: string[], cwd: string): Promise<CliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cliPath, ...args], {
       cwd,
+      // Inherit NODE_V8_COVERAGE so a spawned dist/atry.js is part of the coverage run.
       env: process.env,
     });
     let stdout = "";
@@ -78,6 +79,13 @@ export function gitCommit(cwd: string, message = "init"): Promise<unknown> {
 }
 
 export async function reachReview(runPath: string, cwd: string): Promise<void> {
+  const index = join(runPath, "10-plan", "index.json");
+  try {
+    await access(index);
+  } catch {
+    await mkdir(join(runPath, "10-plan"), { recursive: true });
+    await writeFile(index, `${JSON.stringify({ schema: 1, tasks: [] })}\n`);
+  }
   for (
     const args of [
       ["approve", runPath, "--via", "arg"],

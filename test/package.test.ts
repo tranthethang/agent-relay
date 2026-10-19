@@ -21,7 +21,9 @@ test("package.json matches the P1 package contract", () => {
   expect(pkg.engines.node).toBe(">=22");
   expect(Object.keys(pkg.dependencies).sort()).toEqual(["commander", "zod"]);
   expect(Object.keys(pkg.devDependencies).sort()).toEqual([
+    "@jridgewell/trace-mapping",
     "@types/node",
+    "@vitest/coverage-v8",
     "tsup",
     "typescript",
     "vitest",

@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
@@ -109,6 +109,11 @@ test("stage and approve verbs follow the plan state diagram", async () => {
     expect(twice.code).toBe(4);
     expect(twice.stderr).toContain("approve refused: run is approved");
     await runCli(["stage", "start", run.path, "implement", "--tool", "cursor"], dir);
+    await mkdir(join(run.path, "10-plan"), { recursive: true });
+    await writeFile(
+      join(run.path, "10-plan", "index.json"),
+      `${JSON.stringify({ schema: 1, tasks: [] })}\n`,
+    );
     const early = await runCli(
       ["stage", "start", run.path, "cross-review", "--tool", "codex"],
       dir,

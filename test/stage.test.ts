@@ -8,6 +8,21 @@ import { createRun, writeTasks } from "./plan-helper.js";
 
 const execFileAsync = promisify(execFile);
 
+async function writeEmptyIndex(run: string): Promise<void> {
+  await mkdir(join(run, "10-plan"), { recursive: true });
+  await writeFile(
+    join(run, "10-plan", "index.json"),
+    `${JSON.stringify({ schema: 1, tasks: [] })}\n`,
+  );
+}
+
+async function lifecycleOf(run: string): Promise<string> {
+  const body = JSON.parse(await readFile(join(run, "run.json"), "utf8")) as {
+    state: { lifecycle: string };
+  };
+  return body.state.lifecycle;
+}
+
 test("atry stage start and done record tool, model, head, and size", async () => {
   await withTempGitRepo(async (dir) => {
     await gitCommit(dir);
@@ -53,6 +68,7 @@ test("atry stage start and done record tool, model, head, and size", async () =>
       "--json",
     ], dir);
     expect(JSON.parse(implement.stdout)).toMatchObject({ lifecycle: "implementing" });
+    await writeEmptyIndex(run.path);
     await writeFile(join(dir, "note.txt"), "hello\n");
     await execFileAsync("git", ["add", "note.txt"], { cwd: dir });
     await gitCommit(dir, "add note");
@@ -92,6 +108,7 @@ test("implement done refuses a file edited after the last task done", async () =
     expect((await runCli(["approve", clean, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", clean, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
+    await writeEmptyIndex(clean);
     expect((await runCli(["stage", "done", clean, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
 
@@ -132,6 +149,142 @@ test("implement done refuses a file edited after the last task done", async () =
     ).find((event) => event.action === "completed" && event.stage === "implement");
     expect(completed?.reason).toBe("late note");
     expect(completed?.extra).toEqual(["src/later.ts"]);
+  });
+});
+
+test("implement stays open until every indexed task is done or skipped", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "unfinished-tasks");
+    await writeTasks(run, [
+      { title: "First", files: ["src/first.ts"] },
+      { title: "Second", deps: ["T1"], files: ["src/second.ts"] },
+      { title: "Third", deps: ["T2"], files: ["src/third.ts"] },
+    ]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
+    expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+
+    expect((await runCli(["task", "start", run, "T1"], dir)).code).toBe(0);
+    const busy = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(busy.code).toBe(4);
+    expect(busy.stderr).toContain("open tasks: T1, T2, T3");
+    expect(await lifecycleOf(run)).toBe("implementing");
+    expect((await runCli(["task", "done", run, "T1"], dir)).code).toBe(0);
+
+    const next = await runCli(["next", "--json", run], dir);
+    expect(JSON.parse(next.stdout)).toMatchObject({
+      command: expect.stringContaining("atry task start"),
+      reason: "An implement task is still open.",
+    });
+    const status = await runCli(["status", "--json", run], dir);
+    expect(JSON.parse(status.stdout).next).toContain("atry task start");
+    const list = await runCli(["status", "--json"], dir);
+    expect(JSON.parse(list.stdout).runs[0].next).toContain("atry task start");
+    const early = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(early.code).toBe(4);
+    expect(early.stderr).toContain("open tasks: T2, T3");
+    expect(await readFile(join(run, "events.jsonl"), "utf8")).not.toContain(
+      "\"stage\":\"implement\",\"action\":\"completed\"",
+    );
+
+    const partial = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(partial.code).toBe(4);
+    expect(partial.stderr).toContain("open tasks: T2, T3");
+
+    expect((await runCli(["task", "skip", run, "T2", "--reason", "not needed"], dir)).code)
+      .toBe(0);
+    expect((await runCli(["task", "skip", run, "T3", "--reason", "not needed"], dir)).code)
+      .toBe(0);
+    expect((await runCli(["next", run], dir)).stdout).toContain("atry stage done");
+    const done = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(done.code, done.stderr).toBe(0);
+    const events = await readFile(join(run, "events.jsonl"), "utf8");
+    expect(events).toContain("\"stage\":\"implement\",\"action\":\"completed\"");
+  });
+});
+
+test("implement done requires a valid index and keeps an empty plan open to completion", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "index-gate");
+    expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
+    expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+
+    const missingNext = await runCli(["next", "--json", run], dir);
+    expect(missingNext.code).toBe(3);
+    expect(missingNext.stderr).toContain("10-plan/index.json");
+    const missingStatus = await runCli(["status", "--json", run], dir);
+    expect(missingStatus.code).toBe(3);
+    expect(missingStatus.stderr).toContain("10-plan/index.json");
+    const missing = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(missing.code).toBe(3);
+    expect(missing.stderr).toContain("10-plan/index.json");
+    expect(await lifecycleOf(run)).toBe("implementing");
+    expect(await readFile(join(run, "events.jsonl"), "utf8")).not.toContain(
+      "\"stage\":\"implement\",\"action\":\"completed\"",
+    );
+
+    await mkdir(join(run, "10-plan"), { recursive: true });
+    await writeFile(join(run, "10-plan", "index.json"), "{", "utf8");
+    const malformed = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(malformed.code).toBe(2);
+    expect(malformed.stderr).toContain("10-plan/index.json");
+    expect(malformed.stderr).toContain("invalid JSON");
+    const badNext = await runCli(["next", run], dir);
+    expect(badNext.code).toBe(2);
+    expect(badNext.stderr).toContain("10-plan/index.json");
+    expect(await lifecycleOf(run)).toBe("implementing");
+
+    await writeFile(
+      join(run, "10-plan", "index.json"),
+      `${JSON.stringify({ schema: 1, tasks: [{ id: "T1" }] })}\n`,
+    );
+    const invalid = await runCli(["status", run], dir);
+    expect(invalid.code).toBe(2);
+    expect(invalid.stderr).toContain("10-plan/index.json");
+    expect(await lifecycleOf(run)).toBe("implementing");
+    expect(await readFile(join(run, "events.jsonl"), "utf8")).not.toContain(
+      "\"stage\":\"implement\",\"action\":\"completed\"",
+    );
+
+    await writeEmptyIndex(run);
+    const emptyNext = await runCli(["next", run], dir);
+    expect(emptyNext.code).toBe(0);
+    expect(emptyNext.stdout).toContain("atry stage done");
+    const empty = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(empty.code, empty.stderr).toBe(0);
+  });
+});
+
+test("plan amend adds a new pending task to the implement gate", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "amend-gate");
+    await writeTasks(run, [{ title: "First", files: ["src/first.ts"] }]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
+    expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
+    expect((await runCli(["task", "start", run, "T1"], dir)).code).toBe(0);
+    expect((await runCli(["task", "done", run, "T1"], dir)).code).toBe(0);
+    await writeTasks(run, [
+      { title: "First", files: ["src/first.ts"] },
+      { title: "Second", files: ["src/second.ts"] },
+    ]);
+    expect((await runCli(["plan", "amend", run], dir)).code).toBe(0);
+    const refused = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(refused.code).toBe(4);
+    expect(refused.stderr).toContain("open tasks: T2");
+    expect(await lifecycleOf(run)).toBe("implementing");
+    expect(await readFile(join(run, "events.jsonl"), "utf8")).not.toContain(
+      "\"stage\":\"implement\",\"action\":\"completed\"",
+    );
+    expect((await runCli(["task", "skip", run, "T2", "--reason", "later"], dir)).code).toBe(0);
+    expect((await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir)).code)
+      .toBe(0);
   });
 });
 

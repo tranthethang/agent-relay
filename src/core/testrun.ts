@@ -88,7 +88,8 @@ export function runTestCommand(
 function killTree(child: ChildProcess): void {
   if (child.pid === undefined) return;
   if (process.platform === "win32") {
-    spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+    const taskkill = String.raw`C:\Windows\System32\taskkill.exe`;
+    spawn(taskkill, ["/pid", String(child.pid), "/t", "/f"], {
       windowsHide: true,
       stdio: "ignore",
     }).on("error", () => child.kill());
@@ -108,7 +109,9 @@ class LineTail {
   constructor(private readonly limit: number) {}
 
   push(chunk: string): void {
-    const parts = `${this.pending}${chunk}`.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+    const parts = `${this.pending}${chunk}`.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split(
+      "\n",
+    );
     this.pending = parts.pop() ?? "";
     for (const line of parts) {
       this.lines.push(line);

@@ -42,17 +42,11 @@ function applyLifecycle(state: RunState, event: EventLine): void {
     return;
   }
   if (event.action === "approved") {
-    state.approved = true;
-    if (state.lifecycle === "planned") state.lifecycle = "approved";
-    state.stage = event.stage;
+    applyApproved(state, event);
     return;
   }
   if (event.action === "started") {
-    state.stage = event.stage;
-    if (event.stage === "implement") state.lifecycle = "implementing";
-    if (event.stage === "self-review" || event.stage === "cross-review") {
-      state.lifecycle = "reviewing";
-    }
+    applyStarted(state, event);
     return;
   }
   if (event.action === "completed" && event.stage === "implement") {
@@ -61,6 +55,20 @@ function applyLifecycle(state: RunState, event: EventLine): void {
     return;
   }
   if (event.action === "completed") state.stage = event.stage;
+}
+
+function applyApproved(state: RunState, event: EventLine): void {
+  state.approved = true;
+  if (state.lifecycle === "planned") state.lifecycle = "approved";
+  state.stage = event.stage;
+}
+
+function applyStarted(state: RunState, event: EventLine): void {
+  state.stage = event.stage;
+  if (event.stage === "implement") state.lifecycle = "implementing";
+  if (event.stage === "self-review" || event.stage === "cross-review") {
+    state.lifecycle = "reviewing";
+  }
 }
 
 function applyTask(state: RunState, event: EventLine): void {

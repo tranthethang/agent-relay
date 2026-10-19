@@ -30,52 +30,69 @@ export async function withRunLock<T>(
 ): Promise<T> {
   const lockDir = join(runDir, "locks");
   const lockPath = join(lockDir, "run.lock");
-  const deadline = Date.now() + 10_000;
   await mkdir(lockDir, { recursive: true });
-  for (;;) {
-    let handle;
-    let created = false;
-    try {
-      handle = await open(lockPath, "wx");
-      created = true;
-      await handle.writeFile(
-        JSON.stringify({
-          pid: process.pid,
-          host: hostname() || "unknown",
-          ts: new Date().toISOString(),
-        }) + "\n",
-      );
-      await handle.close();
-      break;
-    } catch (error) {
-      await handle?.close().catch(() => undefined);
-      const code = error instanceof Error && "code" in error ? error.code : "";
-      // Only remove a lock file this call created. Windows reports EPERM while
-      // another holder's lock file is pending delete, so treat it as busy.
-      if (created) await rm(lockPath, { force: true });
-      if (created || (code !== "EEXIST" && code !== "EPERM")) throw error;
-      if (Date.now() >= deadline) {
-        throw new RelayError("lock", "run lock timed out", "locks/run.lock");
-      }
-      try {
-        const info = await stat(lockPath);
-        if (Date.now() - info.mtimeMs >= 30_000) {
-          await rm(lockPath, { force: true });
-          continue;
-        }
-      } catch (staleError) {
-        if (staleError instanceof Error && "code" in staleError && staleError.code === "ENOENT") {
-          continue;
-        }
-        throw staleError;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
+  await acquireRunLock(lockPath, Date.now() + 10_000);
   try {
     return await fn(await openRun(runDir));
   } finally {
     await rm(lockPath, { force: true });
+  }
+}
+
+function lockBody(): string {
+  return JSON.stringify({
+    pid: process.pid,
+    host: hostname() || "unknown",
+    ts: new Date().toISOString(),
+  }) + "\n";
+}
+
+function lockCode(error: unknown): string {
+  if (!(error instanceof Error) || !("code" in error)) return "";
+  const code = error.code;
+  return typeof code === "string" ? code : "";
+}
+
+async function tryCreateLock(lockPath: string): Promise<boolean> {
+  let handle;
+  try {
+    handle = await open(lockPath, "wx");
+    await handle.writeFile(lockBody());
+    await handle.close();
+    return true;
+  } catch (error) {
+    await handle?.close().catch(() => undefined);
+    if (handle !== undefined) {
+      await rm(lockPath, { force: true });
+      throw error;
+    }
+    // Windows reports EPERM while another holder's lock file is pending delete.
+    if (lockCode(error) !== "EEXIST" && lockCode(error) !== "EPERM") throw error;
+    return false;
+  }
+}
+
+async function waitForLock(lockPath: string, deadline: number): Promise<void> {
+  if (Date.now() >= deadline) {
+    throw new RelayError("lock", "run lock timed out", "locks/run.lock");
+  }
+  try {
+    const info = await stat(lockPath);
+    if (Date.now() - info.mtimeMs >= 30_000) {
+      await rm(lockPath, { force: true });
+      return;
+    }
+  } catch (staleError) {
+    if (lockCode(staleError) !== "ENOENT") throw staleError;
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
+async function acquireRunLock(lockPath: string, deadline: number): Promise<void> {
+  for (;;) {
+    if (await tryCreateLock(lockPath)) return;
+    await waitForLock(lockPath, deadline);
   }
 }
 
