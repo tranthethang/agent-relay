@@ -23,12 +23,14 @@ export type CoverageReport = {
 type Loc = { line: number; column: number };
 type Span = { start: Loc; end: Loc };
 
+type IstanbulFn = { name?: string; decl?: Span; loc?: Span };
+
 type IstanbulFile = {
   statementMap: Record<string, Span>;
   s: Record<string, number>;
   branchMap: Record<string, { locations?: Span[] }>;
   b: Record<string, number[]>;
-  fnMap: Record<string, { decl?: Span; loc?: Span }>;
+  fnMap: Record<string, IstanbulFn>;
   f: Record<string, number>;
 };
 
@@ -88,6 +90,13 @@ export async function buildReport(input: {
   };
 }
 
+export function lcovFromCoverage(
+  root: string,
+  coverage: Record<string, IstanbulFile>,
+): string {
+  return lcovText(indexByRelative(coverage, root));
+}
+
 export function summaryText(report: CoverageReport): string {
   const lines = [`files: ${report.files.length}`];
   for (const file of report.files) {
@@ -111,6 +120,7 @@ async function main(): Promise<void> {
   }
   const report = await buildReport({ root, coverage, sourceMap });
   await writeFile(join(root, "coverage", "files.json"), `${JSON.stringify(report)}\n`);
+  await writeFile(join(root, "coverage", "lcov.info"), lcovFromCoverage(root, coverage));
   process.stdout.write(summaryText(report));
 }
 
@@ -227,6 +237,67 @@ function metricsFor(path: string, file: IstanbulFile | undefined): FileMetrics {
     branches: percent(branches.filter((count) => count > 0).length, branches.length),
     functions: percent(functions.filter((count) => count > 0).length, functions.length),
   };
+}
+
+function lcovText(files: Map<string, IstanbulFile>): string {
+  const records: string[] = [];
+  for (const path of [...files.keys()].sort((left, right) => left.localeCompare(right))) {
+    const file = files.get(path);
+    if (file === undefined) continue;
+    records.push(lcovRecord(path, file));
+  }
+  return records.length === 0 ? "" : `${records.join("\n")}\n`;
+}
+
+function lcovRecord(path: string, file: IstanbulFile): string {
+  const lines = ["TN:", `SF:${path}`];
+  const functions = Object.entries(file.fnMap);
+  let coveredFunctions = 0;
+  for (const [id, fn] of functions) {
+    const span = fn.decl ?? fn.loc;
+    lines.push(`FN:${span?.start.line ?? 0},${lcovName(fn.name, id)}`);
+  }
+  lines.push(`FNF:${functions.length}`);
+  for (const [id, fn] of functions) {
+    const hits = file.f[id] ?? 0;
+    if (hits > 0) coveredFunctions += 1;
+    lines.push(`FNDA:${hits},${lcovName(fn.name, id)}`);
+  }
+  lines.push(`FNH:${coveredFunctions}`);
+
+  let branches = 0;
+  let coveredBranches = 0;
+  for (const [id, branch] of Object.entries(file.branchMap)) {
+    const locations = branch.locations ?? [];
+    const counts = file.b[id] ?? [];
+    locations.forEach((span, index) => {
+      branches += 1;
+      const taken = counts[index] ?? 0;
+      if (taken > 0) coveredBranches += 1;
+      lines.push(`BRDA:${span.start.line},${id},${index},${taken}`);
+    });
+  }
+  lines.push(`BRF:${branches}`, `BRH:${coveredBranches}`);
+
+  const lineHits = new Map<number, number>();
+  for (const [id, span] of Object.entries(file.statementMap)) {
+    const count = file.s[id] ?? 0;
+    for (let line = span.start.line; line <= span.end.line; line += 1) {
+      lineHits.set(line, Math.max(lineHits.get(line) ?? 0, count));
+    }
+  }
+  let coveredLines = 0;
+  for (const [line, count] of [...lineHits.entries()].sort((left, right) => left[0] - right[0])) {
+    if (count > 0) coveredLines += 1;
+    lines.push(`DA:${line},${count}`);
+  }
+  lines.push(`LF:${lineHits.size}`, `LH:${coveredLines}`, "end_of_record");
+  return lines.join("\n");
+}
+
+function lcovName(name: string | undefined, id: string): string {
+  const label = name === undefined || name.length === 0 ? `anonymous_${id}` : name;
+  return label.replaceAll("\n", " ").replaceAll(",", "_");
 }
 
 function percent(covered: number, total: number): number {

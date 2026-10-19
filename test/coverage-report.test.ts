@@ -1,7 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { buildReport, listSourceFiles, summaryText } from "../scripts/maint/coverage-report.ts";
+import {
+  buildReport,
+  lcovFromCoverage,
+  listSourceFiles,
+  summaryText,
+} from "../scripts/maint/coverage-report.ts";
 import { withTempDir } from "./helper.js";
 
 const sourceMap = JSON.stringify({
@@ -58,22 +63,23 @@ test("buildReport attributes the bundle and keeps an uncovered branch visible", 
       fnMap: {},
       f: {},
     };
+    const coverage = {
+      [cli]: {
+        statementMap: { "0": span(1), "1": span(2) },
+        s: { "0": 0, "1": 0 },
+        branchMap: { "0": { locations: [span(2), span(2)] } },
+        b: { "0": [1, 0] },
+        fnMap: { "0": { name: "run", loc: span(2) } },
+        f: { "0": 0 },
+      },
+      [version]: covered,
+      [script]: covered,
+      [join(root, "dist", "atry.js")]: covered,
+    };
     const report = await buildReport({
       root,
       sourceMap,
-      coverage: {
-        [cli]: {
-          statementMap: { "0": span(1), "1": span(2) },
-          s: { "0": 0, "1": 0 },
-          branchMap: { "0": { locations: [span(2), span(2)] } },
-          b: { "0": [1, 0] },
-          fnMap: { "0": { loc: span(2) } },
-          f: { "0": 0 },
-        },
-        [version]: covered,
-        [script]: covered,
-        [join(root, "dist", "atry.js")]: covered,
-      },
+      coverage,
     });
     expect(report.files.map((file) => file.path)).toEqual([
       "scripts/maint/sync-references.ts",
@@ -87,6 +93,14 @@ test("buildReport attributes the bundle and keeps an uncovered branch visible", 
     expect(summaryText(report)).toContain(
       "src/cli.ts lines=50 statements=50 branches=50 functions=0",
     );
+    const lcov = lcovFromCoverage(root, coverage);
+    expect(lcov).toContain("SF:src/cli.ts\n");
+    expect(lcov).toContain("DA:1,1\n");
+    expect(lcov).toContain("DA:2,0\n");
+    expect(lcov).toContain("BRDA:2,0,0,1\n");
+    expect(lcov).toContain("BRDA:2,0,1,0\n");
+    expect(lcov).toContain("FNDA:0,run\n");
+    expect(lcov).not.toContain("dist/atry.js");
   });
 });
 
