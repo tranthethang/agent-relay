@@ -34,6 +34,27 @@ test("explainNext marks approve, close, and decide as human steps", () => {
   });
 });
 
+test("nextStep uses the plan index when run state has no task row", () => {
+  const events = [ev("implement", "started")];
+  const state = reduceEvents(events);
+  const pending = {
+    schema: 1 as const,
+    tasks: [{
+      id: "T1" as const,
+      title: "First",
+      deps: [],
+      files: ["src/core/tasks.ts"],
+      path: "10-plan/T1.md",
+    }],
+  };
+  expect(nextStep("1792208725", state, events, undefined, pending)).toBe(
+    "atry task start 1792208725",
+  );
+  expect(nextStep("1792208725", state, events, undefined, { schema: 1, tasks: [] })).toBe(
+    "atry stage done 1792208725 implement",
+  );
+});
+
 test("nextStep names the following verb", () => {
   const approved = [ev("plan", "approved")];
   expect(nextStep("1792208725", reduceEvents(approved), approved)).toBe(

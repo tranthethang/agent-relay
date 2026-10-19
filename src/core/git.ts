@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { RelayError } from "./error.js";
 
+export const gitProgram = process.platform === "win32"
+  ? String.raw`C:\Program Files\Git\cmd\git.exe`
+  : "/usr/bin/git";
+
 export type DiffSize = {
   files: number;
   added: number;
@@ -161,12 +165,12 @@ async function lineCount(cwd: string, name: string): Promise<number> {
   for (const byte of body) {
     if (byte === 10) lines += 1;
   }
-  if (body[body.length - 1] !== 10) lines += 1;
+  if (body.at(-1) !== 10) lines += 1;
   return lines;
 }
 
 function count(value: string | undefined): number {
-  if (value === undefined || !/^[0-9]+$/.test(value)) return 0;
+  if (value === undefined || !/^\d+$/.test(value)) return 0;
   return Number(value);
 }
 
@@ -178,12 +182,15 @@ function git(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = execFile(
-      "git",
+      gitProgram,
       args,
       { cwd, ...(env === undefined ? {} : { env }) },
       (error, stdout) => {
-        if (error !== null) reject(error);
-        else resolve(stdout);
+        if (error === null) {
+          resolve(stdout);
+          return;
+        }
+        reject(error instanceof Error ? error : new Error("git failed"));
       },
     );
     if (input !== undefined) child.stdin?.end(input);

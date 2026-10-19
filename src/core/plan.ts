@@ -406,7 +406,7 @@ function maxTaskNumber(ids: readonly string[]): number {
 async function planFileIds(runDir: string): Promise<string[]> {
   const names = await readdir(join(runDir, "10-plan"));
   return names
-    .filter((name) => /^T[1-9][0-9]*\.md$/.test(name))
+    .filter((name) => /^T[1-9]\d*\.md$/.test(name))
     .map((name) => name.slice(0, -".md".length));
 }
 
@@ -456,7 +456,7 @@ function findCycle(
     if (state === 1) {
       const start = stack.indexOf(id);
       const nodes = stack.slice(start);
-      const from = stack[stack.length - 1] ?? id;
+      const from = stack.at(-1) ?? id;
       const owner = byId.get(from);
       const index = tasks.findIndex((task) => task.id === from);
       const depIndex = owner?.deps.indexOf(id) ?? 0;

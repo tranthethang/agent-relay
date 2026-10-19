@@ -60,7 +60,7 @@ export async function appendJsonl(filePath: string, line: string): Promise<void>
 
 export async function readText(filePath: string): Promise<string> {
   const raw = await readFile(filePath);
-  return raw.toString("utf8").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return raw.toString("utf8").replaceAll("\r\n", "\n").replaceAll("\r", "\n");
 }
 
 export async function readJson(filePath: string): Promise<unknown> {
@@ -76,7 +76,7 @@ export async function readJsonl(filePath: string): Promise<unknown[]> {
   const text = await readText(filePath);
   if (text.length === 0) return [];
   const lines = text.split("\n");
-  if (lines[lines.length - 1] === "") lines.pop();
+  if (lines.at(-1) === "") lines.pop();
   return lines.map((line, index) => {
     if (line.length === 0) {
       throw new RelayError("validation", "invalid JSON", `${filePath}:lines[${index}]`);

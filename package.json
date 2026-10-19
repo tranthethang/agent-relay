@@ -21,6 +21,7 @@
     "check": "dprint check \"**/*.ts\" && tsc --noEmit",
     "pretest": "npm run build",
     "test": "vitest run",
+    "coverage": "vitest run --coverage && node --experimental-strip-types scripts/maint/coverage-report.ts",
     "tokens": "node --experimental-strip-types scripts/maint/skill-tokens.ts",
     "sync": "node --experimental-strip-types scripts/maint/sync-references.ts",
     "sync:check": "node --experimental-strip-types scripts/maint/sync-references.ts --check"
@@ -30,7 +31,9 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@jridgewell/trace-mapping": "0.3.31",
     "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.5",
     "tsup": "9.0.0",
     "typescript": "7.0.2",
     "vitest": "5.0.5"

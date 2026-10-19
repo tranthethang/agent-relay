@@ -115,7 +115,7 @@ function listStages(root: string): StageCount[] {
   counts.sort((left, right) => {
     const rank = stageRank(left.stage) - stageRank(right.stage);
     if (rank !== 0) return rank;
-    return left.stage < right.stage ? -1 : left.stage > right.stage ? 1 : 0;
+    return left.stage.localeCompare(right.stage);
   });
   return counts;
 }

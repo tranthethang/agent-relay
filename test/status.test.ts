@@ -209,3 +209,56 @@ test("status shows claimed and measured data for self and cross reviews", async 
     });
   });
 });
+
+test("status does not recommend implement completion without a valid index", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const name = "20261017-1792208800-open-index";
+    const events = [
+      createdEvent,
+      { schema: 1, ts: "2026-10-17T00:01:00.000Z", stage: "plan", action: "approved" },
+      {
+        schema: 1,
+        ts: "2026-10-17T00:02:00.000Z",
+        stage: "implement",
+        action: "started",
+        tool: "cursor",
+      },
+    ];
+    const cache = {
+      ...(runCache(plannedState) as { id: string; slug: string }),
+      id: "1792208800",
+      slug: "open-index",
+    };
+    const runDir = await seedRun(relay, name, cache, events);
+    await expect(statusDetail(runDir, now)).rejects.toMatchObject({
+      fieldPath: "10-plan/index.json",
+    });
+    const list = await statusList(relay, now);
+    expect(list.runs).toEqual([]);
+    expect(list.warnings?.[0]).toContain("index.json not found");
+    const cli = await runCli(["status", "--json", name], root);
+    expect(cli.code).toBe(3);
+    expect(cli.stdout).not.toContain("atry stage done");
+
+    await mkdir(join(runDir, "10-plan"), { recursive: true });
+    await writeFile(
+      join(runDir, "10-plan", "index.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          tasks: [{
+            id: "T1",
+            title: "First",
+            deps: [],
+            files: [],
+            path: "10-plan/T1.md",
+          }],
+        })
+      }\n`,
+    );
+    const detail = await statusDetail(runDir, now);
+    expect(detail.next).toBe("atry task start 1792208800");
+    expect(detail.lifecycle).toBe("implementing");
+  });
+});

@@ -13,7 +13,7 @@ import { type RunState } from "./reduce.js";
 import { parseReviewJson, reviewJsonSchema } from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
 import { outsidePaths } from "./scope.js";
-import { planIndexSchema } from "./tasks.js";
+import { openPlanTasks, planIndexSchema, readPlanIndex } from "./tasks.js";
 import { schemaVersion, toolSchema, viaSchema } from "./vocab.js";
 
 const workflowStages = ["plan", "implement", "self-review", "cross-review"] as const;
@@ -120,7 +120,7 @@ export function closePreviewText(result: ClosePreview): string {
 
 export function sectionText(markdown: string, heading: string): string {
   const lines = markdown.split("\n");
-  const start = lines.findIndex((line) => line === `## ${heading}`);
+  const start = lines.indexOf(`## ${heading}`);
   if (start === -1) return "";
   const body: string[] = [];
   for (const line of lines.slice(start + 1)) {
@@ -280,6 +280,22 @@ export async function closeRun(input: {
   });
 }
 
+export function reviewProgress(events: readonly EventLine[]): {
+  done: ReviewIntegrity["done"];
+  latest: EventLine | undefined;
+} {
+  const done: ReviewIntegrity["done"] = [];
+  let latest: EventLine | undefined;
+  for (const event of events) {
+    if (event.action !== "completed") continue;
+    if (event.stage !== "self-review" && event.stage !== "cross-review") continue;
+    const kind = event.stage === "self-review" ? "self" : "cross";
+    if (!done.includes(kind)) done.push(kind);
+    latest = event;
+  }
+  return { done, latest };
+}
+
 export async function reviewIntegrity(
   runDir: string,
   base: string,
@@ -291,16 +307,7 @@ export async function reviewIntegrity(
   const required = size.added + size.deleted < policy.smallChange
     ? ["self"] as const
     : policy.requireReviews;
-  const done: ReviewIntegrity["done"] = [];
-  let latest: EventLine | undefined;
-  for (const event of events) {
-    if (event.action !== "completed") continue;
-    if (event.stage !== "self-review" && event.stage !== "cross-review") continue;
-    if (!done.includes(event.stage === "self-review" ? "self" : "cross")) {
-      done.push(event.stage === "self-review" ? "self" : "cross");
-    }
-    latest = event;
-  }
+  const { done, latest } = reviewProgress(events);
   return {
     required: [...required],
     done,
@@ -369,6 +376,20 @@ async function recordStage(
   }
   return withRunLock(input.runDir, async (loaded) => {
     assertMove(loaded.run.state, stageMove(stage, action));
+    if (action === "completed" && stage === "implement") {
+      const index = await readPlanIndex(input.runDir);
+      if (index === null) {
+        throw new RelayError("not_found", "index.json not found", "10-plan/index.json");
+      }
+      const open = openPlanTasks(index, loaded.run.state);
+      if (open.length > 0) {
+        throw new RelayError(
+          "gate",
+          `implement done refused: open tasks: ${open.join(", ")}`,
+          "tasks",
+        );
+      }
+    }
     const measured = action === "completed" && sizedStages.has(stage)
       ? await measure(input.runDir, loaded.run.base)
       : undefined;
@@ -515,32 +536,44 @@ async function assertNoOpenQuestions(runDir: string, events: readonly EventLine[
 
 // The folder whose review `completed` event is newest wins. Without events, cross beats self.
 // A `ref` on that event names the exact file, so a later unfinished scaffold cannot hide it.
-async function latestReview(
-  runDir: string,
-  events: readonly EventLine[],
-): Promise<{ path: string; open: number } | null> {
+function newestCompletedReview(events: readonly EventLine[]): EventLine | undefined {
   let newest: EventLine | undefined;
   for (const event of events) {
     if (event.action !== "completed") continue;
     if (reviewDirs.some((review) => review.stage === event.stage)) newest = event;
   }
-  if (newest?.ref !== undefined) {
-    const dir = reviewDirs.find((review) => review.stage === newest.stage)?.dir;
-    if (dir === undefined || !new RegExp(`^${dir}/[0-9]+\\.json$`).test(newest.ref)) {
-      throw new RelayError("validation", "invalid review ref", newest.ref);
-    }
-    const openItems = await readReview(runDir, newest.ref);
-    return {
-      path: newest.ref,
-      open: unresolvedOpenCount(newest.ref, openItems, events),
-    };
+  return newest;
+}
+
+async function reviewFromRef(
+  runDir: string,
+  newest: EventLine,
+  events: readonly EventLine[],
+): Promise<{ path: string; open: number }> {
+  const dir = reviewDirs.find((review) => review.stage === newest.stage)?.dir;
+  const ref = newest.ref ?? "";
+  if (dir === undefined || !new RegExp(String.raw`^${dir}/\d+\.json$`).test(ref)) {
+    throw new RelayError("validation", "invalid review ref", ref);
   }
+  const openItems = await readReview(runDir, ref);
+  return { path: ref, open: unresolvedOpenCount(ref, openItems, events) };
+}
+
+function completedIndex(events: readonly EventLine[], stage: EventLine["stage"]): number {
+  let done = -1;
+  events.forEach((event, index) => {
+    if (event.stage === stage && event.action === "completed") done = index;
+  });
+  return done;
+}
+
+async function reviewHits(
+  runDir: string,
+  events: readonly EventLine[],
+): Promise<{ done: number; rank: number; n: number; rel: string }[]> {
   const hits: { done: number; rank: number; n: number; rel: string }[] = [];
   for (const review of reviewDirs) {
-    let done = -1;
-    events.forEach((event, index) => {
-      if (event.stage === review.stage && event.action === "completed") done = index;
-    });
+    const done = completedIndex(events, review.stage);
     let names: string[];
     try {
       names = await readdir(join(runDir, review.dir));
@@ -549,13 +582,22 @@ async function latestReview(
       throw error;
     }
     for (const name of names) {
-      const match = /^([0-9]+)\.json$/.exec(name);
+      const match = /^(\d+)\.json$/.exec(name);
       if (match === null) continue;
       hits.push({ done, rank: review.rank, n: Number(match[1]), rel: `${review.dir}/${name}` });
     }
   }
   hits.sort((left, right) => left.done - right.done || left.rank - right.rank || left.n - right.n);
-  const latest = hits[hits.length - 1];
+  return hits;
+}
+
+async function latestReview(
+  runDir: string,
+  events: readonly EventLine[],
+): Promise<{ path: string; open: number } | null> {
+  const newest = newestCompletedReview(events);
+  if (newest?.ref !== undefined) return reviewFromRef(runDir, newest, events);
+  const latest = (await reviewHits(runDir, events)).at(-1);
   if (latest === undefined) return null;
   const openItems = await readReview(runDir, latest.rel);
   return {

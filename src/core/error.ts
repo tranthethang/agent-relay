@@ -1,4 +1,4 @@
-import { type ZodError, type ZodIssue } from "zod";
+import { type ZodError } from "zod";
 
 export const exitCodes = {
   ok: 0,
@@ -34,7 +34,7 @@ export function formatIssuePath(path: ReadonlyArray<PropertyKey>): string {
       continue;
     }
     const text = typeof key === "string" ? key : String(key);
-    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(text)) {
+    if (/^[A-Za-z_]\w*$/.test(text)) {
       out += out.length === 0 ? text : `.${text}`;
       continue;
     }
@@ -44,7 +44,7 @@ export function formatIssuePath(path: ReadonlyArray<PropertyKey>): string {
 }
 
 export function fromZod(error: ZodError): RelayError {
-  const issue: ZodIssue | undefined = error.issues[0];
+  const issue = error.issues[0];
   if (issue === undefined) {
     return new RelayError("validation", "validation failed", "");
   }

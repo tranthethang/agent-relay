@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { type EventLine } from "../src/core/event.js";
-import { gitCommit, reachReview, runCli, withTempDir, withTempGitRepo } from "./helper.js";
+import { gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
 import { plannedState, runCache, seedRelay, seedRun } from "./seed.js";
 
 function ev(stage: EventLine["stage"], action: EventLine["action"]): EventLine {
@@ -187,7 +187,18 @@ test("approve and close previews snapshot their prompt text", async () => {
     `);
     expect(await readFile(join(run.path, "events.jsonl"), "utf8")).toBe(before);
 
-    await reachReview(run.path, dir);
+    for (
+      const args of [
+        ["approve", run.path, "--via", "arg"],
+        ["stage", "start", run.path, "implement", "--tool", "cursor"],
+        ["task", "start", run.path, "T1"],
+        ["task", "done", run.path, "T1"],
+        ["stage", "done", run.path, "implement", "--tool", "cursor"],
+      ]
+    ) {
+      const result = await runCli(args, dir);
+      expect(result.code, result.stderr).toBe(0);
+    }
     await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
     await runCli(["review", "done", run.path, "self"], dir);
     const ready = await runCli(["close", run.path, "--preview", "--json"], dir);

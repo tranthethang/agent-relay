@@ -1,5 +1,6 @@
 import { type EventLine } from "./event.js";
 import { type RunState } from "./reduce.js";
+import { openPlanTasks, type PlanIndex } from "./tasks.js";
 import { schemaVersion } from "./vocab.js";
 
 export type NextResult = {
@@ -24,39 +25,61 @@ export function nextStep(
   state: RunState,
   events: readonly EventLine[],
   reviews?: { required: readonly string[]; done: readonly string[] },
+  index?: PlanIndex | null,
 ): string {
+  const early = nextBeforeReview(id, state, index);
+  if (early !== undefined) return early;
+  if (lastStageAction(events, "self-review") === "started") return `atry review done ${id} self`;
+  if (lastStageAction(events, "cross-review") === "started") return `atry review done ${id} cross`;
+  if (reviews !== undefined) return nextFromReviews(id, events, reviews);
+  return nextWithoutReviews(id, events);
+}
+
+function nextBeforeReview(
+  id: string,
+  state: RunState,
+  index?: PlanIndex | null,
+): string | undefined {
   if (state.lifecycle === "abandoned" || state.lifecycle === "closed") return "none";
   if (state.lifecycle === "planned") return `atry approve ${id}`;
   if (state.lifecycle === "approved") return `atry stage start ${id} implement`;
-  if (state.lifecycle === "implementing") {
-    const open = state.tasks.some((task) =>
-      task.status === "pending" || task.status === "in-progress"
-    );
-    if (open) return `atry task start ${id}`;
-    return `atry stage done ${id} implement`;
+  if (state.lifecycle !== "implementing") return undefined;
+  if (openPlanTasks(index ?? null, state).length > 0) return `atry task start ${id}`;
+  return `atry stage done ${id} implement`;
+}
+
+function nextFromReviews(
+  id: string,
+  events: readonly EventLine[],
+  reviews: { required: readonly string[]; done: readonly string[] },
+): string {
+  if (reviews.required.includes("self") && !reviews.done.includes("self")) {
+    return reviewCommand(id, events, "self");
   }
-  if (lastStageAction(events, "self-review") === "started") return `atry review done ${id} self`;
-  if (lastStageAction(events, "cross-review") === "started") return `atry review done ${id} cross`;
-  if (reviews !== undefined) {
-    if (reviews.required.includes("self") && !reviews.done.includes("self")) {
-      return lastStageAction(events, "self-review") === "started"
-        ? `atry review done ${id} self`
-        : `atry review new ${id} self`;
-    }
-    if (reviews.required.includes("cross") && !reviews.done.includes("cross")) {
-      return lastStageAction(events, "cross-review") === "started"
-        ? `atry review done ${id} cross`
-        : `atry review new ${id} cross`;
-    }
-    return `atry close ${id}`;
+  if (reviews.required.includes("cross") && !reviews.done.includes("cross")) {
+    return reviewCommand(id, events, "cross");
   }
-  if (lastStageAction(events, "self-review") !== "completed") {
-    if (lastStageAction(events, "self-review") === "started") return `atry review done ${id} self`;
-    return `atry review new ${id} self`;
-  }
-  if (lastStageAction(events, "cross-review") === "started") return `atry review done ${id} cross`;
-  if (lastStageAction(events, "cross-review") !== "completed") return `atry review new ${id} cross`;
   return `atry close ${id}`;
+}
+
+function nextWithoutReviews(id: string, events: readonly EventLine[]): string {
+  if (lastStageAction(events, "self-review") !== "completed") {
+    return reviewCommand(id, events, "self");
+  }
+  if (lastStageAction(events, "cross-review") !== "completed") {
+    return reviewCommand(id, events, "cross");
+  }
+  return `atry close ${id}`;
+}
+
+function reviewCommand(
+  id: string,
+  events: readonly EventLine[],
+  kind: "self" | "cross",
+): string {
+  const stage = kind === "self" ? "self-review" : "cross-review";
+  const verb = lastStageAction(events, stage) === "started" ? "done" : "new";
+  return `atry review ${verb} ${id} ${kind}`;
 }
 
 export function explainNext(command: string): NextResult {

@@ -17,6 +17,6 @@ export function outsidePaths(
     const covered = [...own, ...others].some((entry) => pathsOverlap(path, entry));
     if (!covered) outside.push(path);
   }
-  outside.sort();
+  outside.sort((left, right) => left.localeCompare(right));
   return outside;
 }
