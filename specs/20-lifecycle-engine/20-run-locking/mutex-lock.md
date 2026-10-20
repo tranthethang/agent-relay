@@ -29,3 +29,6 @@ await withRunLock(runDir, async () => {
   // Read events, check gate preconditions, append new event, update cache
 });
 ```
+
+`review done` holds the lock twice when a policy `testCommand` is set.
+The test command runs between the two holds, so a long test run does not hold the lock.

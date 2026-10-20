@@ -118,8 +118,10 @@ Changes below `smallChange` lines, counting additions and deletions from base
 to the current tree, require only a self-review. Policy can also include an
 optional `testCommand`. `review done` runs it at the repo root through the
 platform shell, records its exit code, duration, and tree, and writes the last
-200 stdout and stderr lines to `NN.test.log`. A non-zero exit records failure
-but does not refuse `review done`.
+200 stdout and stderr lines to `NN.test.log`. The recorded tree is the tree
+when the tests started. A non-zero exit records failure but does not refuse
+`review done`. The command runs without the run lock. `review done` refuses
+when the same review stage records another event while the tests run.
 
 The optional `strict` policy groups control scope, plan, and review-integrity
 gates independently. Each group defaults to `false`, which reports a warning
