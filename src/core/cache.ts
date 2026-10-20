@@ -2,7 +2,7 @@ import { basename, join } from "node:path";
 import { runIdFromName, runSlugFromName } from "./discover.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine, eventLineSchema } from "./event.js";
-import { atomicWrite, isEnoent, readJson, readJsonl } from "./files.js";
+import { appendJsonl, atomicWrite, isEnoent, readJson, readJsonl } from "./files.js";
 import { reduceEvents, type RunState, type TaskState } from "./reduce.js";
 import { type RunJson, runJsonSchema } from "./run.js";
 import { schemaVersion } from "./vocab.js";
@@ -20,10 +20,18 @@ export async function rebuildRun(runDir: string): Promise<RebuildResult> {
   const state = canonicalState(reduceEvents(events));
   const current = await readCache(runDir);
   if (sameState(current.state, state)) return { run: current, events, warning: null };
+  // Keep evidence of the drift; the rebuild below would otherwise erase it.
+  const drifted = eventLineSchema.parse({
+    schema: schemaVersion,
+    ts: new Date().toISOString(),
+    stage: "run",
+    action: "drifted",
+  });
+  await appendJsonl(join(runDir, "events.jsonl"), JSON.stringify(drifted));
   const run = withState(current, state);
   await atomicWrite(join(runDir, "run.json"), `${JSON.stringify(run)}\n`);
   process.stderr.write(`warning: ${cacheWarning}\n`);
-  return { run, events, warning: cacheWarning };
+  return { run, events: [...events, drifted], warning: cacheWarning };
 }
 
 async function readEvents(runDir: string): Promise<EventLine[]> {

@@ -212,6 +212,8 @@ async function closeReasons(
   ) {
     reasons.push("failed tests");
   }
+  const drift = events.filter((event) => event.stage === "run" && event.action === "drifted");
+  if (drift.length > 0) reasons.push(`run.json drifted ${drift.length} times`);
   return reasons;
 }
 

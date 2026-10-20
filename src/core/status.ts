@@ -49,6 +49,7 @@ export type StatusDetail = {
   actions: string[];
   reviews: StatusReviews;
   actors: RunActors;
+  drift: number;
   warnings?: string[];
 };
 
@@ -152,6 +153,7 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
     ),
     reviews,
     actors: runActors(loaded.events),
+    drift: driftCount(loaded.events),
   };
   if (run.from !== undefined) detail.from = run.from;
   if (loaded.warning !== null) detail.warnings = [loaded.warning];
@@ -220,6 +222,7 @@ export function statusDetailText(result: StatusDetail): string {
     `actions: ${result.actions.join(", ") || "none"}`,
     reviewsLine(result.reviews),
     actorsLine(result.actors),
+    `drift: ${result.drift}`,
   ];
   return `${lines.join("\n")}\n`;
 }
@@ -379,4 +382,8 @@ async function hasCache(runDir: string): Promise<boolean> {
 async function cacheMtime(runDir: string): Promise<number> {
   const info = await stat(join(runDir, "run.json"));
   return info.mtimeMs;
+}
+
+export function driftCount(events: readonly EventLine[]): number {
+  return events.filter((event) => event.stage === "run" && event.action === "drifted").length;
 }

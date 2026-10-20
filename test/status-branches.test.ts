@@ -68,6 +68,7 @@ function detailWith(overrides: Partial<StatusDetail>): StatusDetail {
     actions: [],
     reviews: baseReviews,
     actors: {},
+    drift: 0,
     ...overrides,
   };
 }

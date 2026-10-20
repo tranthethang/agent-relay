@@ -50,6 +50,9 @@ test("statusDetail rebuilds a stale cache", async () => {
     expect(detail.lifecycle).toBe("approved");
     expect(detail.approved).toBe(true);
     expect(detail.warnings).toEqual(["run.json disagreed with events.jsonl; rebuilt"]);
+    expect(detail.drift).toBe(1);
+    expect(statusDetailText(detail)).toContain("\ndrift: 1\n");
+    expect((await statusDetail(runDir, now)).drift).toBe(1);
     expect(detail.next).toBe("atry stage start 1792208725 implement");
     expect(detail.actions).toEqual(["atry stage start 1792208725 implement"]);
     const stored = JSON.parse(await readFile(join(runDir, "run.json"), "utf8")) as {

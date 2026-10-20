@@ -77,6 +77,25 @@ test("rebuildRun rewrites a stale state and warns once", async () => {
   });
 });
 
+test("rebuildRun records one drifted event per detected drift", async () => {
+  await withTempDir(async (dir) => {
+    const runDir = await seed(dir, run.state, [
+      created,
+      { schema: 1, ts: "2026-10-17T00:01:00.000Z", stage: "plan", action: "approved" },
+    ]);
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const first = await rebuildRun(runDir);
+    const second = await rebuildRun(runDir);
+    spy.mockRestore();
+    expect(first.events.at(-1)).toMatchObject({ stage: "run", action: "drifted" });
+    expect(second.warning).toBeNull();
+    const lines = (await readFile(join(runDir, "events.jsonl"), "utf8")).trim().split("\n");
+    expect(lines).toHaveLength(3);
+    expect(JSON.parse(lines[2] ?? "")).toMatchObject({ stage: "run", action: "drifted" });
+    expect(second.run.state.lifecycle).toBe("approved");
+  });
+});
+
 test("rebuildRun reports a missing cache and a bad event line", async () => {
   await withTempDir(async (dir) => {
     const runDir = await seed(dir);
