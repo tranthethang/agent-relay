@@ -751,10 +751,10 @@ function newestCompletedReview(events: readonly EventLine[]): EventLine | undefi
 async function reviewFromRef(
   runDir: string,
   newest: EventLine,
+  ref: string,
   events: readonly EventLine[],
 ): Promise<{ path: string; open: number }> {
   const dir = reviewDirs.find((review) => review.stage === newest.stage)?.dir;
-  const ref = newest.ref ?? "";
   if (dir === undefined || !new RegExp(String.raw`^${dir}/\d+\.json$`).test(ref)) {
     throw new RelayError("validation", "invalid review ref", ref);
   }
@@ -799,7 +799,7 @@ async function latestReview(
   events: readonly EventLine[],
 ): Promise<{ path: string; open: number } | null> {
   const newest = newestCompletedReview(events);
-  if (newest?.ref !== undefined) return reviewFromRef(runDir, newest, events);
+  if (newest?.ref !== undefined) return reviewFromRef(runDir, newest, newest.ref, events);
   const latest = (await reviewHits(runDir, events)).at(-1);
   if (latest === undefined) return null;
   const openItems = await readReview(runDir, latest.rel);

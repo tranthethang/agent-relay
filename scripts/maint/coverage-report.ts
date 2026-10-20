@@ -339,8 +339,8 @@ function sonarToken(env: NodeJS.ProcessEnv): string {
   return token;
 }
 
-function scannerName(): string {
-  return process.platform === "win32" ? "sonar-scanner.cmd" : "sonar-scanner";
+export function scannerName(platform: NodeJS.Platform = process.platform): string {
+  return platform === "win32" ? "sonar-scanner.cmd" : "sonar-scanner";
 }
 
 async function runScannerCommand(root: string, env: NodeJS.ProcessEnv): Promise<void> {
@@ -362,7 +362,7 @@ function scannerFailure(error: unknown): Error {
   return new Error("sonar-scanner failed");
 }
 
-function isMissingScanner(error: unknown): boolean {
+export function isMissingScanner(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   if ("code" in error && error.code === "ENOENT") return true;
   const stderr = "stderr" in error ? String(error.stderr ?? "") : "";

@@ -159,7 +159,11 @@ export async function validateRunWorktree(
 }
 
 // The worktree sees the main repo run history through a link, so runs stay in one place.
-export async function linkRelay(worktreePath: string, relayDir: string): Promise<void> {
+export async function linkRelay(
+  worktreePath: string,
+  relayDir: string,
+  platform: NodeJS.Platform = process.platform,
+): Promise<void> {
   const link = join(worktreePath, relayName);
   try {
     await lstat(link);
@@ -167,7 +171,7 @@ export async function linkRelay(worktreePath: string, relayDir: string): Promise
   } catch (error) {
     if (!isEnoent(error)) throw error;
   }
-  await symlink(resolve(relayDir), link, process.platform === "win32" ? "junction" : "dir");
+  await symlink(resolve(relayDir), link, platform === "win32" ? "junction" : "dir");
 }
 
 // The `.agent-relay/` pattern does not match a link, so ignore the bare name for every worktree.

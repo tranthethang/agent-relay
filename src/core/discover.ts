@@ -55,9 +55,10 @@ export async function resolveRun(relayDir: string, token: string, cwd: string): 
 }
 
 function oneHit(hits: string[], relayDir: string, token: string): string {
-  if (hits.length === 0) throw new RelayError("not_found", "run not found", token);
-  if (hits.length > 1) throw new RelayError("ambiguous", "run is ambiguous", token);
-  return joinUnder(relayDir, hits[0] ?? "");
+  const [hit, extra] = hits;
+  if (hit === undefined) throw new RelayError("not_found", "run not found", token);
+  if (extra !== undefined) throw new RelayError("ambiguous", "run is ambiguous", token);
+  return joinUnder(relayDir, hit);
 }
 
 async function existingRunPath(token: string, cwd: string): Promise<string | null> {

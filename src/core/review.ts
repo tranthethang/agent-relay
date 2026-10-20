@@ -328,7 +328,7 @@ async function assertPriorQuestionsDecided(
 ): Promise<void> {
   const previous = latestCompletedReview(events);
   if (previous?.ref === undefined) return;
-  const previousReview = await readReviewAt(runDir, previous);
+  const previousReview = await readReviewAt(runDir, previous.stage, previous.ref);
   for (const item of previousReview.open) {
     if (review.value.open.some((next) => next.q === item.q)) continue;
     const decided = events.some((event) =>
@@ -490,12 +490,12 @@ function latestCompletedReview(events: readonly EventLine[]): EventLine | undefi
 
 async function readReviewAt(
   runDir: string,
-  event: EventLine,
+  stage: EventLine["stage"],
+  rel: string,
 ): Promise<ReviewJson> {
-  const dir = event.stage === "self-review" ? reviewPlaces.self.dir : reviewPlaces.cross.dir;
-  const rel = event.ref;
-  if (rel === undefined || !new RegExp(String.raw`^${dir}/\d+\.json$`).test(rel)) {
-    throw new RelayError("validation", "invalid review ref", rel ?? "review.ref");
+  const dir = stage === "self-review" ? reviewPlaces.self.dir : reviewPlaces.cross.dir;
+  if (!new RegExp(String.raw`^${dir}/\d+\.json$`).test(rel)) {
+    throw new RelayError("validation", "invalid review ref", rel);
   }
   let value: unknown;
   try {
