@@ -96,11 +96,15 @@ A lower version prints `npm i -g @tranthethang/agent-relay@latest` and exits 1.
 `atry close <run> --preview` prints `recommend: y` or `recommend: n` and the reasons.
 Neither preview records an event.
 The skills ask before they run those verbs. Implement start refuses when the
-plan is not approved. Close requires completed reviews for its policy and
-checks the latest completed review against the current code tree. It refuses
-while the latest review has open questions unless you pass `--ack-open`.
-Changes made after the latest review started require user acceptance and
-`--ack-fixes`. `--waive-review <reason>` records a review waiver and skips
+plan is not approved. Close checks the required reviews for its policy, the
+latest completed review tree against the current code tree, open questions,
+and changes made after the latest review started.
+With `strict.reviewIntegrity` false (the default) and `--via` set, `close`
+does not refuse on those checks. It records them as warnings in the `closed`
+event. The skills pass `--via`, so this is the default path.
+Without `--via`, or with `strict.reviewIntegrity` true, `close` refuses until
+each check passes. Pass `--ack-open` for open questions and `--ack-fixes` for
+changes after the latest review. `--waive-review <reason>` records a review waiver and skips
 review integrity checks; it does not skip the open-question check.
 `atry close --abandon <reason>` stops a run from any open state.
 
@@ -254,12 +258,17 @@ scaffold that already has every key. Task status lives in events.
 
 - The tree snapshot uses a temporary copy of the Git index and excludes
   `.agent-relay/`. It does not change the real index.
-- When `run.json` differs from the replay of `events.jsonl`, `atry` rebuilds it
-  and appends a `run` `drifted` event. `atry status` shows the count and
-  `close --preview` lists it. An edit that changes both files the same way is
-  not detected.
-- `locks/run.lock` serializes CLI state changes. It does not lock direct file
-  edits made outside `atry`.
+- When `run.json` differs from the replay of `events.jsonl`, `atry` takes the
+  run lock, rebuilds it, and appends a `run` `drifted` event. `atry status`
+  shows the count and `close --preview` lists it. An edit that changes both
+  files the same way is not detected.
+- Each event after the first has `prev`, the sha256 of the previous line. A
+  plain edit, insert, or delete in `events.jsonl` fails the next read. The chain
+  is not a signature: a writer who recomputes the hashes, or removes every
+  `prev`, is not detected. Runs from before the chain still load.
+- `locks/run.lock` serializes CLI state changes. It holds an owner token, and
+  only the owner removes it. A stale lock (30 seconds) is removed by one process
+  at a time. It does not lock direct file edits made outside `atry`.
 - A review waiver is recorded with its reason. It does not prove who approved
   the waiver.
 - Cross-review independence is a request. `atry review done` warns when the

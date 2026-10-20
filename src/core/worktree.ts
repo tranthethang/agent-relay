@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import {
   lstat,
   mkdir,
-  open,
   readFile,
   realpath,
   rm,
@@ -11,10 +10,9 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { type RebuildResult, rebuildRun } from "./cache.js";
+import { type RebuildResult, rebuildRunLocked } from "./cache.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { isEnoent, readJson } from "./files.js";
@@ -22,6 +20,7 @@ import { gitProgram, treeStatus } from "./git.js";
 import { appendEvent } from "./mutate.js";
 import { readPolicy, validateWorktreeDir } from "./policy.js";
 import { type RunJson, runJsonSchema } from "./run.js";
+import { acquireRunLock, releaseRunLock } from "./runlock.js";
 import { schemaVersion } from "./vocab.js";
 
 const execFileAsync = promisify(execFile);
@@ -376,71 +375,15 @@ export function worktreeCleanupText(result: WorktreeCleanupResult): string {
   return `worktree: kept (${result.worktree.reason ?? "unknown"})\n`;
 }
 
-async function tryAcquireCleanupLock(lockPath: string): Promise<boolean> {
-  let handle;
-  try {
-    handle = await open(lockPath, "wx");
-    await handle.writeFile(
-      JSON.stringify({
-        pid: process.pid,
-        host: hostname() || "unknown",
-        ts: new Date().toISOString(),
-      }) + "\n",
-    );
-    await handle.close();
-    return true;
-  } catch (error) {
-    await handle?.close().catch(() => undefined);
-    if (handle !== undefined) {
-      await rm(lockPath, { force: true });
-      throw error;
-    }
-    const code = error instanceof Error && "code" in error && typeof error.code === "string"
-      ? error.code
-      : "";
-    if (code !== "EEXIST" && code !== "EPERM") throw error;
-    return false;
-  }
-}
-
-async function clearStaleCleanupLock(lockPath: string): Promise<void> {
-  try {
-    const info = await stat(lockPath);
-    if (Date.now() - info.mtimeMs >= 30_000) {
-      await rm(lockPath, { force: true });
-    }
-  } catch (staleError) {
-    const staleCode = staleError instanceof Error && "code" in staleError
-        && typeof staleError.code === "string"
-      ? staleError.code
-      : "";
-    if (staleCode !== "ENOENT") throw staleError;
-  }
-}
-
-async function acquireCleanupLock(lockPath: string): Promise<void> {
-  const deadline = Date.now() + 10_000;
-  while (!(await tryAcquireCleanupLock(lockPath))) {
-    if (Date.now() >= deadline) {
-      throw new RelayError("lock", "run lock timed out", "locks/run.lock");
-    }
-    await clearStaleCleanupLock(lockPath);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-}
-
 async function withWorktreeCleanupLock<T>(
   runDir: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const lockDir = join(runDir, "locks");
-  const lockPath = join(lockDir, "run.lock");
-  await mkdir(lockDir, { recursive: true });
-  await acquireCleanupLock(lockPath);
+  const lock = await acquireRunLock(runDir);
   try {
     return await fn();
   } finally {
-    await rm(lockPath, { force: true });
+    await releaseRunLock(lock);
   }
 }
 
@@ -505,7 +448,7 @@ async function handleExistingWorktree(
 
 export async function cleanupWorktree(runDir: string): Promise<WorktreeCleanupResult> {
   return withWorktreeCleanupLock(runDir, async () => {
-    const loaded = await rebuildRun(runDir);
+    const loaded = await rebuildRunLocked(runDir);
     assertCleanupEligible(loaded);
     const worktree = loaded.run.worktree!;
     const exists = await pathExists(worktree.path);

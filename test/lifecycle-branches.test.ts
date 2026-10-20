@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
-import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { appendChained } from "../src/core/cache.js";
 import { RelayError } from "../src/core/error.js";
 import { type EventLine } from "../src/core/event.js";
 import * as git from "../src/core/git.js";
@@ -317,19 +318,13 @@ test("closePreview scans review folders and refuses an invalid review ref", asyn
     await writeFile(join(runDir, "40-cross-review"), "file\n");
     await expect(closePreview(runDir)).rejects.toMatchObject({ code: "ENOTDIR" });
     await rm(join(runDir, "40-cross-review"));
-    await appendFile(
-      join(runDir, "events.jsonl"),
-      `${JSON.stringify(event({ stage: "self-review", action: "completed", ref: "bad" }))}\n`,
-    );
+    await appendChained(runDir, event({ stage: "self-review", action: "completed", ref: "bad" }));
     await expect(closePreview(runDir)).rejects.toThrow(/invalid review ref/);
   });
 });
 
 async function addEvents(runDir: string, lines: Partial<EventLine>[]): Promise<void> {
-  await appendFile(
-    join(runDir, "events.jsonl"),
-    lines.map((line) => `${JSON.stringify(event(line))}\n`).join(""),
-  );
+  for (const line of lines) await appendChained(runDir, event(line));
 }
 
 async function setWorktree(runDir: string, path: string): Promise<void> {

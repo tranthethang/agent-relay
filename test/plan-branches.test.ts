@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test, vi } from "vitest";
@@ -11,6 +11,7 @@ import {
   listSourceFiles,
   scannerName,
 } from "../scripts/maint/coverage-report.ts";
+import { appendChained } from "../src/core/cache.js";
 import {
   indexFromTasks,
   planAmend,
@@ -59,7 +60,7 @@ const sourceMap = JSON.stringify({
 
 async function rawEvent(run: string, fields: Record<string, unknown>): Promise<void> {
   const line = { schema: 1, ts: "2026-10-20T00:00:00.000Z", ...fields };
-  await appendFile(join(run, "events.jsonl"), `${JSON.stringify(line)}\n`);
+  await appendChained(run, line as Parameters<typeof appendChained>[1]);
 }
 
 test("planDoneText prints none for an empty task list", () => {

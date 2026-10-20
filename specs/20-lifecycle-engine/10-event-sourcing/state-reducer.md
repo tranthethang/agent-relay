@@ -18,4 +18,7 @@ function reduceEvents(events: readonly EventLine[]): RunState;
 - `waived`, `rebased`, `cleaned`, and `drifted` do not change lifecycle, stage, or tasks.
 - `RunState` does not store review pairs, question decisions, or waivers. Callers read those from the event list.
 - `appendEvent` writes the reduced snapshot to `run.json`.
-- `rebuildRun` compares `run.json` with the replay. On a difference it appends a `run` `drifted` event, rewrites `run.json`, and prints a warning.
+- `rebuildRun` compares `run.json` with the replay. It writes nothing when they match.
+- On a difference, `rebuildRun` takes the run lock and compares again. When the difference remains, it appends a `run` `drifted` event, rewrites `run.json`, and prints a warning.
+- `rebuildRunLocked` does the second step for a caller that already holds the run lock.
+- Reading events also checks the `prev` hash chain. See [`event-schema.md`](event-schema.md).
