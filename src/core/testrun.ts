@@ -10,25 +10,36 @@ export type TestExecution = {
 const defaultTimeoutMs = 10 * 60 * 1000;
 const tailLimit = 200;
 
+export function shellCommand(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): { shell: string; args: string[] } {
+  // Windows: the same cmd.exe arguments that Node uses for `shell: true`.
+  if (platform === "win32") {
+    return { shell: env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", `"${command}"`] };
+  }
+  return { shell: "/bin/sh", args: ["-c", command] };
+}
+
 export function runTestCommand(
   cwd: string,
   command: string | undefined,
   timeoutMs = defaultTimeoutMs,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<TestExecution> {
   if (command === undefined) {
     return Promise.resolve({ tests: "not-configured", stdout: "", stderr: "" });
   }
   const started = performance.now();
-  const shell = process.platform === "win32" ? process.env.ComSpec ?? "cmd.exe" : "/bin/sh";
-  // Windows: the same cmd.exe arguments that Node uses for `shell: true`.
-  const args = process.platform === "win32" ? ["/d", "/s", "/c", `"${command}"`] : ["-c", command];
+  const { shell, args } = shellCommand(command, platform);
   return new Promise((resolve) => {
     // Unix: own process group, so a timeout can kill the shell and its children.
     const child = spawn(shell, args, {
       cwd,
-      detached: process.platform !== "win32",
+      detached: platform !== "win32",
       windowsHide: true,
-      windowsVerbatimArguments: process.platform === "win32",
+      windowsVerbatimArguments: platform === "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stdout = new LineTail(tailLimit);
@@ -37,7 +48,7 @@ export function runTestCommand(
     let settled = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      killTree(child);
+      killTree(child, platform);
     }, timeoutMs);
     child.on("exit", () => {
       // A child that outlives the shell can hold the pipes open after a timeout.
@@ -48,20 +59,14 @@ export function runTestCommand(
     // A detached group does not get the terminal's Ctrl+C, so pass the signal on.
     const forward = (signal: NodeJS.Signals): void => {
       stopForwarding();
-      if (child.pid !== undefined) {
-        try {
-          process.kill(-child.pid, signal);
-        } catch {
-          child.kill(signal);
-        }
-      }
+      signalGroup(child, signal);
       process.kill(process.pid, signal);
     };
     const stopForwarding = (): void => {
       process.off("SIGINT", forward);
       process.off("SIGTERM", forward);
     };
-    if (process.platform !== "win32") {
+    if (platform !== "win32") {
       process.once("SIGINT", forward);
       process.once("SIGTERM", forward);
     }
@@ -85,9 +90,12 @@ export function runTestCommand(
   });
 }
 
-function killTree(child: ChildProcess): void {
+export function killTree(
+  child: Pick<ChildProcess, "pid" | "kill">,
+  platform: NodeJS.Platform = process.platform,
+): void {
   if (child.pid === undefined) return;
-  if (process.platform === "win32") {
+  if (platform === "win32") {
     const taskkill = String.raw`C:\Windows\System32\taskkill.exe`;
     spawn(taskkill, ["/pid", String(child.pid), "/t", "/f"], {
       windowsHide: true,
@@ -95,10 +103,19 @@ function killTree(child: ChildProcess): void {
     }).on("error", () => child.kill());
     return;
   }
+  signalGroup(child, "SIGKILL");
+}
+
+/** Signals the child's process group, or the child alone when the group is gone. */
+export function signalGroup(
+  child: Pick<ChildProcess, "pid" | "kill">,
+  signal: NodeJS.Signals,
+): void {
+  if (child.pid === undefined) return;
   try {
-    process.kill(-child.pid, "SIGKILL");
+    process.kill(-child.pid, signal);
   } catch {
-    child.kill("SIGKILL");
+    child.kill(signal);
   }
 }
 
@@ -109,11 +126,11 @@ class LineTail {
   constructor(private readonly limit: number) {}
 
   push(chunk: string): void {
-    const parts = `${this.pending}${chunk}`.replaceAll("\r\n", "\n").replaceAll("\r", "\n").split(
-      "\n",
-    );
-    this.pending = parts.pop() ?? "";
-    for (const line of parts) {
+    const text = `${this.pending}${chunk}`.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+    const end = text.lastIndexOf("\n");
+    this.pending = text.slice(end + 1);
+    if (end < 0) return;
+    for (const line of text.slice(0, end).split("\n")) {
       this.lines.push(line);
       if (this.lines.length > this.limit) this.lines.shift();
     }

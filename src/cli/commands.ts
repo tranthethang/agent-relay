@@ -138,7 +138,7 @@ function flagRun(command: Command): string | undefined {
   return typeof run === "string" ? run : undefined;
 }
 
-async function reviewsForNext(
+export async function reviewsForNext(
   runDir: string,
   base: string,
   events: readonly EventLine[],
