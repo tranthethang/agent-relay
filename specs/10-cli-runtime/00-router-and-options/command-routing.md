@@ -23,6 +23,7 @@ Command registration is modularized under `src/cli/`:
 | `review.ts`    | Verification & review | `review new`, `review done`, `review decide`                                                    |
 | `distill.ts`   | Artifact manifest     | `distill`                                                                                       |
 | `policy.ts`    | Repository policy     | `policy init`, `policy check`                                                                   |
+| `worktree.ts`  | Worktree management   | `worktree cleanup`                                                                              |
 
 ## Token Resolution Convention
 

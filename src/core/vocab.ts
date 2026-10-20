@@ -28,6 +28,7 @@ export const actions = [
   "released",
   "stolen",
   "rebased",
+  "cleaned",
 ] as const;
 
 export const tools = [

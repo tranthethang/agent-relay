@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { RelayError } from "../src/core/error.js";
@@ -72,8 +72,9 @@ test("stage done implement measures the tree in the worktree", async () => {
         "--json",
       ], dir);
       const runPath = (JSON.parse(created.stdout) as { path: string }).path;
+      const runName = basename(runPath);
       const path = join(outside, "wt");
-      await execFileAsync("git", ["worktree", "add", "-b", "wt", path, "HEAD"], { cwd: dir });
+      await execFileAsync("git", ["worktree", "add", "-b", runName, path, "HEAD"], { cwd: dir });
       try {
         const runJson = join(runPath, "run.json");
         const value = JSON.parse(await readFile(runJson, "utf8")) as Record<string, unknown>;

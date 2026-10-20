@@ -21,6 +21,7 @@ import { writeResult } from "./output.js";
 import { registerPlan } from "./plan.js";
 import { registerPolicy } from "./policy.js";
 import { registerReview } from "./review.js";
+import { registerWorktree } from "./worktree.js";
 
 export function registerCommands(program: Command): void {
   program
@@ -113,6 +114,7 @@ export function registerCommands(program: Command): void {
   registerReview(program);
   registerDistill(program);
   registerPolicy(program);
+  registerWorktree(program);
 }
 
 function commandJson(command: Command): boolean {

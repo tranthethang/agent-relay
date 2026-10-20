@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, realpath, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { fromZod, RelayError } from "./error.js";
@@ -58,7 +58,11 @@ export async function readPolicy(cwd: string, base: string): Promise<Policy> {
     }
     throw new RelayError("validation", "could not read policy from base", ".agent-relay.json");
   }
-  return parsePolicy(text);
+  const policy = parsePolicy(text);
+  if (policy.worktree?.dir !== undefined) {
+    await validateWorktreeDir(await gitRoot(cwd), policy.worktree.dir);
+  }
+  return policy;
 }
 
 export function parsePolicy(text: string): Policy {
@@ -94,7 +98,8 @@ export async function initPolicy(cwd: string): Promise<PolicyInitResult> {
 }
 
 export async function checkPolicy(cwd: string): Promise<PolicyCheckResult> {
-  const path = join(await gitRoot(cwd), ".agent-relay.json");
+  const root = await gitRoot(cwd);
+  const path = join(root, ".agent-relay.json");
   let text: string;
   try {
     text = await readFile(path, "utf8");
@@ -104,5 +109,34 @@ export async function checkPolicy(cwd: string): Promise<PolicyCheckResult> {
     }
     throw error;
   }
-  return { schema: 1, path, policy: parsePolicy(text) };
+  const policy = parsePolicy(text);
+  if (policy.worktree?.dir !== undefined) {
+    await validateWorktreeDir(root, policy.worktree.dir);
+  }
+  return { schema: 1, path, policy };
+}
+
+export async function validateWorktreeDir(root: string, dir: string | undefined): Promise<void> {
+  if (dir === undefined) return;
+  const canonicalRoot = await realpath(root);
+  const canonicalTarget = await canonicalPath(resolve(root, dir));
+  const rel = relative(canonicalRoot, canonicalTarget);
+  if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) {
+    throw new RelayError(
+      "validation",
+      "worktree directory cannot be inside the repository",
+      ".agent-relay.json:worktree.dir",
+    );
+  }
+}
+
+async function canonicalPath(filePath: string): Promise<string> {
+  try {
+    return await realpath(filePath);
+  } catch (error) {
+    if (!isEnoent(error)) throw error;
+    const parent = dirname(filePath);
+    if (parent === filePath) return filePath;
+    return join(await canonicalPath(parent), basename(filePath));
+  }
 }

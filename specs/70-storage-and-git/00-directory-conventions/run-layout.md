@@ -43,6 +43,12 @@ When policy at `HEAD` has `worktree.enabled` set to `true`, `run new` adds a `wo
 - `branch` is the branch at `HEAD` before `run new`. `close` checks the merge against it.
 - The object is strict. A run without it runs git from the run folder in the main repo.
 
+`run new` reserves the run folder using exclusive directory creation. If run initialization fails, agent-relay rolls back the symlink, the worktree, and the branch.
+
 The real `.agent-relay/` stays at the main repo root. Each worktree has `.agent-relay` as a link to it: a symlink on macOS and Linux, and a directory junction on Windows. The pattern `.agent-relay/` does not match a link, so the CLI appends the line `.agent-relay` to the shared `info/exclude` (under `git rev-parse --git-common-dir`) once.
 
-`close` removes the worktree only after the run branch is merged into `branch` and the worktree has no uncommitted changes. It removes the link first. The run folder and the run branch stay.
+`stage start implement` checks the worktree. It verifies that the directory exists, is registered with Git, is not detached, and matches the run branch.
+
+`close` removes the worktree only after the run branch is merged into `branch` and the worktree has no uncommitted changes. It unlinks `.agent-relay` before removing the worktree. If removal fails, `close` preserves the closed run and reports `worktree: kept (<reason>)`. Successful removal appends a `cleaned` run event.
+
+`atry worktree cleanup <run>` retries removal on a closed run. It applies the same safety checks and records the `cleaned` event.

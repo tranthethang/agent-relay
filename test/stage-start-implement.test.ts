@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
@@ -100,19 +100,113 @@ test("a run with a worktree record skips the clean-tree check", async () => {
       await gitCommit(dir);
       const run = await approved(dir, "worktree-skip");
       const path = join(outside, "wt");
-      await git(dir, ["worktree", "add", "-b", "wt", path, "HEAD"]);
+      const runName = basename(run);
+      await git(dir, ["worktree", "add", "-b", runName, path, "HEAD"]);
       try {
         const runJson = join(run, "run.json");
         const value = JSON.parse(await readFile(runJson, "utf8")) as { base: string };
         await writeFile(
           runJson,
-          `${JSON.stringify({ ...value, worktree: { path, branch: "x" } })}\n`,
+          `${JSON.stringify({ ...value, worktree: { path, branch: "main" } })}\n`,
         );
         await writeFile(join(dir, "dirty.txt"), "dirty\n");
         expect((await start(run, dir)).code).toBe(0);
         expect((await events(run)).some((event) => event.action === "rebased")).toBe(false);
         const saved = JSON.parse(await readFile(runJson, "utf8")) as { base: string };
         expect(saved.base).toBe(value.base);
+      } finally {
+        await git(dir, ["worktree", "remove", "--force", path]);
+      }
+    });
+  });
+});
+
+test("implement start rejects a missing worktree path and adds no event", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await approved(dir, "wt-missing");
+    const before = await events(run);
+    const runJson = join(run, "run.json");
+    const value = JSON.parse(await readFile(runJson, "utf8")) as { base: string };
+    await writeFile(
+      runJson,
+      `${
+        JSON.stringify({ ...value, worktree: { path: join(dir, "missing-dir"), branch: "main" } })
+      }\n`,
+    );
+    const result = await start(run, dir);
+    expect(result.code).toBe(4);
+    expect(result.stderr).toContain("worktree not found");
+    expect(await events(run)).toEqual(before);
+  });
+});
+
+test("implement start rejects a foreign repository worktree and adds no event", async () => {
+  await withTempGitRepo(async (dir) => {
+    await withTempGitRepo(async (foreign) => {
+      await gitCommit(dir);
+      await gitCommit(foreign);
+      const run = await approved(dir, "wt-foreign");
+      const before = await events(run);
+      const runJson = join(run, "run.json");
+      const value = JSON.parse(await readFile(runJson, "utf8")) as { base: string };
+      await writeFile(
+        runJson,
+        `${JSON.stringify({ ...value, worktree: { path: foreign, branch: "main" } })}\n`,
+      );
+      const result = await start(run, dir);
+      expect(result.code).toBe(4);
+      expect(result.stderr).toContain("worktree is not registered with the repository");
+      expect(await events(run)).toEqual(before);
+    });
+  });
+});
+
+test("implement start rejects a detached HEAD worktree and adds no event", async () => {
+  await withTempGitRepo(async (dir) => {
+    await withTempDir(async (outside) => {
+      await gitCommit(dir);
+      const run = await approved(dir, "wt-detached");
+      const before = await events(run);
+      const path = join(outside, "wt");
+      await git(dir, ["worktree", "add", "--detach", path, "HEAD"]);
+      try {
+        const runJson = join(run, "run.json");
+        const value = JSON.parse(await readFile(runJson, "utf8")) as { base: string };
+        await writeFile(
+          runJson,
+          `${JSON.stringify({ ...value, worktree: { path, branch: "main" } })}\n`,
+        );
+        const result = await start(run, dir);
+        expect(result.code).toBe(4);
+        expect(result.stderr).toContain("worktree HEAD is detached");
+        expect(await events(run)).toEqual(before);
+      } finally {
+        await git(dir, ["worktree", "remove", "--force", path]);
+      }
+    });
+  });
+});
+
+test("implement start rejects a worktree checked out on the wrong branch", async () => {
+  await withTempGitRepo(async (dir) => {
+    await withTempDir(async (outside) => {
+      await gitCommit(dir);
+      const run = await approved(dir, "wt-wrong-branch");
+      const before = await events(run);
+      const path = join(outside, "wt");
+      await git(dir, ["worktree", "add", "-b", "other-branch", path, "HEAD"]);
+      try {
+        const runJson = join(run, "run.json");
+        const value = JSON.parse(await readFile(runJson, "utf8")) as { base: string };
+        await writeFile(
+          runJson,
+          `${JSON.stringify({ ...value, worktree: { path, branch: "main" } })}\n`,
+        );
+        const result = await start(run, dir);
+        expect(result.code).toBe(4);
+        expect(result.stderr).toContain("worktree branch is other-branch");
+        expect(await events(run)).toEqual(before);
       } finally {
         await git(dir, ["worktree", "remove", "--force", path]);
       }

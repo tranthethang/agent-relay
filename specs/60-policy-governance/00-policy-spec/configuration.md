@@ -28,10 +28,15 @@ The `worktree` object is strict, so an unknown key in it fails validation.
 
 ## Worktree Settings
 
+- Worktree isolation remains off by default.
 - `run new` reads policy at `HEAD`. An uncommitted policy change has no effect. Other commands read policy at the run `base`.
-- With `worktree.enabled` set to `true`, `run new` creates `<dir>/<run name>` on a new branch named after the run. It fails with `gate` (exit `4`) on a detached `HEAD`, or when the branch or the path exists.
+- With `worktree.enabled` set to `true`, `run new` creates `<dir>/<run name>` on a new branch named after the run.
+- `worktree.dir` cannot point to the repository root or any directory inside the repository. Both `atry policy check` and `atry run new` validate this restriction.
 - The default `dir` is `<repo>_work-tree`, a sibling of the main repo folder.
+- `run new` exclusively reserves the run directory name. A failure during setup rolls back the symlink, the worktree, and the branch.
+- `stage start implement` validates that the registered worktree exists, is registered with Git, is not detached, and matches the run branch.
 - With worktree off, `stage start implement` requires a clean tree outside `.agent-relay/` and moves `base` to `HEAD`.
+- Ignored files remain outside this change. Merging and deleting run branches remain manual.
 - See [`run-layout.md`](../../70-storage-and-git/00-directory-conventions/run-layout.md) for the `run.json` record and [`parallel.md`](../../70-storage-and-git/00-directory-conventions/parallel.md) for parallel runs.
 
 ## Policy Commands

@@ -21,6 +21,7 @@ import {
   mainRoot,
   removeMergedWorktree,
   runGitCwd,
+  validateRunWorktree,
   type WorktreeRemoval,
 } from "./worktree.js";
 
@@ -311,10 +312,31 @@ export async function closeRun(input: {
       lifecycle: saved.run.state.lifecycle,
     };
     if (loaded.run.worktree !== undefined) {
-      result.worktree = await removeMergedWorktree(await mainRoot(input.runDir), {
-        name: basename(input.runDir),
-        worktree: loaded.run.worktree,
-      });
+      try {
+        const root = await mainRoot(input.runDir);
+        result.worktree = await removeMergedWorktree(root, {
+          name: basename(input.runDir),
+          worktree: loaded.run.worktree,
+        });
+        if (result.worktree.removed) {
+          try {
+            await appendEvent(
+              { run: saved.run, events: [...loaded.events, saved.event], warning: null },
+              input.runDir,
+              {
+                stage: "run",
+                action: "cleaned",
+                actor,
+              },
+            );
+          } catch {
+            // Swallow event write failure to report removal and preserve closed run
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        result.worktree = { removed: false, reason: `worktree cleanup failed: ${message}` };
+      }
     }
     return result;
   });
@@ -453,6 +475,9 @@ async function recordStage(
   }
   return withRunLock(input.runDir, async (locked) => {
     assertMove(locked.run.state, stageMove(stage, action));
+    if (action === "started" && stage === "implement" && locked.run.worktree !== undefined) {
+      await validateRunWorktree(input.runDir, locked.run.worktree);
+    }
     const loaded = action === "started" && stage === "implement"
         && locked.run.worktree === undefined
       ? await rebaseRun(input.runDir, locked)

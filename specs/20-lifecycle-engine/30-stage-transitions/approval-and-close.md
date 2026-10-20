@@ -29,3 +29,15 @@
 
 5. **Preview**:
    - `atry close <run> --preview` prints the close readiness status and diagnostic warnings without closing the run.
+
+6. **Worktree Removal**:
+   - When a run has a worktree record, `close` checks if the run branch is merged and the working tree is clean.
+   - If removal fails or unmerged changes remain, `close` reports `worktree: kept (<reason>)` while preserving run closure.
+   - Successful removal appends a `cleaned` run event.
+
+## Worktree Cleanup (`atry worktree cleanup`)
+
+- `atry worktree cleanup <run>` retries removal of a merged worktree for a closed run.
+- It validates the registered worktree and branch, verifies that the branch is merged into base, and checks that the working tree is clean.
+- It returns repeatable results when the worktree is already absent, reconciling any missing `cleaned` event.
+- It refuses active or abandoned runs to prevent accidental loss of uncommitted work.

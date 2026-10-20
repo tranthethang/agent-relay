@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import {
   lstat,
   mkdir,
+  open,
   readFile,
   realpath,
   rm,
@@ -10,13 +11,18 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
+import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { rebuildRun } from "./cache.js";
+import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { isEnoent, readJson } from "./files.js";
 import { gitProgram, treeStatus } from "./git.js";
-import { readPolicy } from "./policy.js";
+import { appendEvent } from "./mutate.js";
+import { readPolicy, validateWorktreeDir } from "./policy.js";
 import { type RunJson, runJsonSchema } from "./run.js";
+import { schemaVersion } from "./vocab.js";
 
 const execFileAsync = promisify(execFile);
 const relayName = ".agent-relay";
@@ -56,6 +62,88 @@ export async function runGitCwd(runDir: string, run: RunJson): Promise<string> {
     throw error;
   }
   return run.worktree.path;
+}
+
+export type WorktreeListEntry = {
+  path: string;
+  head: string;
+  branch?: string;
+  detached?: boolean;
+  bare?: boolean;
+};
+
+export async function listWorktrees(root: string): Promise<WorktreeListEntry[]> {
+  const stdout = await gitOut(root, ["worktree", "list", "--porcelain"]);
+  const entries: WorktreeListEntry[] = [];
+  let current: Partial<WorktreeListEntry> | null = null;
+  for (const line of stdout.split(/\r?\n/)) {
+    if (line.startsWith("worktree ")) {
+      if (current?.path !== undefined && current.head !== undefined) {
+        entries.push(current as WorktreeListEntry);
+      }
+      current = { path: line.slice("worktree ".length) };
+    } else if (line.startsWith("HEAD ")) {
+      if (current !== null) current.head = line.slice("HEAD ".length);
+    } else if (line.startsWith("branch ")) {
+      if (current !== null) {
+        current.branch = line.slice("branch ".length).replace(/^refs\/heads\//, "");
+      }
+    } else if (line === "detached") {
+      if (current !== null) current.detached = true;
+    } else if (line === "bare") {
+      if (current !== null) current.bare = true;
+    }
+  }
+  if (current?.path !== undefined && current.head !== undefined) {
+    entries.push(current as WorktreeListEntry);
+  }
+  return entries;
+}
+
+export async function validateRunWorktree(
+  runDir: string,
+  worktree: WorktreeRecord,
+): Promise<void> {
+  let canonicalWorktreePath: string;
+  try {
+    canonicalWorktreePath = await realpath(worktree.path);
+  } catch (error) {
+    if (isEnoent(error)) {
+      throw new RelayError("gate", "worktree not found", "worktree.path");
+    }
+    throw error;
+  }
+
+  const root = await mainRoot(runDir);
+  const entries = await listWorktrees(root);
+  let matched: WorktreeListEntry | undefined;
+  for (const entry of entries) {
+    try {
+      if (await realpath(entry.path) === canonicalWorktreePath) {
+        matched = entry;
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (matched === undefined) {
+    throw new RelayError("gate", "worktree is not registered with the repository", "worktree.path");
+  }
+
+  if (matched.detached === true) {
+    throw new RelayError("gate", "worktree HEAD is detached", "worktree.path");
+  }
+
+  const runName = basename(runDir);
+  if (matched.branch !== runName) {
+    throw new RelayError(
+      "gate",
+      `worktree branch is ${matched.branch ?? "none"}, expected ${runName}`,
+      "worktree.branch",
+    );
+  }
 }
 
 // The worktree sees the main repo run history through a link, so runs stay in one place.
@@ -104,6 +192,25 @@ export async function worktreeSettings(
   return { ...(policy.worktree.dir === undefined ? {} : { dir: policy.worktree.dir }), branch };
 }
 
+// Roll back a created worktree, its relay symlink, and its branch.
+export async function rollbackWorktree(
+  root: string,
+  path: string,
+  branchName: string,
+): Promise<void> {
+  const link = join(path, relayName);
+  try {
+    await unlink(link);
+  } catch (error) {
+    if (!isEnoent(error)) await rm(link, { force: true }).catch(() => undefined);
+  }
+  await gitOut(root, ["worktree", "remove", "--force", path]).catch(() => undefined);
+  await gitOut(root, ["branch", "-D", branchName]).catch(() => undefined);
+  if (await pathExists(path)) {
+    await rm(path, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 // Create `<dir>/<name>` on a new branch `<name>`, link `.agent-relay`, and ignore the link.
 // A failure removes the worktree and the branch again.
 export async function addWorktree(
@@ -120,19 +227,24 @@ export async function addWorktree(
   if (await branchExists(root, input.name)) {
     throw new RelayError("gate", "worktree branch already exists", input.name);
   }
+  await validateWorktreeDir(root, settings.dir);
   await mkdir(dir, { recursive: true });
   try {
     await gitOut(root, ["worktree", "add", "-b", input.name, path, input.head]);
   } catch (error) {
+    if (await branchExists(root, input.name)) {
+      await gitOut(root, ["branch", "-D", input.name]).catch(() => undefined);
+    }
+    if (await pathExists(path)) {
+      await rm(path, { recursive: true, force: true }).catch(() => undefined);
+    }
     throw new RelayError("gate", `git worktree add failed: ${gitMessage(error)}`, path);
   }
   try {
     await linkRelay(path, relayDir);
     await excludeRelay(root);
   } catch (error) {
-    await rm(join(path, relayName), { force: true }).catch(() => undefined);
-    await gitOut(root, ["worktree", "remove", "--force", path]).catch(() => undefined);
-    await gitOut(root, ["branch", "-D", input.name]).catch(() => undefined);
+    await rollbackWorktree(root, path, input.name);
     throw error;
   }
   return { path, branch: settings.branch };
@@ -188,15 +300,22 @@ export async function removeMergedWorktree(
   if (reason !== null) return { removed: false, reason };
   const link = join(run.worktree.path, relayName);
   // Remove the link first, so `git worktree remove` cannot reach the real `.agent-relay/`.
+  let unlinked = false;
   try {
     await unlink(link);
+    unlinked = true;
   } catch (error) {
-    if (!isEnoent(error)) throw error;
+    if (!isEnoent(error)) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { removed: false, reason: `unlink .agent-relay failed: ${message}` };
+    }
   }
   try {
     await gitOut(root, ["worktree", "remove", run.worktree.path]);
   } catch (error) {
-    await linkRelay(run.worktree.path, join(root, relayName)).catch(() => undefined);
+    if (unlinked) {
+      await linkRelay(run.worktree.path, join(root, relayName)).catch(() => undefined);
+    }
     return { removed: false, reason: `git worktree remove failed: ${gitMessage(error)}` };
   }
   return { removed: true };
@@ -228,4 +347,142 @@ async function gitOut(cwd: string, args: string[]): Promise<string> {
 function gitMessage(error: unknown): string {
   const stderr = error instanceof Error && "stderr" in error ? String(error.stderr).trim() : "";
   return stderr.length > 0 ? stderr : "unknown error";
+}
+
+export type WorktreeCleanupResult = {
+  schema: 1;
+  path: string;
+  worktree: WorktreeRemoval;
+};
+
+export function worktreeCleanupText(result: WorktreeCleanupResult): string {
+  if (result.worktree.removed) return "worktree: removed\n";
+  return `worktree: kept (${result.worktree.reason ?? "unknown"})\n`;
+}
+
+async function withWorktreeCleanupLock<T>(
+  runDir: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const lockDir = join(runDir, "locks");
+  const lockPath = join(lockDir, "run.lock");
+  await mkdir(lockDir, { recursive: true });
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    let handle;
+    try {
+      handle = await open(lockPath, "wx");
+      await handle.writeFile(
+        JSON.stringify({
+          pid: process.pid,
+          host: hostname() || "unknown",
+          ts: new Date().toISOString(),
+        }) + "\n",
+      );
+      await handle.close();
+      break;
+    } catch (error) {
+      await handle?.close().catch(() => undefined);
+      if (handle !== undefined) {
+        await rm(lockPath, { force: true });
+        throw error;
+      }
+      const code = error instanceof Error && "code" in error && typeof error.code === "string"
+        ? error.code
+        : "";
+      if (code !== "EEXIST" && code !== "EPERM") throw error;
+      if (Date.now() >= deadline) {
+        throw new RelayError("lock", "run lock timed out", "locks/run.lock");
+      }
+      try {
+        const info = await stat(lockPath);
+        if (Date.now() - info.mtimeMs >= 30_000) {
+          await rm(lockPath, { force: true });
+          continue;
+        }
+      } catch (staleError) {
+        const staleCode = staleError instanceof Error && "code" in staleError
+            && typeof staleError.code === "string"
+          ? staleError.code
+          : "";
+        if (staleCode !== "ENOENT") throw staleError;
+        continue;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+}
+
+export async function cleanupWorktree(runDir: string): Promise<WorktreeCleanupResult> {
+  return withWorktreeCleanupLock(runDir, async () => {
+    const loaded = await rebuildRun(runDir);
+    if (loaded.run.worktree === undefined) {
+      throw new RelayError("gate", "run has no worktree", "worktree");
+    }
+    if (loaded.run.state.lifecycle !== "closed") {
+      throw new RelayError(
+        "gate",
+        `worktree cleanup refused: run is ${loaded.run.state.lifecycle}`,
+        "state.lifecycle",
+      );
+    }
+    const exists = await pathExists(loaded.run.worktree.path);
+    if (!exists) {
+      const hasCleaned = loaded.events.some((e) => e.stage === "run" && e.action === "cleaned");
+      if (!hasCleaned) {
+        try {
+          const actor = detectTool(process.env) === undefined ? "unknown" : "agent-env";
+          await appendEvent(loaded, runDir, {
+            stage: "run",
+            action: "cleaned",
+            actor,
+          });
+        } catch {
+          // Swallow write failure to report removal
+        }
+      }
+      return {
+        schema: schemaVersion,
+        path: runDir,
+        worktree: { removed: true },
+      };
+    }
+    try {
+      await validateRunWorktree(runDir, loaded.run.worktree);
+      const root = await mainRoot(runDir);
+      const removal = await removeMergedWorktree(root, {
+        name: basename(runDir),
+        worktree: loaded.run.worktree,
+      });
+      if (removal.removed) {
+        try {
+          const actor = detectTool(process.env) === undefined ? "unknown" : "agent-env";
+          await appendEvent(loaded, runDir, {
+            stage: "run",
+            action: "cleaned",
+            actor,
+          });
+        } catch {
+          // Swallow write failure to report removal
+        }
+      }
+      return {
+        schema: schemaVersion,
+        path: runDir,
+        worktree: removal,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        schema: schemaVersion,
+        path: runDir,
+        worktree: { removed: false, reason: message },
+      };
+    }
+  });
 }

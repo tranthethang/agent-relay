@@ -1,5 +1,5 @@
-import { mkdir, rm, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { mkdir, realpath, rm, stat } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { findRelayDir, listRunNames, runIdFromName } from "./discover.js";
 import { RelayError } from "./error.js";
@@ -15,7 +15,12 @@ import {
   slugSchema,
   ymdSchema,
 } from "./vocab.js";
-import { addWorktree, type WorktreeRecord, worktreeSettings } from "./worktree.js";
+import {
+  addWorktree,
+  rollbackWorktree,
+  type WorktreeRecord,
+  worktreeSettings,
+} from "./worktree.js";
 
 const stageDirs = ["10-plan", "20-implement", "30-self-review", "40-cross-review"] as const;
 
@@ -75,51 +80,56 @@ export async function createRun(input: {
   const settings = await worktreeSettings(input.cwd, head);
   const relayDir = await ensureRelay(input.cwd);
   const from = input.from === undefined ? undefined : await resolveBrainstorm(relayDir, input.from);
-  const id = await allocateId(relayDir, nowMs);
-  const name = `${ymd}-${id}-${slug}`;
-  const runDir = join(relayDir, name);
-  await mkdir(runDir, { recursive: true });
-  for (const dir of stageDirs) await mkdir(join(runDir, dir));
+  const { id, name, runDir } = await reserveRunDir(relayDir, ymd, slug, nowMs);
   let worktree: WorktreeRecord | undefined;
+  let worktreeCreated = false;
   try {
-    if (settings !== null) worktree = await addWorktree(settings, { relayDir, name, head });
+    for (const dir of stageDirs) await mkdir(join(runDir, dir));
+    if (settings !== null) {
+      worktree = await addWorktree(settings, { relayDir, name, head });
+      worktreeCreated = true;
+    }
+    const event: EventLine = eventLineSchema.parse({
+      schema: schemaVersion,
+      ts: new Date(nowMs).toISOString(),
+      stage: "run" as const,
+      action: "created" as const,
+      ...(from === undefined ? {} : { ref: from }),
+    });
+    const run = runJsonSchema.parse({
+      schema: schemaVersion,
+      id,
+      ymd,
+      slug,
+      title,
+      base: head,
+      ...(from === undefined ? {} : { from }),
+      ...(worktree === undefined ? {} : { worktree }),
+      state: reduceEvents([event]),
+    });
+    await atomicWrite(join(runDir, "run.json"), `${JSON.stringify(run)}\n`);
+    await atomicWrite(join(runDir, "events.jsonl"), `${JSON.stringify(event)}\n`);
+    const result: RunNewResult = {
+      schema: schemaVersion,
+      path: runDir,
+      name,
+      id,
+      ymd,
+      slug,
+      title,
+      base: head,
+    };
+    if (from !== undefined) result.from = from;
+    if (worktree !== undefined) result.worktree = worktree;
+    return result;
   } catch (error) {
+    if (worktreeCreated && worktree !== undefined) {
+      const root = dirname(await realpath(relayDir));
+      await rollbackWorktree(root, worktree.path, name);
+    }
     await rm(runDir, { recursive: true, force: true });
     throw error;
   }
-  const event: EventLine = eventLineSchema.parse({
-    schema: schemaVersion,
-    ts: new Date(nowMs).toISOString(),
-    stage: "run" as const,
-    action: "created" as const,
-    ...(from === undefined ? {} : { ref: from }),
-  });
-  const run = runJsonSchema.parse({
-    schema: schemaVersion,
-    id,
-    ymd,
-    slug,
-    title,
-    base: head,
-    ...(from === undefined ? {} : { from }),
-    ...(worktree === undefined ? {} : { worktree }),
-    state: reduceEvents([event]),
-  });
-  await atomicWrite(join(runDir, "run.json"), `${JSON.stringify(run)}\n`);
-  await atomicWrite(join(runDir, "events.jsonl"), `${JSON.stringify(event)}\n`);
-  const result: RunNewResult = {
-    schema: schemaVersion,
-    path: runDir,
-    name,
-    id,
-    ymd,
-    slug,
-    title,
-    base: head,
-  };
-  if (from !== undefined) result.from = from;
-  if (worktree !== undefined) result.worktree = worktree;
-  return result;
 }
 
 export async function createBrainstorm(input: {
@@ -169,13 +179,31 @@ async function ensureRelay(cwd: string): Promise<string> {
   }
 }
 
-async function allocateId(relayDir: string, nowMs: number): Promise<string> {
+async function reserveRunDir(
+  relayDir: string,
+  ymd: string,
+  slug: string,
+  nowMs: number,
+): Promise<{ id: string; name: string; runDir: string }> {
   const used = new Set((await listRunNames(relayDir)).map((name) => runIdFromName(name)));
-  let id = Math.floor(nowMs / 1000);
-  while (used.has(String(id))) id += 1;
-  const text = String(id);
-  requireMatch(runIdSchema, text, "id", "run id overflow");
-  return text;
+  let idNumber = Math.floor(nowMs / 1000);
+  while (used.has(String(idNumber))) idNumber += 1;
+  while (true) {
+    const id = requireMatch(runIdSchema, String(idNumber), "id", "run id overflow");
+    const name = `${ymd}-${id}-${slug}`;
+    const runDir = join(relayDir, name);
+    try {
+      await mkdir(runDir);
+      return { id, name, runDir };
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+        idNumber += 1;
+        while (used.has(String(idNumber))) idNumber += 1;
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 export async function resolveBrainstorm(relayDir: string, token: string): Promise<string> {

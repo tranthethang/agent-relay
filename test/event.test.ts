@@ -42,3 +42,15 @@ test("parseEventLine rejects an unknown action", () => {
 test("parseEventLine rejects an unknown tool", () => {
   expect(() => parseEventLine({ ...validEvent, tool: "claude" })).toThrow();
 });
+
+test("parseEventLine accepts cleaned action", () => {
+  const event = parseEventLine({
+    schema: 1,
+    ts: "2026-10-17T04:26:00.000Z",
+    stage: "run",
+    action: "cleaned",
+    actor: "agent-env",
+  });
+  expect(event.action).toBe("cleaned");
+  expect(event.stage).toBe("run");
+});

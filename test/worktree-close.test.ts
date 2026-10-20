@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
@@ -132,5 +132,107 @@ test("close still closes the run when git worktree remove fails", async () => {
     } finally {
       await git(repo, ["worktree", "unlock", run.worktree.path]);
     }
+  });
+});
+
+test("close still closes the run when unlinking .agent-relay fails", async () => {
+  await withReviewedRun(async (repo, run) => {
+    await git(repo, ["merge", "--ff-only", run.name]);
+    const link = join(run.worktree.path, ".agent-relay");
+    await rm(link);
+    await mkdir(join(link, "nested"), { recursive: true });
+    try {
+      const closed = await runCli(["close", run.path, "--via", "arg"], repo);
+      expect(closed.code).toBe(0);
+      expect(closed.stdout).toContain("lifecycle: closed");
+      expect(closed.stdout).toContain("worktree: kept (unlink .agent-relay failed:");
+      const context = await runCli(["context", run.path, "--json"], repo);
+      expect(context.code).toBe(0);
+      expect(JSON.parse(context.stdout)).toMatchObject({ lifecycle: "closed" });
+    } finally {
+      await rm(link, { recursive: true, force: true });
+    }
+  });
+});
+
+test("worktree cleanup removes merged worktree for closed run and is idempotent", async () => {
+  await withReviewedRun(async (repo, run) => {
+    // Close while unmerged -> worktree is kept
+    const closed = await runCli(["close", run.path, "--via", "arg"], repo);
+    expect(closed.code).toBe(0);
+    expect(closed.stdout).toContain("worktree: kept (branch not merged");
+    expect(await exists(run.worktree.path)).toBe(true);
+
+    // Merge now
+    await git(repo, ["merge", "--ff-only", run.name]);
+
+    // Retry cleanup
+    const cleaned = await runCli(["worktree", "cleanup", run.path], repo);
+    expect(cleaned.code).toBe(0);
+    expect(cleaned.stdout).toContain("worktree: removed");
+    expect(await exists(run.worktree.path)).toBe(false);
+
+    // Check cleaned event recorded
+    const events = (await readFile(join(run.path, "events.jsonl"), "utf8")).trim().split("\n");
+    expect(events.some((line) => JSON.parse(line).action === "cleaned")).toBe(true);
+
+    // Repeat cleanup is idempotent
+    const repeat = await runCli(["worktree", "cleanup", run.path], repo);
+    expect(repeat.code).toBe(0);
+    expect(repeat.stdout).toContain("worktree: removed");
+  });
+});
+
+test("worktree cleanup reconciles missing cleaned event when worktree is gone", async () => {
+  await withReviewedRun(async (repo, run) => {
+    await git(repo, ["merge", "--ff-only", run.name]);
+    const closed = await runCli(["close", run.path, "--via", "arg"], repo);
+    expect(closed.code).toBe(0);
+    expect(await exists(run.worktree.path)).toBe(false);
+
+    // Filter out the cleaned event to simulate write failure after removal
+    const eventsFile = join(run.path, "events.jsonl");
+    const rawEvents = (await readFile(eventsFile, "utf8")).trim().split("\n");
+    const withoutCleaned = rawEvents.filter((line) => JSON.parse(line).action !== "cleaned");
+    await writeFile(eventsFile, `${withoutCleaned.join("\n")}\n`);
+
+    // Verify cleaned event is missing
+    const beforeEvents = (await readFile(eventsFile, "utf8")).trim().split("\n");
+    expect(beforeEvents.some((line) => JSON.parse(line).action === "cleaned")).toBe(false);
+
+    // Worktree cleanup reconciles the missing event
+    const cleaned = await runCli(["worktree", "cleanup", run.path], repo);
+    expect(cleaned.code).toBe(0);
+    expect(cleaned.stdout).toContain("worktree: removed");
+
+    const afterEvents = (await readFile(eventsFile, "utf8")).trim().split("\n");
+    expect(afterEvents.some((line) => JSON.parse(line).action === "cleaned")).toBe(true);
+  });
+});
+
+test("worktree cleanup refuses non-closed or abandoned runs and unmerged worktrees", async () => {
+  await withReviewedRun(async (repo, run) => {
+    // Calling cleanup on active run is refused
+    const activeResult = await runCli(["worktree", "cleanup", run.path], repo);
+    expect(activeResult.code).not.toBe(0);
+    expect(activeResult.stderr).toContain("worktree cleanup refused: run is reviewing");
+
+    // Close while unmerged -> retry cleanup refuses unmerged
+    await runCli(["close", run.path, "--via", "arg"], repo);
+    const unmergedResult = await runCli(["worktree", "cleanup", run.path], repo);
+    expect(unmergedResult.code).toBe(0);
+    expect(unmergedResult.stdout).toContain(
+      `worktree: kept (branch not merged into ${run.worktree.branch})`,
+    );
+  });
+
+  // Test abandoned run
+  await withReviewedRun(async (repo, run) => {
+    const abandoned = await runCli(["close", run.path, "--abandon", "no longer needed"], repo);
+    expect(abandoned.code).toBe(0);
+    const cleanupResult = await runCli(["worktree", "cleanup", run.path], repo);
+    expect(cleanupResult.code).not.toBe(0);
+    expect(cleanupResult.stderr).toContain("worktree cleanup refused: run is abandoned");
+    expect(await exists(run.worktree.path)).toBe(true);
   });
 });
