@@ -10,7 +10,8 @@ const execFileAsync = promisify(execFile);
 type Created = { path: string; name: string; worktree: { path: string; branch: string } };
 
 async function git(cwd: string, args: string[]): Promise<string> {
-  return (await execFileAsync("git", args, { cwd })).stdout.trim();
+  const identity = ["-c", "user.email=test@example.com", "-c", "user.name=test"];
+  return (await execFileAsync("git", [...identity, ...args], { cwd })).stdout.trim();
 }
 
 async function withReviewedRun(fn: (repo: string, run: Created) => Promise<void>): Promise<void> {
