@@ -71,6 +71,7 @@ atry plan done <run>
 atry approve <run> --via confirm|arg
 atry approve <run> --preview
 atry close <run> --preview
+atry policy init [--preset lenient|standard|strict]
 atry stage start <run> implement --tool <tool>
 atry task start <run> T1
 atry task done <run> T1
@@ -139,8 +140,24 @@ After a user answers a completed review's open item, record the answer with
 `atry review decide <run> Q<n> <answer>`. A decision is stored in
 `events.jsonl`; a later review can then close that question.
 
-`atry policy init` writes a template `.agent-relay.json` at the git root. The
-template holds the defaults and `"worktree": { "enabled": false }`. The command
+| Key                      | What it controls                                        |
+| ------------------------ | ------------------------------------------------------- |
+| `requireReviews`         | Review kinds `close` requires: `self`, `cross`, or both |
+| `smallChange`            | Below this many changed lines, only `self` is required  |
+| `testCommand`            | Command that `review done` runs and records             |
+| `worktree.enabled`       | One git worktree and branch per run                     |
+| `worktree.dir`           | Folder for run worktrees, outside the repo              |
+| `strict.scope`           | Refuse edits outside task `files` (hook: deny, not ask) |
+| `strict.plan`            | Refuse plans with more than eight tasks                 |
+| `strict.reviewIntegrity` | Refuse `close` on review warnings, even with `--via`    |
+
+Each option, its default, and the commands that read it are in
+[`configuration.md`](specs/60-policy-governance/00-policy-spec/configuration.md).
+
+`atry policy init` writes a template `.agent-relay.json` at the git root.
+`--preset lenient|standard|strict` picks the template; the default is
+`standard`. The `standard` template holds the defaults and
+`"worktree": { "enabled": false }`. The command
 refuses when the file exists. It does not stage or commit the file. You must
 commit it, because runs read policy only at their base commit.
 
