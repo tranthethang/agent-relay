@@ -1,5 +1,4 @@
 import { type Command } from "commander";
-import { RelayError } from "../core/error.js";
 import {
   planAmend,
   planDone,
@@ -11,7 +10,7 @@ import {
   taskSkip,
   taskStart,
 } from "../core/plan.js";
-import { oneToken, selectRun } from "../core/select.js";
+import { commandJson, flagRun, takeRun } from "./distill.js";
 import { writeResult } from "./output.js";
 
 export function registerPlan(program: Command): void {
@@ -91,19 +90,4 @@ export function registerPlan(program: Command): void {
         taskMoveText,
       );
     });
-}
-
-async function takeRun(command: Command, positional: string | undefined): Promise<string> {
-  const token = oneToken(positional, flagRun(command));
-  if (token === undefined) throw new RelayError("usage", "run is required", "run");
-  return selectRun(process.cwd(), token);
-}
-
-function commandJson(command: Command): boolean {
-  return command.optsWithGlobals().json === true;
-}
-
-function flagRun(command: Command): string | undefined {
-  const run = command.optsWithGlobals().run;
-  return typeof run === "string" ? run : undefined;
 }

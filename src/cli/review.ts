@@ -1,8 +1,7 @@
 import { type Command } from "commander";
 import { decideQuestion, decideText } from "../core/decide.js";
-import { RelayError } from "../core/error.js";
 import { reviewDone, reviewDoneText, reviewNew, reviewNewText } from "../core/review.js";
-import { oneToken, selectRun } from "../core/select.js";
+import { commandJson, flagRun, takeRun } from "./distill.js";
 import { withWarnings, writeResult } from "./output.js";
 
 export function registerReview(program: Command): void {
@@ -55,19 +54,4 @@ export function registerReview(program: Command): void {
       const { warnings, ...body } = result;
       writeResult(withWarnings(body, warnings), commandJson(command), reviewDoneText);
     });
-}
-
-async function takeRun(command: Command, positional: string | undefined): Promise<string> {
-  const token = oneToken(positional, flagRun(command));
-  if (token === undefined) throw new RelayError("usage", "run is required", "run");
-  return selectRun(process.cwd(), token);
-}
-
-function commandJson(command: Command): boolean {
-  return command.optsWithGlobals().json === true;
-}
-
-function flagRun(command: Command): string | undefined {
-  const run = command.optsWithGlobals().run;
-  return typeof run === "string" ? run : undefined;
 }

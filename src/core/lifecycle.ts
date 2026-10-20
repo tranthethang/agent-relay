@@ -10,7 +10,7 @@ import { changedPaths, gitHead, treeDiffSize, treeStatus, workTree } from "./git
 import { appendEvent, withRunLock } from "./mutate.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
-import { parseReviewJson, reviewJsonSchema } from "./review.js";
+import { parseReviewJson, readReviewDocument } from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
 import { outsidePaths } from "./scope.js";
 import { openPlanTasks, planIndexSchema, readPlanIndex } from "./tasks.js";
@@ -813,22 +813,7 @@ async function readReview(
   runDir: string,
   rel: string,
 ): Promise<Awaited<ReturnType<typeof parseReviewJson>>["open"]> {
-  let value: unknown;
-  try {
-    value = await readJson(join(runDir, rel));
-  } catch (error) {
-    if (error instanceof RelayError && error.message === "invalid JSON") {
-      throw new RelayError("validation", "invalid JSON", rel);
-    }
-    throw error;
-  }
-  const parsed = reviewJsonSchema.safeParse(value);
-  if (!parsed.success) {
-    const issue = fromZod(parsed.error);
-    const fieldPath = issue.fieldPath.length === 0 ? rel : `${rel}:${issue.fieldPath}`;
-    throw new RelayError("validation", issue.message, fieldPath);
-  }
-  return parsed.data.open;
+  return (await readReviewDocument(runDir, rel)).open;
 }
 
 function unresolvedOpenCount(

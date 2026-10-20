@@ -138,30 +138,43 @@ async function runNext(args: string[], cwd = repoRoot) {
 function loadNext(id: number): Promise<unknown> {
   switch (id) {
     case 1:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=1");
     case 2:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=2");
     case 3:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=3");
     case 4:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=4");
     case 5:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=5");
     case 6:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=6");
     case 7:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=7");
     case 8:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=8");
     case 9:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=9");
     case 10:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=10");
     case 11:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=11");
     case 12:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=12");
     case 13:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=13");
     default:
       throw new Error(`missing next-version import case ${id}`);

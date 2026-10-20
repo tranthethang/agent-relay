@@ -1,7 +1,9 @@
+import { Command } from "commander";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { takeRun } from "../src/cli/distill.js";
 import { gitCommit, runCli, withTempGitRepo } from "./helper.js";
 import { createRun } from "./plan-helper.js";
 
@@ -72,4 +74,15 @@ test("atry distill works after the run is abandoned", async () => {
     expect(created.code).toBe(0);
     expect(JSON.parse(created.stdout).files).toBeGreaterThan(0);
   });
+});
+
+test("atry distill accepts the same --run value and rejects a missing run", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "distill-flag");
+    const flagged = await runCli(["distill", "--run", run, run, "--json"], dir);
+    expect(flagged.code).toBe(0);
+    expect(JSON.parse(flagged.stdout).files).toBeGreaterThan(0);
+  });
+  await expect(takeRun(new Command(), undefined)).rejects.toThrow("run is required");
 });

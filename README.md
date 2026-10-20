@@ -252,6 +252,9 @@ scaffold that already has every key. Task status lives in events.
 npm test
 npm run check
 npm run sync:check
+git config core.hooksPath .githooks
+brew install dprint
+brew install sonar-scanner
 ```
 
 Contributor rules: [`AGENTS.md`](AGENTS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).

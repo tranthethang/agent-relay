@@ -1,6 +1,7 @@
-import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { exists } from "./claim.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
@@ -383,6 +384,14 @@ async function readLatestReview(
   const latest = files.at(-1);
   if (latest === undefined) throw new RelayError("not_found", "review not found", dirName);
   const rel = `${dirName}/${latest}`;
+  const value = await readReviewDocument(runDir, rel);
+  if (value.kind !== kind) {
+    throw new RelayError("validation", "kind does not match", `${rel}:kind`);
+  }
+  return { rel, value };
+}
+
+export async function readReviewDocument(runDir: string, rel: string): Promise<ReviewJson> {
   let value: unknown;
   try {
     value = await readJson(join(runDir, rel));
@@ -398,10 +407,7 @@ async function readLatestReview(
     const fieldPath = issue.fieldPath.length === 0 ? rel : `${rel}:${issue.fieldPath}`;
     throw new RelayError("validation", issue.message, fieldPath);
   }
-  if (parsed.data.kind !== kind) {
-    throw new RelayError("validation", "kind does not match", `${rel}:kind`);
-  }
-  return { rel, value: parsed.data };
+  return parsed.data;
 }
 
 function reviewNumber(name: string): number {
@@ -480,14 +486,4 @@ function parseKind(value: string): ReviewKind {
 function parseModel(value: string): string {
   if (value.trim().length === 0) throw new RelayError("validation", "model is empty", "model");
   return value;
-}
-
-async function exists(filePath: string): Promise<boolean> {
-  try {
-    await stat(filePath);
-    return true;
-  } catch (error) {
-    if (isEnoent(error)) return false;
-    throw error;
-  }
 }

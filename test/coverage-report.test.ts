@@ -1,8 +1,10 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import {
+  assertCoverageBars,
+  assertDuplication,
   buildReport,
   lcovFromCoverage,
   listSourceFiles,
@@ -219,10 +221,13 @@ async function runReport(cwd: string) {
 function loadReport(id: number): Promise<unknown> {
   switch (id) {
     case 1:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/coverage-report.ts?cli=1");
     case 2:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/coverage-report.ts?cli=2");
     case 3:
+      // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/coverage-report.ts?cli=3");
     default:
       throw new Error(`missing coverage-report import case ${id}`);
@@ -269,9 +274,33 @@ test("coverage-report CLI runs successfully and handles errors", async () => {
     expect(noMap.stderr).toContain("source map missing");
 
     await writeFile(join(root, "dist", "atry.js.map"), sourceMap);
-    const ok = await runReport(root);
-    expect(ok.status).toBe(0);
-    expect(ok.stdout).toContain("files:");
+    const bin = await installScanner(root);
+    const previousFetch = globalThis.fetch;
+    const previousHost = process.env.SONAR_HOST_URL;
+    const previousToken = process.env.SONAR_TOKEN;
+    const previousPath = process.env.PATH;
+    const previousWinPath = process.env.Path;
+    const calls: string[] = [];
+    const nextPath = `${bin}${delimiter}${previousPath ?? ""}`;
+    process.env.PATH = nextPath;
+    process.env.Path = nextPath;
+    process.env.SONAR_HOST_URL = "https://sonarqube.example/";
+    process.env.SONAR_TOKEN = "token";
+    globalThis.fetch = mockSonarFetch(calls, [{ status: "SUCCESS" }], "1");
+    try {
+      const ok = await runReport(root);
+      expect(ok.status).toBe(0);
+      expect(ok.stdout).toContain("files:");
+      expect(calls.some((url) => url.includes("qualitygates"))).toBe(false);
+      expect(calls.some((url) => url.includes("component=agent-relay"))).toBe(true);
+      expect(calls.some((url) => url.includes("duplicated_lines_density"))).toBe(true);
+    } finally {
+      globalThis.fetch = previousFetch;
+      restoreEnv("SONAR_HOST_URL", previousHost);
+      restoreEnv("SONAR_TOKEN", previousToken);
+      restoreEnv("PATH", previousPath);
+      restoreEnv("Path", previousWinPath);
+    }
   });
 });
 
@@ -509,3 +538,310 @@ test("buildReport handles edge cases in bundle mapping, branches, and functions"
     expect(report.files.length).toBe(3);
   });
 });
+
+test("assertCoverageBars fails when overall coverage is below 95", async () => {
+  await withTempDir(async (root) => {
+    const coverage = {
+      [join(root, "src", "wide.ts")]: countedFile(1000, 949),
+    };
+    expect(() => assertCoverageBars(root, coverage)).toThrow(
+      "overall coverage below 95%: 94.9",
+    );
+  });
+});
+
+test("assertCoverageBars fails when a gated file is at 90", async () => {
+  await withTempDir(async (root) => {
+    const coverage = {
+      [join(root, "src", "low.ts")]: countedFile(10, 9),
+      [join(root, "scripts", "maint", "high.ts")]: countedFile(1000, 1000),
+    };
+    expect(() => assertCoverageBars(root, coverage)).toThrow(
+      "per-file coverage at or below 90%: src/low.ts 90",
+    );
+  });
+});
+
+test("assertCoverageBars counts line and branch totals for both trees", async () => {
+  await withTempDir(async (root) => {
+    const passing = {
+      [join(root, "src", "lines.ts")]: countedFile(10, 9, 10, 10),
+      [join(root, "scripts", "maint", "lines.ts")]: countedFile(1000, 1000),
+      [join(root, "tsup.config.ts")]: countedFile(10, 0),
+      [join(root, "src", "empty.ts")]: countedFile(0, 0, 4, 0),
+    };
+    expect(() => assertCoverageBars(root, passing)).not.toThrow();
+
+    const maintLow = {
+      [join(root, "src", "full.ts")]: countedFile(100, 100),
+      [join(root, "scripts", "maint", "low.ts")]: countedFile(100, 90),
+    };
+    expect(() => assertCoverageBars(root, maintLow)).toThrow(
+      "per-file coverage at or below 90%: scripts/maint/low.ts 90",
+    );
+  });
+});
+
+test("assertCoverageBars passes at 95 overall and above 90 per file", async () => {
+  await withTempDir(async (root) => {
+    expect(() => {
+      assertCoverageBars(root, {
+        [join(root, "src", "edge.ts")]: countedFile(1000, 901),
+        [join(root, "scripts", "maint", "edge.ts")]: countedFile(980, 980),
+      });
+    }).not.toThrow();
+  });
+});
+
+test("assertDuplication fails when the host or token is missing", async () => {
+  await withTempDir(async (root) => {
+    await expect(assertDuplication({ root, env: { SONAR_TOKEN: "token" } })).rejects.toThrow(
+      "SONAR_HOST_URL missing",
+    );
+    await expect(assertDuplication({
+      root,
+      env: { SONAR_HOST_URL: "https://sonarqube.example", SONAR_TOKEN: "  " },
+    })).rejects.toThrow("SONAR_TOKEN missing");
+  });
+});
+
+test("assertDuplication fails when sonar-scanner is missing or exits non-zero", async () => {
+  await withTempDir(async (root) => {
+    const empty = join(root, "empty-bin");
+    await mkdir(empty);
+    const env = sonarEnv(empty);
+    await expect(assertDuplication({ root, env })).rejects.toThrow("sonar-scanner missing");
+    const bin = await installScanner(root, 1);
+    await expect(assertDuplication({ root, env: sonarEnv(bin) })).rejects.toThrow(
+      "sonar-scanner failed",
+    );
+  });
+});
+
+test("assertDuplication fails when the analysis task id is missing", async () => {
+  await withTempDir(async (root) => {
+    const env = { SONAR_HOST_URL: "https://sonarqube.example", SONAR_TOKEN: "token" };
+    const runScanner = async () => {};
+    await expect(assertDuplication({ root, env, runScanner })).rejects.toThrow(
+      "analysis task id missing",
+    );
+    await mkdir(join(root, ".scannerwork"));
+    await writeFile(join(root, ".scannerwork", "report-task.txt"), "projectKey=agent-relay\n");
+    await expect(assertDuplication({ root, env, runScanner })).rejects.toThrow(
+      "analysis task id missing",
+    );
+  });
+});
+
+test("assertDuplication fails when the analysis task does not succeed", async () => {
+  await withTempDir(async (root) => {
+    await expect(duplicationInput(root, [{ status: "FAILED" }]).run()).rejects.toThrow(
+      "analysis task FAILED",
+    );
+    await expect(duplicationInput(root, [{ status: "CANCELED" }]).run()).rejects.toThrow(
+      "analysis task CANCELED",
+    );
+    await expect(duplicationInput(root, [{ task: {} }]).run()).rejects.toThrow(
+      "analysis task status missing",
+    );
+    await expect(duplicationInput(root, [], "1", 503).run()).rejects.toThrow(
+      "sonar request failed: 503",
+    );
+    const slept: number[] = [];
+    await expect(assertDuplication({
+      root,
+      env: { SONAR_HOST_URL: "https://sonarqube.example", SONAR_TOKEN: "token" },
+      runScanner: async () => {},
+      readTaskFile: async () => "ceTaskId=task-1\n",
+      attempts: 1,
+      sleep: async (ms) => {
+        slept.push(ms);
+      },
+      fetchImpl: mockSonarFetch([], [{ status: "PENDING" }], "1"),
+    })).rejects.toThrow("analysis task timed out");
+    expect(slept).toEqual([1000]);
+  });
+});
+
+test("assertDuplication waits with the default pause", async () => {
+  vi.useFakeTimers();
+  try {
+    const run = assertDuplication({
+      root: "/tmp/coverage-bars",
+      env: { SONAR_HOST_URL: "https://sonarqube.example", SONAR_TOKEN: "token" },
+      runScanner: async () => {},
+      readTaskFile: async () => "ceTaskId=task-1\n",
+      attempts: 1,
+      fetchImpl: mockSonarFetch([], [{ status: "PENDING" }], "1"),
+    });
+    const assertion = expect(run).rejects.toThrow("analysis task timed out");
+    await vi.advanceTimersByTimeAsync(1000);
+    await assertion;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("assertDuplication reads duplicated lines density and ignores the quality gate", async () => {
+  await withTempDir(async (root) => {
+    const pending = duplicationInput(root, [{ status: "IN_PROGRESS" }, { status: "SUCCESS" }], "1");
+    await expect(pending.run()).resolves.toBeUndefined();
+    expect(pending.calls.some((url) => url.includes("qualitygates"))).toBe(false);
+    expect(pending.calls.some((url) => url.includes("/api/ce/task?id=task-1"))).toBe(true);
+    await expect(duplicationInput(root, [{ status: "SUCCESS" }], "1.1").run()).rejects.toThrow(
+      "duplicated lines density above 1%: 1.1",
+    );
+    await expect(duplicationInput(root, [{ status: "SUCCESS" }], null).run()).rejects.toThrow(
+      "duplicated lines density missing",
+    );
+    await expect(duplicationInput(root, [{ status: "SUCCESS" }], "nope").run()).rejects.toThrow(
+      "duplicated lines density missing",
+    );
+    await expect(assertDuplication({
+      root,
+      env: { SONAR_HOST_URL: "https://sonarqube.example", SONAR_TOKEN: "token" },
+      runScanner: async () => {},
+      readTaskFile: async () => "ceTaskId=task-1\n",
+      sleep: async () => {},
+      fetchImpl: (async (url: RequestInfo | URL) => {
+        if (String(url).includes("/api/ce/task")) {
+          return Response.json({ task: { status: "SUCCESS" } });
+        }
+        return Response.json({
+          component: { measures: [null, { metric: "duplicated_lines_density", value: 1 }] },
+        });
+      }) as typeof fetch,
+    })).rejects.toThrow("duplicated lines density missing");
+  });
+});
+
+function countedFile(lines: number, coveredLines: number, branches = 0, coveredBranches = 0) {
+  const statementMap: Record<string, Span> = {};
+  const statements: Record<string, number> = {};
+  for (let line = 1; line <= lines; line += 1) {
+    statementMap[String(line)] = {
+      start: { line, column: 0 },
+      end: { line, column: 1 },
+    };
+    statements[String(line)] = line <= coveredLines ? 1 : 0;
+  }
+  const locations = Array.from({ length: branches }, (_, index) => ({
+    start: { line: 1, column: index },
+    end: { line: 1, column: index + 1 },
+  }));
+  const counts = Array.from({ length: branches }, (_, index) => (index < coveredBranches ? 1 : 0));
+  const branchMap: Record<string, { locations: Span[] }> = {};
+  const branchCounts: Record<string, number[]> = {};
+  if (branches > 0) {
+    branchMap["0"] = { locations };
+    branchCounts["0"] = counts;
+  }
+  return {
+    statementMap,
+    s: statements,
+    branchMap,
+    b: branchCounts,
+    fnMap: {},
+    f: {},
+  };
+}
+
+type Span = { start: { line: number; column: number }; end: { line: number; column: number } };
+
+function sonarEnv(bin: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PATH: bin,
+    Path: bin,
+    SONAR_HOST_URL: "https://sonarqube.example",
+    SONAR_TOKEN: "token",
+  };
+}
+
+async function installScanner(root: string, exitCode = 0): Promise<string> {
+  const bin = join(root, "bin");
+  await mkdir(bin, { recursive: true });
+  const script = join(bin, "scanner.mjs");
+  const source = exitCode === 0
+    ? [
+      "import { mkdir, writeFile } from \"node:fs/promises\";",
+      "await mkdir(\".scannerwork\", { recursive: true });",
+      "await writeFile(\".scannerwork/report-task.txt\", \"projectKey=agent-relay\\nceTaskId=task-1\\n\");",
+      "",
+    ].join("\n")
+    : `process.exit(${exitCode});\n`;
+  await writeFile(script, source);
+  if (process.platform === "win32") {
+    await writeFile(
+      join(bin, "sonar-scanner.cmd"),
+      `@echo off\r\n"${process.execPath}" "${script}"\r\n`,
+    );
+    return bin;
+  }
+  const command = join(bin, "sonar-scanner");
+  await writeFile(command, `#!/bin/sh\nexec "${process.execPath}" "${script}"\n`, { mode: 0o755 });
+  await chmod(command, 0o755);
+  return bin;
+}
+
+function restoreEnv(
+  name: "SONAR_HOST_URL" | "SONAR_TOKEN" | "PATH" | "Path",
+  value: string | undefined,
+): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+  process.env[name] = value;
+}
+
+function mockSonarFetch(
+  calls: string[],
+  tasks: Array<{ status?: string; task?: Record<string, unknown> }>,
+  density: string | null,
+  statusCode = 200,
+): typeof fetch {
+  let taskIndex = 0;
+  return (async (url: RequestInfo | URL, init?: RequestInit) => {
+    const href = String(url);
+    calls.push(href);
+    if (statusCode !== 200) return new Response("nope", { status: statusCode });
+    const header = new Headers(init?.headers).get("authorization") ?? "";
+    if (!header.startsWith("Basic ")) return new Response("unauthorized", { status: 401 });
+    if (href.includes("/api/ce/task")) {
+      const task = tasks[taskIndex] ?? tasks.at(-1);
+      taskIndex += 1;
+      if (task?.status === undefined) return Response.json({ task: task?.task ?? {} });
+      return Response.json({ task: { id: "task-1", status: task.status } });
+    }
+    if (density === null) return Response.json({ component: { measures: [] } });
+    return Response.json({
+      component: {
+        key: "agent-relay",
+        measures: [{ metric: "duplicated_lines_density", value: density }],
+      },
+    });
+  }) as typeof fetch;
+}
+
+function duplicationInput(
+  root: string,
+  tasks: Array<{ status?: string; task?: Record<string, unknown> }> = [{ status: "SUCCESS" }],
+  density: string | null = "1",
+  statusCode = 200,
+) {
+  const calls: string[] = [];
+  return {
+    calls,
+    run: () =>
+      assertDuplication({
+        root,
+        env: { SONAR_HOST_URL: "https://sonarqube.example", SONAR_TOKEN: "token" },
+        runScanner: async () => {},
+        readTaskFile: async () => "projectKey=agent-relay\nceTaskId=task-1\n",
+        fetchImpl: mockSonarFetch(calls, tasks, density, statusCode),
+        sleep: async () => {},
+        attempts: tasks.length === 0 ? 1 : tasks.length,
+      }),
+  };
+}
