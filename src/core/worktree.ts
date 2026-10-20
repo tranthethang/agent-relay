@@ -14,7 +14,7 @@ import {
 import { hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { rebuildRun } from "./cache.js";
+import { type RebuildResult, rebuildRun } from "./cache.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { isEnoent, readJson } from "./files.js";
@@ -72,31 +72,43 @@ export type WorktreeListEntry = {
   bare?: boolean;
 };
 
+function pushValidEntry(
+  entries: WorktreeListEntry[],
+  current: Partial<WorktreeListEntry> | null,
+): void {
+  if (current?.path !== undefined && current.head !== undefined) {
+    entries.push(current as WorktreeListEntry);
+  }
+}
+
+function parseWorktreeLine(
+  line: string,
+  current: Partial<WorktreeListEntry>,
+): void {
+  if (line.startsWith("HEAD ")) {
+    current.head = line.slice("HEAD ".length);
+  } else if (line.startsWith("branch ")) {
+    current.branch = line.slice("branch ".length).replace(/^refs\/heads\//, "");
+  } else if (line === "detached") {
+    current.detached = true;
+  } else if (line === "bare") {
+    current.bare = true;
+  }
+}
+
 export async function listWorktrees(root: string): Promise<WorktreeListEntry[]> {
   const stdout = await gitOut(root, ["worktree", "list", "--porcelain"]);
   const entries: WorktreeListEntry[] = [];
   let current: Partial<WorktreeListEntry> | null = null;
   for (const line of stdout.split(/\r?\n/)) {
     if (line.startsWith("worktree ")) {
-      if (current?.path !== undefined && current.head !== undefined) {
-        entries.push(current as WorktreeListEntry);
-      }
+      pushValidEntry(entries, current);
       current = { path: line.slice("worktree ".length) };
-    } else if (line.startsWith("HEAD ")) {
-      if (current !== null) current.head = line.slice("HEAD ".length);
-    } else if (line.startsWith("branch ")) {
-      if (current !== null) {
-        current.branch = line.slice("branch ".length).replace(/^refs\/heads\//, "");
-      }
-    } else if (line === "detached") {
-      if (current !== null) current.detached = true;
-    } else if (line === "bare") {
-      if (current !== null) current.bare = true;
+    } else if (current !== null) {
+      parseWorktreeLine(line, current);
     }
   }
-  if (current?.path !== undefined && current.head !== undefined) {
-    entries.push(current as WorktreeListEntry);
-  }
+  pushValidEntry(entries, current);
   return entries;
 }
 
@@ -360,6 +372,59 @@ export function worktreeCleanupText(result: WorktreeCleanupResult): string {
   return `worktree: kept (${result.worktree.reason ?? "unknown"})\n`;
 }
 
+async function tryAcquireCleanupLock(lockPath: string): Promise<boolean> {
+  let handle;
+  try {
+    handle = await open(lockPath, "wx");
+    await handle.writeFile(
+      JSON.stringify({
+        pid: process.pid,
+        host: hostname() || "unknown",
+        ts: new Date().toISOString(),
+      }) + "\n",
+    );
+    await handle.close();
+    return true;
+  } catch (error) {
+    await handle?.close().catch(() => undefined);
+    if (handle !== undefined) {
+      await rm(lockPath, { force: true });
+      throw error;
+    }
+    const code = error instanceof Error && "code" in error && typeof error.code === "string"
+      ? error.code
+      : "";
+    if (code !== "EEXIST" && code !== "EPERM") throw error;
+    return false;
+  }
+}
+
+async function clearStaleCleanupLock(lockPath: string): Promise<void> {
+  try {
+    const info = await stat(lockPath);
+    if (Date.now() - info.mtimeMs >= 30_000) {
+      await rm(lockPath, { force: true });
+    }
+  } catch (staleError) {
+    const staleCode = staleError instanceof Error && "code" in staleError
+        && typeof staleError.code === "string"
+      ? staleError.code
+      : "";
+    if (staleCode !== "ENOENT") throw staleError;
+  }
+}
+
+async function acquireCleanupLock(lockPath: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!(await tryAcquireCleanupLock(lockPath))) {
+    if (Date.now() >= deadline) {
+      throw new RelayError("lock", "run lock timed out", "locks/run.lock");
+    }
+    await clearStaleCleanupLock(lockPath);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 async function withWorktreeCleanupLock<T>(
   runDir: string,
   fn: () => Promise<T>,
@@ -367,50 +432,7 @@ async function withWorktreeCleanupLock<T>(
   const lockDir = join(runDir, "locks");
   const lockPath = join(lockDir, "run.lock");
   await mkdir(lockDir, { recursive: true });
-  const deadline = Date.now() + 10_000;
-  for (;;) {
-    let handle;
-    try {
-      handle = await open(lockPath, "wx");
-      await handle.writeFile(
-        JSON.stringify({
-          pid: process.pid,
-          host: hostname() || "unknown",
-          ts: new Date().toISOString(),
-        }) + "\n",
-      );
-      await handle.close();
-      break;
-    } catch (error) {
-      await handle?.close().catch(() => undefined);
-      if (handle !== undefined) {
-        await rm(lockPath, { force: true });
-        throw error;
-      }
-      const code = error instanceof Error && "code" in error && typeof error.code === "string"
-        ? error.code
-        : "";
-      if (code !== "EEXIST" && code !== "EPERM") throw error;
-      if (Date.now() >= deadline) {
-        throw new RelayError("lock", "run lock timed out", "locks/run.lock");
-      }
-      try {
-        const info = await stat(lockPath);
-        if (Date.now() - info.mtimeMs >= 30_000) {
-          await rm(lockPath, { force: true });
-          continue;
-        }
-      } catch (staleError) {
-        const staleCode = staleError instanceof Error && "code" in staleError
-            && typeof staleError.code === "string"
-          ? staleError.code
-          : "";
-        if (staleCode !== "ENOENT") throw staleError;
-        continue;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
+  await acquireCleanupLock(lockPath);
   try {
     return await fn();
   } finally {
@@ -418,71 +440,78 @@ async function withWorktreeCleanupLock<T>(
   }
 }
 
+function assertCleanupEligible(loaded: RebuildResult): void {
+  if (loaded.run.worktree === undefined) {
+    throw new RelayError("gate", "run has no worktree", "worktree");
+  }
+  if (loaded.run.state.lifecycle !== "closed") {
+    throw new RelayError(
+      "gate",
+      `worktree cleanup refused: run is ${loaded.run.state.lifecycle}`,
+      "state.lifecycle",
+    );
+  }
+}
+
+async function recordWorktreeCleaned(loaded: RebuildResult, runDir: string): Promise<void> {
+  try {
+    const actor = detectTool(process.env) === undefined ? "unknown" : "agent-env";
+    await appendEvent(loaded, runDir, {
+      stage: "run",
+      action: "cleaned",
+      actor,
+    });
+  } catch {
+    // Swallow write failure to report removal
+  }
+}
+
+async function handleMissingWorktree(
+  loaded: RebuildResult,
+  runDir: string,
+): Promise<WorktreeRemoval> {
+  const hasCleaned = loaded.events.some((e) => e.stage === "run" && e.action === "cleaned");
+  if (!hasCleaned) {
+    await recordWorktreeCleaned(loaded, runDir);
+  }
+  return { removed: true };
+}
+
+async function handleExistingWorktree(
+  runDir: string,
+  loaded: RebuildResult,
+  worktree: WorktreeRecord,
+): Promise<WorktreeRemoval> {
+  try {
+    await validateRunWorktree(runDir, worktree);
+    const root = await mainRoot(runDir);
+    const removal = await removeMergedWorktree(root, {
+      name: basename(runDir),
+      worktree,
+    });
+    if (removal.removed) {
+      await recordWorktreeCleaned(loaded, runDir);
+    }
+    return removal;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { removed: false, reason: message };
+  }
+}
+
 export async function cleanupWorktree(runDir: string): Promise<WorktreeCleanupResult> {
   return withWorktreeCleanupLock(runDir, async () => {
     const loaded = await rebuildRun(runDir);
-    if (loaded.run.worktree === undefined) {
-      throw new RelayError("gate", "run has no worktree", "worktree");
-    }
-    if (loaded.run.state.lifecycle !== "closed") {
-      throw new RelayError(
-        "gate",
-        `worktree cleanup refused: run is ${loaded.run.state.lifecycle}`,
-        "state.lifecycle",
-      );
-    }
-    const exists = await pathExists(loaded.run.worktree.path);
-    if (!exists) {
-      const hasCleaned = loaded.events.some((e) => e.stage === "run" && e.action === "cleaned");
-      if (!hasCleaned) {
-        try {
-          const actor = detectTool(process.env) === undefined ? "unknown" : "agent-env";
-          await appendEvent(loaded, runDir, {
-            stage: "run",
-            action: "cleaned",
-            actor,
-          });
-        } catch {
-          // Swallow write failure to report removal
-        }
-      }
-      return {
-        schema: schemaVersion,
-        path: runDir,
-        worktree: { removed: true },
-      };
-    }
-    try {
-      await validateRunWorktree(runDir, loaded.run.worktree);
-      const root = await mainRoot(runDir);
-      const removal = await removeMergedWorktree(root, {
-        name: basename(runDir),
-        worktree: loaded.run.worktree,
-      });
-      if (removal.removed) {
-        try {
-          const actor = detectTool(process.env) === undefined ? "unknown" : "agent-env";
-          await appendEvent(loaded, runDir, {
-            stage: "run",
-            action: "cleaned",
-            actor,
-          });
-        } catch {
-          // Swallow write failure to report removal
-        }
-      }
-      return {
-        schema: schemaVersion,
-        path: runDir,
-        worktree: removal,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        schema: schemaVersion,
-        path: runDir,
-        worktree: { removed: false, reason: message },
-      };
-    }
+    assertCleanupEligible(loaded);
+    const worktree = loaded.run.worktree!;
+    const exists = await pathExists(worktree.path);
+    const removal = exists
+      ? await handleExistingWorktree(runDir, loaded, worktree)
+      : await handleMissingWorktree(loaded, runDir);
+    return {
+      schema: schemaVersion,
+      path: runDir,
+      worktree: removal,
+    };
   });
 }

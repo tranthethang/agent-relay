@@ -22,6 +22,7 @@ import {
   removeMergedWorktree,
   runGitCwd,
   validateRunWorktree,
+  type WorktreeRecord,
   type WorktreeRemoval,
 } from "./worktree.js";
 
@@ -260,6 +261,63 @@ export async function approveRun(input: {
   });
 }
 
+async function executeAbandon(
+  loaded: RebuildResult,
+  runDir: string,
+  rawReason: string,
+  actor: "agent-env" | "unknown",
+  via?: EventLine["via"],
+): Promise<CloseResult> {
+  const reason = rawReason.trim();
+  if (reason.length === 0) throw new RelayError("validation", "reason is empty", "reason");
+  const saved = await appendEvent(loaded, runDir, {
+    stage: "run",
+    action: "abandoned",
+    reason,
+    actor,
+    ...(via === undefined ? {} : { via }),
+  });
+  if (saved.run.state.lifecycle !== "abandoned") {
+    throw new RelayError("validation", "close did not abandon the run", "state.lifecycle");
+  }
+  return { schema: schemaVersion, path: runDir, lifecycle: saved.run.state.lifecycle };
+}
+
+async function cleanupWorktreeOnClose(
+  runDir: string,
+  worktree: WorktreeRecord,
+  saved: { run: RebuildResult["run"]; event: EventLine },
+  loadedEvents: readonly EventLine[],
+  actor: "agent-env" | "unknown",
+): Promise<WorktreeRemoval> {
+  try {
+    const root = await mainRoot(runDir);
+    const removal = await removeMergedWorktree(root, {
+      name: basename(runDir),
+      worktree,
+    });
+    if (removal.removed) {
+      try {
+        await appendEvent(
+          { run: saved.run, events: [...loadedEvents, saved.event], warning: null },
+          runDir,
+          {
+            stage: "run",
+            action: "cleaned",
+            actor,
+          },
+        );
+      } catch {
+        // Swallow event write failure to report removal and preserve closed run
+      }
+    }
+    return removal;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { removed: false, reason: `worktree cleanup failed: ${message}` };
+  }
+}
+
 export async function closeRun(input: {
   runDir: string;
   via?: string;
@@ -276,19 +334,7 @@ export async function closeRun(input: {
   }
   return withRunLock(input.runDir, async (loaded) => {
     if (input.abandon !== undefined) {
-      const reason = input.abandon.trim();
-      if (reason.length === 0) throw new RelayError("validation", "reason is empty", "reason");
-      const saved = await appendEvent(loaded, input.runDir, {
-        stage: "run",
-        action: "abandoned",
-        reason,
-        actor,
-        ...(via === undefined ? {} : { via }),
-      });
-      if (saved.run.state.lifecycle !== "abandoned") {
-        throw new RelayError("validation", "close did not abandon the run", "state.lifecycle");
-      }
-      return { schema: schemaVersion, path: input.runDir, lifecycle: saved.run.state.lifecycle };
+      return executeAbandon(loaded, input.runDir, input.abandon, actor, via);
     }
     assertMove(loaded.run.state, "close");
     const policy = await readPolicy(await gitCwd(input.runDir), loaded.run.base);
@@ -333,31 +379,13 @@ export async function closeRun(input: {
       lifecycle: saved.run.state.lifecycle,
     };
     if (loaded.run.worktree !== undefined) {
-      try {
-        const root = await mainRoot(input.runDir);
-        result.worktree = await removeMergedWorktree(root, {
-          name: basename(input.runDir),
-          worktree: loaded.run.worktree,
-        });
-        if (result.worktree.removed) {
-          try {
-            await appendEvent(
-              { run: saved.run, events: [...loaded.events, saved.event], warning: null },
-              input.runDir,
-              {
-                stage: "run",
-                action: "cleaned",
-                actor,
-              },
-            );
-          } catch {
-            // Swallow event write failure to report removal and preserve closed run
-          }
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        result.worktree = { removed: false, reason: `worktree cleanup failed: ${message}` };
-      }
+      result.worktree = await cleanupWorktreeOnClose(
+        input.runDir,
+        loaded.run.worktree,
+        saved,
+        loaded.events,
+        actor,
+      );
     }
     return result;
   });
@@ -477,6 +505,57 @@ export async function finishBrainstorm(path: string): Promise<BrainstormDoneResu
   return { schema: schemaVersion, path, open: parsed.data.open.length };
 }
 
+async function prepareImplementStart(
+  runDir: string,
+  locked: RebuildResult,
+): Promise<RebuildResult> {
+  if (locked.run.worktree !== undefined) {
+    await validateRunWorktree(runDir, locked.run.worktree);
+    return locked;
+  }
+  return rebaseRun(runDir, locked);
+}
+
+async function assertImplementDoneTasks(runDir: string, state: RunState): Promise<void> {
+  const index = await readPlanIndex(runDir);
+  if (index === null) {
+    throw new RelayError("not_found", "index.json not found", "10-plan/index.json");
+  }
+  const open = openPlanTasks(index, state);
+  if (open.length > 0) {
+    throw new RelayError(
+      "gate",
+      `implement done refused: open tasks: ${open.join(", ")}`,
+      "tasks",
+    );
+  }
+}
+
+async function measureStageCompletion(
+  runDir: string,
+  loaded: RebuildResult,
+  stage: (typeof workflowStages)[number],
+  allowExtra?: string,
+): Promise<{
+  measured?: Awaited<ReturnType<typeof measure>>;
+  scope?: Awaited<ReturnType<typeof implementScope>>;
+}> {
+  if (!sizedStages.has(stage)) return {};
+  const cwd = await runGitCwd(runDir, loaded.run);
+  const measured = await measure(cwd, loaded.run.base);
+  const scope = stage === "implement"
+    ? await implementScope(
+      runDir,
+      cwd,
+      loaded.run.base,
+      loaded.events,
+      measured.tree,
+      allowExtra,
+    )
+    : undefined;
+  return { measured, scope };
+}
+
 async function recordStage(
   input: {
     runDir: string;
@@ -496,41 +575,15 @@ async function recordStage(
   }
   return withRunLock(input.runDir, async (locked) => {
     assertMove(locked.run.state, stageMove(stage, action));
-    if (action === "started" && stage === "implement" && locked.run.worktree !== undefined) {
-      await validateRunWorktree(input.runDir, locked.run.worktree);
-    }
     const loaded = action === "started" && stage === "implement"
-        && locked.run.worktree === undefined
-      ? await rebaseRun(input.runDir, locked)
+      ? await prepareImplementStart(input.runDir, locked)
       : locked;
     if (action === "completed" && stage === "implement") {
-      const index = await readPlanIndex(input.runDir);
-      if (index === null) {
-        throw new RelayError("not_found", "index.json not found", "10-plan/index.json");
-      }
-      const open = openPlanTasks(index, loaded.run.state);
-      if (open.length > 0) {
-        throw new RelayError(
-          "gate",
-          `implement done refused: open tasks: ${open.join(", ")}`,
-          "tasks",
-        );
-      }
+      await assertImplementDoneTasks(input.runDir, loaded.run.state);
     }
-    const cwd = action === "completed" && sizedStages.has(stage)
-      ? await runGitCwd(input.runDir, loaded.run)
-      : undefined;
-    const measured = cwd === undefined ? undefined : await measure(cwd, loaded.run.base);
-    const scope = cwd !== undefined && measured !== undefined && stage === "implement"
-      ? await implementScope(
-        input.runDir,
-        cwd,
-        loaded.run.base,
-        loaded.events,
-        measured.tree,
-        input.allowExtra,
-      )
-      : undefined;
+    const { measured, scope } = action === "completed"
+      ? await measureStageCompletion(input.runDir, loaded, stage, input.allowExtra)
+      : {};
     const saved = await appendEvent(loaded, input.runDir, {
       stage,
       action,

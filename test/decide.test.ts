@@ -97,3 +97,41 @@ test("close accepts open items with recorded decisions", async () => {
     expect(closed.stdout).toContain("closed");
   });
 });
+
+test("atry review decide handles validation and text formatting", async () => {
+  await withTempGitRepo(async (dir) => {
+    const run = await createCompletedReview(dir, "decide-errors");
+    // decideText output formatting
+    const textResult = await runCli(["review", "decide", run, "Q1", "a"], dir);
+    expect(textResult.code).toBe(0);
+    expect(textResult.stdout).toContain("question: Choose?\nanswer: a\naction: decided\n");
+
+    // question already decided
+    const duplicate = await runCli(["review", "decide", run, "Q1", "b"], dir);
+    expect(duplicate.code).toBe(2);
+    expect(duplicate.stderr).toContain("question already decided");
+
+    // invalid question id
+    const badId = await runCli(["review", "decide", run, "invalid", "a"], dir);
+    expect(badId.code).toBe(2);
+    expect(badId.stderr).toContain("invalid question id");
+
+    // empty answer
+    const emptyAnswer = await runCli(["review", "decide", run, "Q2", "   "], dir);
+    expect(emptyAnswer.code).toBe(2);
+    expect(emptyAnswer.stderr).toContain("answer is empty");
+
+    // invalid choice answer
+    const badChoice = await runCli(["review", "decide", run, "Q2", "a"], dir);
+    expect(badChoice.code).toBe(0);
+  });
+});
+
+test("atry review decide rejects choice answers other than a or b", async () => {
+  await withTempGitRepo(async (dir) => {
+    const run = await createCompletedReview(dir, "decide-choice-err");
+    const badChoice = await runCli(["review", "decide", run, "Q1", "c"], dir);
+    expect(badChoice.code).toBe(2);
+    expect(badChoice.stderr).toContain("choice answer must be a or b");
+  });
+});

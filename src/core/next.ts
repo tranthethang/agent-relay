@@ -96,6 +96,48 @@ export function explainNext(command: string): NextResult {
   return explainNextWithChoices(command);
 }
 
+function nextImplementingActions(
+  id: string,
+  state: RunState,
+  recommendation: string,
+  index?: PlanIndex | null,
+): string[] {
+  if (index === undefined || index === null) {
+    if (recommendation.includes("task start")) return [`atry list ${id}`];
+    return [recommendation];
+  }
+  const status = new Map(state.tasks.map((task) => [task.id, task.status]));
+  const eligible = index.tasks.filter((task) =>
+    (status.get(task.id) ?? "pending") === "pending"
+    && task.deps.every((dep) => {
+      const value = status.get(dep) ?? "pending";
+      return value === "done" || value === "skipped";
+    })
+  ).map((task) => `atry task start ${id} ${task.id}`);
+  if (eligible.length > 0) return eligible;
+  if (openPlanTasks(index, state).length > 0) return [`atry list ${id}`];
+  return [recommendation];
+}
+
+function nextReviewingActions(
+  id: string,
+  events: readonly EventLine[],
+  recommendation: string,
+  reviews?: { required: readonly string[]; done: readonly string[] },
+): string[] {
+  const currentReview = ["self-review", "cross-review"].find((stage) =>
+    lastStageAction(events, stage as EventLine["stage"]) === "started"
+  );
+  if (currentReview !== undefined) return [recommendation];
+  if (reviews === undefined) return [recommendation];
+  const missing = reviews.required.filter((kind) => !reviews.done.includes(kind));
+  const commands = missing.map((kind) => `atry review new ${id} ${kind}`);
+  if (commands.length === 0) return [`atry close ${id} --preview`];
+  if (!commands.includes(recommendation)) commands.unshift(recommendation);
+  commands.push(`atry close ${id} --preview`);
+  return [...new Set(commands)];
+}
+
 export function nextActions(
   id: string,
   state: RunState,
@@ -106,33 +148,10 @@ export function nextActions(
 ): string[] {
   if (state.lifecycle === "closed" || state.lifecycle === "abandoned") return [];
   if (state.lifecycle === "implementing") {
-    if (index === undefined || index === null) {
-      if (recommendation.includes("task start")) return [`atry list ${id}`];
-      return [recommendation];
-    }
-    const status = new Map(state.tasks.map((task) => [task.id, task.status]));
-    const eligible = index.tasks.filter((task) =>
-      (status.get(task.id) ?? "pending") === "pending"
-      && task.deps.every((dep) => {
-        const value = status.get(dep) ?? "pending";
-        return value === "done" || value === "skipped";
-      })
-    ).map((task) => `atry task start ${id} ${task.id}`);
-    if (eligible.length > 0) return eligible;
-    if (openPlanTasks(index, state).length > 0) return [`atry list ${id}`];
+    return nextImplementingActions(id, state, recommendation, index);
   }
   if (state.lifecycle === "reviewing") {
-    const currentReview = ["self-review", "cross-review"].find((stage) =>
-      lastStageAction(events, stage as EventLine["stage"]) === "started"
-    );
-    if (currentReview !== undefined) return [recommendation];
-    if (reviews === undefined) return [recommendation];
-    const missing = reviews.required.filter((kind) => !reviews.done.includes(kind));
-    const commands = missing.map((kind) => `atry review new ${id} ${kind}`);
-    if (commands.length === 0) return [`atry close ${id} --preview`];
-    if (!commands.includes(recommendation)) commands.unshift(recommendation);
-    commands.push(`atry close ${id} --preview`);
-    return [...new Set(commands)];
+    return nextReviewingActions(id, events, recommendation, reviews);
   }
   return [recommendation];
 }
@@ -177,14 +196,21 @@ export function nextText(result: NextResult): string {
   return `${state}\nrecommendation: ${result.recommendation}\n${actions}\n`;
 }
 
+function actionReadPaths(command: string, task?: string): string[] {
+  if (command.includes(" approve ")) {
+    return ["10-plan/overview.md"];
+  }
+  if (task !== undefined) {
+    return ["10-plan/overview.md", `10-plan/${task}.md`];
+  }
+  return [];
+}
+
 function actionFor(command: string): NextAction {
   const needsHuman = /\b(approve|close|decide)\b/.test(command);
-  const task = command.match(/\btask start \S+ (T[1-9]\d*)$/)?.[1];
-  const read = command.includes(" approve ")
-    ? ["10-plan/overview.md"]
-    : task === undefined
-    ? []
-    : ["10-plan/overview.md", `10-plan/${task}.md`];
+  const match = /\btask start \S+ (T[1-9]\d*)$/.exec(command);
+  const task = match?.[1];
+  const read = actionReadPaths(command, task);
   return {
     command,
     reason: reasonFor(command),
