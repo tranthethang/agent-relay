@@ -5,7 +5,8 @@
 Markdown skills plus a TypeScript CLI (`atry`) for one piece of work in stages:
 plan, implement, self-review, and cross-review. You run each stage yourself, in
 whatever tool you open. Nothing here schedules agents, calls a model, or checks
-that an agent followed a skill.
+that an agent followed a skill. An optional Claude Code hook can check each file
+edit against the in-progress task files.
 
 ## What it does and does not do
 
@@ -81,6 +82,8 @@ atry review decide <run> Q<n> <answer>
 atry close <run> --via confirm|arg [--ack-open] [--ack-fixes]
 atry close <run> --waive-review "<reason>" [--ack-open]
 atry worktree cleanup [run]
+atry hook install --tool claude-code
+atry hook check
 atry distill <run>
 ```
 
@@ -194,6 +197,20 @@ a path that another in-progress task's `files` covers. `atry guard <run> <path>`
 exits 0 when that path is inside an in-progress task. `--session <tag>` limits
 the check to that session.
 
+### Claude Code edit hook
+
+`atry hook install --tool claude-code` adds a `PreToolUse` hook to
+`.claude/settings.json` at the git root. It keeps the other settings and hooks.
+A second install reports `present` and adds nothing. The command does not stage
+or commit the file. It does not write user-level settings.
+
+The hook runs `atry hook check` before `Edit`, `MultiEdit`, `Write`, and
+`NotebookEdit`. The check reads the edited path from the hook JSON on stdin. It
+allows the edit when no run is implementing, when the path is under
+`.agent-relay/`, or when an in-progress task lists the path. Otherwise it asks
+the person. When `strict.scope` is true for an implementing run, it denies the
+edit. A check that fails prints nothing and allows the edit.
+
 ## Run layout
 
 ```text
@@ -242,8 +259,9 @@ scaffold that already has every key. Task status lives in events.
   `--allow-extra <reason>` is set. `stage done implement` does the same for
   paths outside the union of task `files` and recorded `extra` paths.
 - `claim` checks recorded file paths before work starts. It does not stop an
-  edit while the task is in progress. `atry guard` can check one path. This
-  repo does not install a tool hook.
+  edit while the task is in progress. `atry guard` can check one path. The
+  Claude Code hook checks edits only after you install it, and only in Claude
+  Code. Other tools and shell commands that write files are not checked.
 - There is no migration from the bash CLI or from v1 run files.
 - CI runs `npm test` on macOS, Linux, and Windows. It does not show that an
   agent follows a skill.

@@ -16,6 +16,7 @@ import { schemaVersion } from "../core/vocab.js";
 import { packageVersion } from "../version.js";
 import { registerClaim } from "./claim.js";
 import { flagRun, registerDistill } from "./distill.js";
+import { registerHook } from "./hook.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
 import { registerPlan } from "./plan.js";
@@ -127,6 +128,7 @@ export function registerCommands(program: Command): void {
   registerDistill(program);
   registerPolicy(program);
   registerWorktree(program);
+  registerHook(program);
 }
 
 function commandJson(command: Command): boolean {
