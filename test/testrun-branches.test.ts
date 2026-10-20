@@ -62,13 +62,15 @@ test("killTree does nothing without a pid", () => {
   expect(kill).not.toHaveBeenCalled();
 });
 
-test("killTree on the Windows path kills the child when taskkill cannot start", async () => {
-  if (process.platform === "win32") return;
-  const killed = new Promise<void>((resolve) => {
-    killTree({ pid: missingPid, kill: () => (resolve(), true) }, "win32");
-  });
-  await expect(killed).resolves.toBeUndefined();
-});
+test.skipIf(process.platform === "win32")(
+  "killTree on the Windows path kills the child when taskkill cannot start",
+  async () => {
+    const killed = new Promise<void>((resolve) => {
+      killTree({ pid: missingPid, kill: () => (resolve(), true) }, "win32");
+    });
+    await expect(killed).resolves.toBeUndefined();
+  },
+);
 
 test("runTestCommand keeps only the last 200 lines", async () => {
   const result = await runTestCommand(

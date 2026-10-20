@@ -6,6 +6,7 @@ import {
   assertCoverageBars,
   assertDuplication,
   buildReport,
+  isMissingScanner,
   lcovFromCoverage,
   listSourceFiles,
   summaryText,
@@ -535,7 +536,7 @@ test("buildReport handles edge cases in bundle mapping, branches, and functions"
       sourceMap,
       coverage,
     });
-    expect(report.files.length).toBe(3);
+    expect(report.files).toHaveLength(3);
   });
 });
 
@@ -579,6 +580,29 @@ test("assertCoverageBars counts line and branch totals for both trees", async ()
     expect(() => assertCoverageBars(root, maintLow)).toThrow(
       "per-file coverage at or below 90%: scripts/maint/low.ts 90",
     );
+  });
+});
+
+test("assertCoverageBars fails when a gated file has under 90 percent branches", async () => {
+  await withTempDir(async (root) => {
+    const coverage = {
+      [join(root, "src", "branchy.ts")]: countedFile(1000, 1000, 1000, 899),
+      [join(root, "scripts", "maint", "full.ts")]: countedFile(1000, 1000, 10, 10),
+    };
+    expect(() => assertCoverageBars(root, coverage)).toThrow(
+      "per-file branch coverage below 90%: src/branchy.ts 89.9",
+    );
+  });
+});
+
+test("assertCoverageBars passes a file at exactly 90 percent branches or with none", async () => {
+  await withTempDir(async (root) => {
+    expect(() => {
+      assertCoverageBars(root, {
+        [join(root, "src", "edge.ts")]: countedFile(1000, 1000, 10, 9),
+        [join(root, "src", "flat.ts")]: countedFile(1000, 1000),
+      });
+    }).not.toThrow();
   });
 });
 
@@ -845,3 +869,15 @@ function duplicationInput(
       }),
   };
 }
+
+test("isMissingScanner reads string and Buffer stderr and ignores other values", () => {
+  expect(isMissingScanner({ stderr: "sh: sonar-scanner: command not found" })).toBe(true);
+  expect(
+    isMissingScanner({
+      stderr: Buffer.from("'sonar-scanner' is not recognized as an internal or external command"),
+    }),
+  )
+    .toBe(true);
+  expect(isMissingScanner({ stderr: { message: "command not found" } })).toBe(false);
+  expect(isMissingScanner({ stderr: "analysis failed" })).toBe(false);
+});

@@ -1,7 +1,7 @@
 import { type Command } from "commander";
 import { decideQuestion, decideText } from "../core/decide.js";
 import { reviewDone, reviewDoneText, reviewNew, reviewNewText } from "../core/review.js";
-import { commandJson, flagRun, takeRun } from "./distill.js";
+import { commandJson, takeRun } from "./distill.js";
 import { withWarnings, writeResult } from "./output.js";
 
 export function registerReview(program: Command): void {

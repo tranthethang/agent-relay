@@ -43,6 +43,7 @@ const sourceFiles = ["tsup.config.ts", "vitest.config.ts"];
 const sonarProjectKey = "agent-relay";
 const overallMinimum = 95;
 const fileMinimum = 90;
+const fileBranchMinimum = 90;
 const analysisAttempts = 300;
 const analysisPauseMs = 1000;
 
@@ -124,6 +125,7 @@ export function assertCoverageBars(
   let covered = 0;
   let total = 0;
   const low: string[] = [];
+  const lowBranches: string[] = [];
   for (const path of [...files.keys()].sort((left, right) => left.localeCompare(right))) {
     if (!isGatedPath(path)) continue;
     const file = files.get(path);
@@ -136,6 +138,8 @@ export function assertCoverageBars(
     total += fileTotal;
     const metric = percent(fileCovered, fileTotal);
     if (metric <= fileMinimum) low.push(`${path} ${metric}`);
+    const branchMetric = percent(totals.coveredBranches, totals.totalBranches);
+    if (branchMetric < fileBranchMinimum) lowBranches.push(`${path} ${branchMetric}`);
   }
   const overall = percent(covered, total);
   if (overall < overallMinimum) {
@@ -143,6 +147,11 @@ export function assertCoverageBars(
   }
   if (low.length > 0) {
     throw new Error(`per-file coverage at or below ${fileMinimum}%: ${low.join(", ")}`);
+  }
+  if (lowBranches.length > 0) {
+    throw new Error(
+      `per-file branch coverage below ${fileBranchMinimum}%: ${lowBranches.join(", ")}`,
+    );
   }
 }
 
@@ -328,9 +337,15 @@ function isGatedPath(path: string): boolean {
 }
 
 function sonarHost(env: NodeJS.ProcessEnv): string {
-  const host = env.SONAR_HOST_URL?.trim().replace(/\/+$/, "") ?? "";
+  const host = trimTrailingSlashes(env.SONAR_HOST_URL?.trim() ?? "");
   if (host.length === 0) throw new Error("SONAR_HOST_URL missing");
   return host;
+}
+
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") end -= 1;
+  return value.slice(0, end);
 }
 
 function sonarToken(env: NodeJS.ProcessEnv): string {
@@ -365,7 +380,7 @@ function scannerFailure(error: unknown): Error {
 export function isMissingScanner(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   if ("code" in error && error.code === "ENOENT") return true;
-  const stderr = "stderr" in error ? String(error.stderr ?? "") : "";
+  const stderr = "stderr" in error ? outputText(error.stderr) : "";
   return /not recognized as an internal or external command|command not found/i.test(stderr);
 }
 
@@ -412,10 +427,15 @@ async function waitForAnalysis(input: {
   throw new Error("analysis task timed out");
 }
 
+function outputText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Buffer.isBuffer(value)) return value.toString("utf8");
+  return "";
+}
+
 async function readJson(url: string, token: string, fetchImpl: typeof fetch): Promise<unknown> {
-  const response = await fetchImpl(url, {
-    headers: { Authorization: `Basic ${Buffer.from(`${token}:`).toString("base64")}` },
-  });
+  const credentials = Buffer.from(`${token}:`).toString("base64");
+  const response = await fetchImpl(url, { headers: { Authorization: `Basic ${credentials}` } });
   if (!response.ok) throw new Error(`sonar request failed: ${response.status}`);
   return response.json() as Promise<unknown>;
 }
