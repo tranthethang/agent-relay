@@ -83,6 +83,16 @@ export async function workTree(cwd: string): Promise<string> {
   }
 }
 
+// Changes outside .agent-relay/, staged or not, plus untracked files that are not ignored.
+export async function treeStatus(cwd: string): Promise<string> {
+  try {
+    const root = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
+    return await git(root, ["status", "--porcelain", "--", ...outsideRuns]);
+  } catch {
+    throw new RelayError("validation", "git status failed", "tree");
+  }
+}
+
 export async function changedPaths(cwd: string, from: string, to: string): Promise<string[]> {
   let text: string;
   try {

@@ -15,17 +15,17 @@ export function registerDistill(program: Command): void {
     });
 }
 
-async function takeRun(command: Command, positional: string | undefined): Promise<string> {
+export async function takeRun(command: Command, positional: string | undefined): Promise<string> {
   const token = oneToken(positional, flagRun(command));
   if (token === undefined) throw new RelayError("usage", "run is required", "run");
   return selectRun(process.cwd(), token);
 }
 
-function commandJson(command: Command): boolean {
+export function commandJson(command: Command): boolean {
   return command.optsWithGlobals().json === true;
 }
 
-function flagRun(command: Command): string | undefined {
+export function flagRun(command: Command): string | undefined {
   const run = command.optsWithGlobals().run;
   return typeof run === "string" ? run : undefined;
 }

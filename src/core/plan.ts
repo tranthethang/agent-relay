@@ -1,17 +1,28 @@
-import { mkdir, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { type ZodType } from "zod";
-import { assertClaimOwner, releaseClaimLock } from "./claim.js";
-import { fromZod, RelayError } from "./error.js";
+import {
+  assertClaimOwner,
+  ensureImplement,
+  exists,
+  loadPlanIndex,
+  parseTaskId,
+  readSchema,
+  releaseClaimLock,
+  requireTask,
+  taskStatus,
+} from "./claim.js";
+import { RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
-import { atomicWrite, isEnoent, readJson } from "./files.js";
+import { atomicWrite } from "./files.js";
 import { changedPaths, workTree } from "./git.js";
 import { appendEvent, openRun, withRunLock } from "./mutate.js";
 import { normalizePath } from "./overlap.js";
+import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
 import { outsidePaths } from "./scope.js";
 import { type PlanIndex, planIndexSchema, type TasksInput, tasksInputSchema } from "./tasks.js";
 import { schemaVersion, taskIdSchema } from "./vocab.js";
+import { runGitCwd } from "./worktree.js";
 
 const maxPlanTasks = 8;
 
@@ -40,6 +51,7 @@ export type PlanDoneResult = {
   path: string;
   tasks: string[];
   index: string;
+  warning?: string;
 };
 
 export type TaskMoveResult = {
@@ -57,7 +69,8 @@ export function planNewText(result: PlanNewResult): string {
 
 export function planDoneText(result: PlanDoneResult): string {
   const tasks = result.tasks.length === 0 ? "none" : result.tasks.join(", ");
-  return `tasks: ${tasks}\nindex: ${result.index}\n`;
+  const warning = result.warning === undefined ? "" : `warning: ${result.warning}\n`;
+  return `tasks: ${tasks}\nindex: ${result.index}\n${warning}`;
 }
 
 export function taskMoveText(result: TaskMoveResult): string {
@@ -74,8 +87,12 @@ export function tasksInputScaffold(): string {
   return `${JSON.stringify({ schema: schemaVersion, tasks: [] })}\n`;
 }
 
-export function indexFromTasks(tasks: TasksInput["tasks"], ids?: readonly string[]): PlanIndex {
-  if (tasks.length > maxPlanTasks) {
+export function indexFromTasks(
+  tasks: TasksInput["tasks"],
+  ids?: readonly string[],
+  strictPlan = true,
+): PlanIndex {
+  if (strictPlan && tasks.length > maxPlanTasks) {
     throw new RelayError("gate", "plan has more than 8 tasks", "tasks");
   }
   const assigned = tasks.map((task, index) => {
@@ -124,18 +141,27 @@ export async function planDone(runDir: string): Promise<PlanDoneResult> {
     }
     const input = await readTasksInput(runDir);
     assertPlanFiles(input.tasks);
-    const index = indexFromTasks(input.tasks);
+    const cwd = await runGitCwd(runDir, loaded.run);
+    const policy = await readPolicy(cwd, loaded.run.base);
+    const index = indexFromTasks(input.tasks, undefined, policy.strict.plan);
     await writePlanFiles(runDir, index);
     await appendEvent(loaded, runDir, { stage: "plan", action: "completed" });
-    return doneResult(runDir, index);
+    const result = doneResult(runDir, index);
+    if (!policy.strict.plan && index.tasks.length > maxPlanTasks) {
+      result.warning =
+        `plan has ${index.tasks.length} tasks; strict.plan=false allows more than ${maxPlanTasks}`;
+    }
+    return result;
   });
 }
 
 export async function planAmend(runDir: string): Promise<PlanDoneResult> {
   return withRunLock(runDir, async (loaded) => {
-    const current = await readIndex(runDir);
+    const current = await loadPlanIndex(runDir);
     const input = await readTasksInput(runDir);
     assertPlanFiles(input.tasks);
+    const cwd = await runGitCwd(runDir, loaded.run);
+    const policy = await readPolicy(cwd, loaded.run.base);
     const unmatched = new Map<string, string[]>();
     for (const task of current.tasks) {
       unmatched.set(task.title, [...(unmatched.get(task.title) ?? []), task.id]);
@@ -165,9 +191,14 @@ export async function planAmend(runDir: string): Promise<PlanDoneResult> {
       next += 1;
       return `T${next}`;
     });
-    const index = indexFromTasks(input.tasks, ids);
+    const index = indexFromTasks(input.tasks, ids, policy.strict.plan);
     await writePlanFiles(runDir, index);
-    return doneResult(runDir, index);
+    const result = doneResult(runDir, index);
+    if (!policy.strict.plan && index.tasks.length > maxPlanTasks) {
+      result.warning =
+        `plan has ${index.tasks.length} tasks; strict.plan=false allows more than ${maxPlanTasks}`;
+    }
+    return result;
   });
 }
 
@@ -175,7 +206,7 @@ export async function taskStart(runDir: string, task: string): Promise<TaskMoveR
   const id = parseTaskId(task);
   return withRunLock(runDir, async (loaded) => {
     assertLifecycle(loaded.run.state, ["implementing"], "task start");
-    const index = await readIndex(runDir);
+    const index = await loadPlanIndex(runDir);
     const item = requireTask(index, id);
     const current = taskStatus(loaded.run.state, id);
     if (current !== "pending") {
@@ -187,8 +218,8 @@ export async function taskStart(runDir: string, task: string): Promise<TaskMoveR
         throw new RelayError("gate", `task start refused: ${dep} is ${status}`, `${id}.deps`);
       }
     }
-    const implement = await writeImplementScaffold(runDir, item.id, item.title);
-    const tree = await workTree(runDir);
+    const implement = await ensureImplement(runDir, item.id, item.title);
+    const tree = await workTree(await runGitCwd(runDir, loaded.run));
     await appendEvent(loaded, runDir, {
       stage: "implement",
       action: "task-started",
@@ -208,7 +239,7 @@ export async function taskDone(
   const id = parseTaskId(task);
   return withRunLock(runDir, async (loaded) => {
     assertLifecycle(loaded.run.state, ["implementing"], "task done");
-    const index = await readIndex(runDir);
+    const index = await loadPlanIndex(runDir);
     const item = requireTask(index, id);
     const current = taskStatus(loaded.run.state, id);
     if (current !== "in-progress") {
@@ -219,12 +250,14 @@ export async function taskDone(
     if (from === undefined) {
       throw new RelayError("gate", `task done refused: ${id} has no start tree`, id);
     }
+    const cwd = await runGitCwd(runDir, loaded.run);
+    const policy = await readPolicy(cwd, loaded.run.base);
     const outside = outsidePaths(
-      await changedPaths(runDir, from, await workTree(runDir)),
+      await changedPaths(cwd, from, await workTree(cwd)),
       item.files,
       otherFiles(index, loaded.run.state, loaded.events, id),
     );
-    const extra = extraFields(id, outside, allowExtra);
+    const extra = extraFields(id, outside, allowExtra, policy.strict.scope);
     await appendEvent(loaded, runDir, {
       stage: "implement",
       action: "task-done",
@@ -232,7 +265,9 @@ export async function taskDone(
       ...extra,
     });
     await releaseClaimLock(runDir, id, session);
-    return moveResult(runDir, id, "done", join(runDir, "20-implement", `${id}.md`));
+    const result = moveResult(runDir, id, "done", join(runDir, "20-implement", `${id}.md`));
+    if (extra.reason !== undefined) result.reason = extra.reason;
+    return result;
   });
 }
 
@@ -247,7 +282,7 @@ export async function taskSkip(
   if (text.length === 0) throw new RelayError("validation", "reason is empty", "reason");
   return withRunLock(runDir, async (loaded) => {
     assertLifecycle(loaded.run.state, ["implementing"], "task skip");
-    const index = await readIndex(runDir);
+    const index = await loadPlanIndex(runDir);
     requireTask(index, id);
     const current = taskStatus(loaded.run.state, id);
     if (current === "done" || current === "skipped") {
@@ -306,9 +341,10 @@ function extraFields(
   id: string,
   outside: readonly string[],
   allowExtra: string | undefined,
+  strict: boolean,
 ): { extra?: string[]; reason?: string } {
   if (outside.length === 0) return {};
-  if (allowExtra === undefined) {
+  if (allowExtra === undefined && strict) {
     const shown = outside.slice(0, 10).join(", ");
     throw new RelayError(
       "gate",
@@ -316,7 +352,9 @@ function extraFields(
       id,
     );
   }
-  const reason = allowExtra.trim();
+  const reason = allowExtra === undefined
+    ? `scope warning: accepted outside task files under strict.scope=false (${outside.join(", ")})`
+    : allowExtra.trim();
   if (reason.length === 0) throw new RelayError("validation", "reason is empty", "allow-extra");
   return { extra: [...outside], reason };
 }
@@ -375,22 +413,6 @@ function sameDeps(left: readonly string[], right: readonly string[]): boolean {
     if (!after.has(dep)) return false;
   }
   return true;
-}
-
-function taskStatus(state: RunState, id: string): RunState["tasks"][number]["status"] {
-  return state.tasks.find((task) => task.id === id)?.status ?? "pending";
-}
-
-function parseTaskId(value: string): string {
-  const parsed = taskIdSchema.safeParse(value);
-  if (!parsed.success) throw new RelayError("validation", "invalid task id", "task");
-  return parsed.data;
-}
-
-function requireTask(index: PlanIndex, id: string): PlanIndex["tasks"][number] {
-  const found = index.tasks.find((task) => task.id === id);
-  if (found === undefined) throw new RelayError("not_found", "task not found", "task");
-  return found;
 }
 
 function maxTaskNumber(ids: readonly string[]): number {
@@ -486,36 +508,6 @@ async function readTasksInput(runDir: string): Promise<TasksInput> {
   return readSchema(join(runDir, rel), rel, tasksInputSchema, "tasks.input.json not found");
 }
 
-async function readIndex(runDir: string): Promise<PlanIndex> {
-  const rel = "10-plan/index.json";
-  return readSchema(join(runDir, rel), rel, planIndexSchema, "index.json not found");
-}
-
-async function readSchema<T>(
-  filePath: string,
-  rel: string,
-  schema: ZodType<T>,
-  missing: string,
-): Promise<T> {
-  let value: unknown;
-  try {
-    value = await readJson(filePath);
-  } catch (error) {
-    if (isEnoent(error)) throw new RelayError("not_found", missing, rel);
-    if (error instanceof RelayError && error.message === "invalid JSON") {
-      throw new RelayError("validation", "invalid JSON", rel);
-    }
-    throw error;
-  }
-  const parsed = schema.safeParse(value);
-  if (!parsed.success) {
-    const issue = fromZod(parsed.error);
-    const fieldPath = issue.fieldPath.length === 0 ? rel : `${rel}:${issue.fieldPath}`;
-    throw new RelayError("validation", issue.message, fieldPath);
-  }
-  return parsed.data;
-}
-
 async function writePlanFiles(runDir: string, index: PlanIndex): Promise<void> {
   await mkdir(join(runDir, "10-plan"), { recursive: true });
   await atomicWrite(join(runDir, "10-plan", "index.json"), `${JSON.stringify(index)}\n`);
@@ -523,24 +515,5 @@ async function writePlanFiles(runDir: string, index: PlanIndex): Promise<void> {
     const file = join(runDir, "10-plan", `${task.id}.md`);
     if (await exists(file)) continue;
     await atomicWrite(file, `# ${task.id}: ${task.title}\n\n## Detail\n`);
-  }
-}
-
-async function writeImplementScaffold(runDir: string, id: string, title: string): Promise<string> {
-  const file = join(runDir, "20-implement", `${id}.md`);
-  await mkdir(join(runDir, "20-implement"), { recursive: true });
-  if (!(await exists(file))) {
-    await atomicWrite(file, `# ${id}: ${title}\n\n## Files\n\n## Assumptions\n\n## Risks\n`);
-  }
-  return file;
-}
-
-async function exists(filePath: string): Promise<boolean> {
-  try {
-    await stat(filePath);
-    return true;
-  } catch (error) {
-    if (isEnoent(error)) return false;
-    throw error;
   }
 }

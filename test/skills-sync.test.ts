@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -11,6 +19,7 @@ function runSync(args: string[], cwd: URL | string) {
   return spawnSync(process.execPath, [...script, ...args], {
     cwd,
     encoding: "utf8",
+    env: process.env,
   });
 }
 
@@ -68,6 +77,233 @@ test("sync:check fails after one edit to a bundle copy", () => {
     const run = runSync(["--check", "--root", root], repo);
     expect(run.status, `${run.stdout}\n${run.stderr}`).not.toBe(0);
     expect(run.stderr).toContain("Drift:");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("parseArgs rejects unknown args and empty root", () => {
+  const badArg = runSync(["--unknown"], repo);
+  expect(badArg.status).not.toBe(0);
+  expect(badArg.stderr).toContain("Error: unknown argument: --unknown");
+
+  const missingRoot = runSync(["--root"], repo);
+  expect(missingRoot.status).not.toBe(0);
+  expect(missingRoot.stderr).toContain("Error: --root requires a directory argument");
+
+  const flagAsRoot = runSync(["--root", "--check"], repo);
+  expect(flagAsRoot.status).not.toBe(0);
+  expect(flagAsRoot.stderr).toContain("Error: --root requires a directory argument");
+});
+
+test("sync removes orphan scripts directory and write mode syncs bundles", () => {
+  const root = mkdtempSync(join(tmpdir(), "sync-write-"));
+  try {
+    cpSync(
+      new URL("../specs/70-storage-and-git/00-directory-conventions", import.meta.url),
+      join(root, "specs/70-storage-and-git/00-directory-conventions"),
+      { recursive: true },
+    );
+    cpSync(
+      new URL("../specs/80-skills-integration/00-skill-bridge", import.meta.url),
+      join(root, "specs/80-skills-integration/00-skill-bridge"),
+      { recursive: true },
+    );
+    cpSync(new URL("../skills", import.meta.url), join(root, "skills"), { recursive: true });
+
+    const orphanDir = join(root, "skills/atry-plan/scripts");
+    mkdirSync(orphanDir, { recursive: true });
+    writeFileSync(join(orphanDir, "dummy.sh"), "#!/bin/sh\n");
+
+    const checkRun = runSync(["--check", "--root", root], repo);
+    expect(checkRun.status).not.toBe(0);
+    expect(checkRun.stderr).toContain("Orphan:");
+
+    const writeRun = runSync(["--root", root], repo);
+    expect(writeRun.status).toBe(0);
+    expect(existsSync(orphanDir)).toBe(false);
+
+    const recheckRun = runSync(["--check", "--root", root], repo);
+    expect(recheckRun.status).toBe(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sync handles AGENT_RELAY_SYNC_ROOT, unknown skill directory, and bad preflight", () => {
+  const root = mkdtempSync(join(tmpdir(), "sync-edge-"));
+  try {
+    cpSync(
+      new URL("../specs/70-storage-and-git/00-directory-conventions", import.meta.url),
+      join(root, "specs/70-storage-and-git/00-directory-conventions"),
+      { recursive: true },
+    );
+    cpSync(
+      new URL("../specs/80-skills-integration/00-skill-bridge", import.meta.url),
+      join(root, "specs/80-skills-integration/00-skill-bridge"),
+      { recursive: true },
+    );
+    cpSync(new URL("../skills", import.meta.url), join(root, "skills"), { recursive: true });
+
+    const unknownSkill = join(root, "skills/unknown-skill");
+    mkdirSync(unknownSkill, { recursive: true });
+    writeFileSync(join(unknownSkill, "SKILL.md"), "no markers\n");
+
+    const runUnknown = spawnSync(process.execPath, [...script, "--check"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: { ...process.env, AGENT_RELAY_SYNC_ROOT: root },
+    });
+    expect(runUnknown.status).not.toBe(0);
+    expect(runUnknown.stderr).toContain(
+      "Error: no conventions manifest entry for skill 'unknown-skill'",
+    );
+
+    rmSync(unknownSkill, { recursive: true, force: true });
+
+    const skillMd = join(root, "skills/atry-plan/SKILL.md");
+    writeFileSync(skillMd, "Corrupted without markers\n");
+
+    const runBadPreflight = runSync(["--check", "--root", root], repo);
+    expect(runBadPreflight.status).not.toBe(0);
+    expect(runBadPreflight.stderr).toContain("Missing <!-- BEGIN PREFLIGHT -->");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sync reports missing bundle files and a blank preflight", () => {
+  const root = mkdtempSync(join(tmpdir(), "sync-gaps-"));
+  try {
+    cpSync(
+      new URL("../specs/70-storage-and-git/00-directory-conventions", import.meta.url),
+      join(root, "specs/70-storage-and-git/00-directory-conventions"),
+      { recursive: true },
+    );
+    cpSync(
+      new URL("../specs/80-skills-integration/00-skill-bridge", import.meta.url),
+      join(root, "specs/80-skills-integration/00-skill-bridge"),
+      { recursive: true },
+    );
+    cpSync(new URL("../skills", import.meta.url), join(root, "skills"), { recursive: true });
+    writeFileSync(join(root, "skills", "notes.txt"), "skip\n");
+
+    const conventions = join(root, "skills/atry-plan/references/file-conventions.md");
+    writeFileSync(conventions, "drift\n");
+    const drifted = runSync(["--check", "--root", root], repo);
+    expect(drifted.status).not.toBe(0);
+    expect(drifted.stderr).toContain("differs from generated conventions");
+
+    rmSync(conventions);
+    const missingCopy = runSync(["--check", "--root", root], repo);
+    expect(missingCopy.stderr).toContain(`Missing: ${conventions}`);
+
+    rmSync(join(root, "skills/atry-plan/SKILL.md"));
+    const missingSkill = runSync(["--check", "--root", root], repo);
+    expect(missingSkill.stderr).toContain("Missing:");
+
+    const conduct = join(root, "skills/atry-cross-review/references/reviewer-conduct.md");
+    rmSync(conduct);
+    const missingConduct = runSync(["--check", "--root", root], repo);
+    expect(missingConduct.stderr).toContain(`Missing: ${conduct}`);
+
+    writeFileSync(
+      join(root, "specs/80-skills-integration/00-skill-bridge/preflight.md"),
+      "\n\n",
+    );
+    const blank = runSync(["--check", "--root", root], repo);
+    expect(blank.status).not.toBe(0);
+
+    writeFileSync(
+      join(root, "specs/80-skills-integration/00-skill-bridge/preflight.md"),
+      "one line",
+    );
+    const skillMd = join(root, "skills/atry-implement/SKILL.md");
+    const source = readFileSync(skillMd, "utf8").replace(/\n$/, "");
+    writeFileSync(skillMd, source);
+    const writeRun = runSync(["--root", root], repo);
+    expect(writeRun.status).toBe(0);
+
+    rmSync(join(root, "skills"), { recursive: true, force: true });
+    const noSkills = runSync(["--root", root], repo);
+    expect(noSkills.stderr).toContain("Error: no skills/*/ directories");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sync errors on missing convention parts, writing, preflight, or empty skills", () => {
+  const root = mkdtempSync(join(tmpdir(), "sync-missing-"));
+  try {
+    // Missing convDir entirely
+    const runNoConv = runSync(["--root", root], repo);
+    expect(runNoConv.status).not.toBe(0);
+    expect(runNoConv.stderr).toContain("not found");
+
+    // Create partial convDir
+    const convDir = join(root, "specs/70-storage-and-git/00-directory-conventions");
+    mkdirSync(convDir, { recursive: true });
+    const runMissingPart = runSync(["--root", root], repo);
+    expect(runMissingPart.status).not.toBe(0);
+    expect(runMissingPart.stderr).toContain("missing convention part");
+
+    // Copy full conventions
+    cpSync(
+      new URL("../specs/70-storage-and-git/00-directory-conventions", import.meta.url),
+      convDir,
+      { recursive: true },
+    );
+
+    // Empty skills dir
+    mkdirSync(join(root, "skills"), { recursive: true });
+    const runNoSkills = runSync(["--root", root], repo);
+    expect(runNoSkills.status).not.toBe(0);
+    expect(runNoSkills.stderr).toContain("Error: no skills/*/ directories");
+
+    // Copy skills
+    cpSync(new URL("../skills", import.meta.url), join(root, "skills"), { recursive: true });
+
+    // Missing writing.md
+    const runNoWriting = runSync(["--root", root], repo);
+    expect(runNoWriting.status).not.toBe(0);
+    expect(runNoWriting.stderr).toContain("writing.md not found");
+
+    // Add writing.md
+    mkdirSync(join(root, "specs/80-skills-integration/00-skill-bridge"), { recursive: true });
+    writeFileSync(
+      join(root, "specs/80-skills-integration/00-skill-bridge/writing.md"),
+      "writing source\n",
+    );
+
+    // Missing preflight.md
+    const runNoPreflight = runSync(["--root", root], repo);
+    expect(runNoPreflight.status).not.toBe(0);
+    expect(runNoPreflight.stderr).toContain("preflight.md not found");
+
+    // Add preflight.md
+    writeFileSync(
+      join(root, "specs/80-skills-integration/00-skill-bridge/preflight.md"),
+      "preflight source\n",
+    );
+
+    // Check review template drift
+    const crossConduct = join(
+      root,
+      "skills/atry-cross-review/references/reviewer-conduct.md",
+    );
+    writeFileSync(crossConduct, "different conduct\n");
+    const runConductDrift = runSync(["--check", "--root", root], repo);
+    expect(runConductDrift.status).not.toBe(0);
+    expect(runConductDrift.stderr).toContain("differs from");
+
+    // Preflight out of sync in --check mode
+    const runPreflightCheck = runSync(["--check", "--root", root], repo);
+    expect(runPreflightCheck.status).not.toBe(0);
+    expect(runPreflightCheck.stderr).toContain("preflight block differs from sync source");
+
+    // Write mode should sync preflight and review templates
+    const runWrite = runSync(["--root", root], repo);
+    expect(runWrite.status).toBe(0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

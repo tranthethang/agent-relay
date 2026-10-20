@@ -3,9 +3,13 @@
 //   node --experimental-strip-types scripts/maint/coverage-report.ts
 
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
+import { execFile } from "node:child_process";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export type FileMetrics = {
   path: string;
@@ -36,6 +40,11 @@ type IstanbulFile = {
 
 const sourceDirs = ["src", "scripts/maint"];
 const sourceFiles = ["tsup.config.ts", "vitest.config.ts"];
+const sonarProjectKey = "agent-relay";
+const overallMinimum = 95;
+const fileMinimum = 90;
+const analysisAttempts = 300;
+const analysisPauseMs = 1000;
 
 export async function listSourceFiles(root: string): Promise<string[]> {
   const found: string[] = [];
@@ -107,6 +116,62 @@ export function summaryText(report: CoverageReport): string {
   return `${lines.join("\n")}\n`;
 }
 
+export function assertCoverageBars(
+  root: string,
+  coverage: Record<string, IstanbulFile>,
+): void {
+  const files = indexByRelative(coverage, root);
+  let covered = 0;
+  let total = 0;
+  const low: string[] = [];
+  for (const path of [...files.keys()].sort((left, right) => left.localeCompare(right))) {
+    if (!isGatedPath(path)) continue;
+    const file = files.get(path);
+    if (file === undefined) continue;
+    const totals = lineBranchTotals(file);
+    if (totals.totalLines === 0) continue;
+    const fileCovered = totals.coveredLines + totals.coveredBranches;
+    const fileTotal = totals.totalLines + totals.totalBranches;
+    covered += fileCovered;
+    total += fileTotal;
+    const metric = percent(fileCovered, fileTotal);
+    if (metric <= fileMinimum) low.push(`${path} ${metric}`);
+  }
+  const overall = percent(covered, total);
+  if (overall < overallMinimum) {
+    throw new Error(`overall coverage below ${overallMinimum}%: ${overall}`);
+  }
+  if (low.length > 0) {
+    throw new Error(`per-file coverage at or below ${fileMinimum}%: ${low.join(", ")}`);
+  }
+}
+
+export async function assertDuplication(input: {
+  root: string;
+  env: NodeJS.ProcessEnv;
+  runScanner?: (root: string, env: NodeJS.ProcessEnv) => Promise<void>;
+  readTaskFile?: (root: string) => Promise<string>;
+  fetchImpl?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  attempts?: number;
+}): Promise<void> {
+  const host = sonarHost(input.env);
+  const token = sonarToken(input.env);
+  const fetchImpl = input.fetchImpl ?? fetch;
+  await (input.runScanner ?? runScannerCommand)(input.root, input.env);
+  const taskId = parseCeTaskId(await (input.readTaskFile ?? readScannerTask)(input.root));
+  await waitForAnalysis({
+    host,
+    token,
+    taskId,
+    fetchImpl,
+    sleep: input.sleep ?? delay,
+    attempts: input.attempts ?? analysisAttempts,
+  });
+  const body = await readJson(measuresUrl(host), token, fetchImpl);
+  assertDensity(readDensity(body));
+}
+
 async function main(): Promise<void> {
   const root = process.cwd();
   const coveragePath = join(root, "coverage", "coverage-final.json");
@@ -122,6 +187,8 @@ async function main(): Promise<void> {
   await writeFile(join(root, "coverage", "files.json"), `${JSON.stringify(report)}\n`);
   await writeFile(join(root, "coverage", "lcov.info"), lcovFromCoverage(root, coverage));
   process.stdout.write(summaryText(report));
+  assertCoverageBars(root, coverage);
+  await assertDuplication({ root, env: process.env });
 }
 
 function hasRoute(
@@ -216,6 +283,26 @@ function metricsFor(path: string, file: IstanbulFile | undefined): FileMetrics {
   if (file === undefined) {
     return { path, lines: 0, statements: 0, branches: 0, functions: 0 };
   }
+  const totals = lineBranchTotals(file);
+  const statements = Object.values(file.s);
+  const functions = Object.values(file.f);
+  return {
+    path,
+    lines: percent(totals.coveredLines, totals.totalLines),
+    statements: percent(statements.filter((count) => count > 0).length, statements.length),
+    branches: percent(totals.coveredBranches, totals.totalBranches),
+    functions: percent(functions.filter((count) => count > 0).length, functions.length),
+  };
+}
+
+type LineBranchTotals = {
+  coveredLines: number;
+  totalLines: number;
+  coveredBranches: number;
+  totalBranches: number;
+};
+
+function lineBranchTotals(file: IstanbulFile): LineBranchTotals {
   const lineHits = new Map<number, boolean>();
   for (const [id, span] of Object.entries(file.statementMap)) {
     const covered = (file.s[id] ?? 0) > 0;
@@ -227,16 +314,147 @@ function metricsFor(path: string, file: IstanbulFile | undefined): FileMetrics {
   for (const covered of lineHits.values()) {
     if (covered) coveredLines += 1;
   }
-  const statements = Object.values(file.s);
-  const functions = Object.values(file.f);
   const branches = Object.values(file.b).flat();
   return {
-    path,
-    lines: percent(coveredLines, lineHits.size),
-    statements: percent(statements.filter((count) => count > 0).length, statements.length),
-    branches: percent(branches.filter((count) => count > 0).length, branches.length),
-    functions: percent(functions.filter((count) => count > 0).length, functions.length),
+    coveredLines,
+    totalLines: lineHits.size,
+    coveredBranches: branches.filter((count) => count > 0).length,
+    totalBranches: branches.length,
   };
+}
+
+function isGatedPath(path: string): boolean {
+  return path.startsWith("src/") || path.startsWith("scripts/maint/");
+}
+
+function sonarHost(env: NodeJS.ProcessEnv): string {
+  const host = env.SONAR_HOST_URL?.trim().replace(/\/+$/, "") ?? "";
+  if (host.length === 0) throw new Error("SONAR_HOST_URL missing");
+  return host;
+}
+
+function sonarToken(env: NodeJS.ProcessEnv): string {
+  const token = env.SONAR_TOKEN?.trim() ?? "";
+  if (token.length === 0) throw new Error("SONAR_TOKEN missing");
+  return token;
+}
+
+function scannerName(): string {
+  return process.platform === "win32" ? "sonar-scanner.cmd" : "sonar-scanner";
+}
+
+async function runScannerCommand(root: string, env: NodeJS.ProcessEnv): Promise<void> {
+  try {
+    await execFileAsync(scannerName(), [], {
+      cwd: root,
+      env,
+      windowsHide: true,
+      shell: process.platform === "win32",
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  } catch (error: unknown) {
+    throw scannerFailure(error);
+  }
+}
+
+function scannerFailure(error: unknown): Error {
+  if (isMissingScanner(error)) return new Error("sonar-scanner missing");
+  return new Error("sonar-scanner failed");
+}
+
+function isMissingScanner(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  if ("code" in error && error.code === "ENOENT") return true;
+  const stderr = "stderr" in error ? String(error.stderr ?? "") : "";
+  return /not recognized as an internal or external command|command not found/i.test(stderr);
+}
+
+async function readScannerTask(root: string): Promise<string> {
+  try {
+    return await readFile(join(root, ".scannerwork", "report-task.txt"), "utf8");
+  } catch {
+    throw new Error("analysis task id missing");
+  }
+}
+
+function parseCeTaskId(text: string): string {
+  const found = /^ceTaskId=(.*)$/m.exec(text);
+  const id = found?.[1]?.trim() ?? "";
+  if (id.length === 0) throw new Error("analysis task id missing");
+  return id;
+}
+
+function measuresUrl(host: string): string {
+  const query = new URLSearchParams({
+    component: sonarProjectKey,
+    metricKeys: "duplicated_lines_density",
+  });
+  return `${host}/api/measures/component?${query.toString()}`;
+}
+
+async function waitForAnalysis(input: {
+  host: string;
+  token: string;
+  taskId: string;
+  fetchImpl: typeof fetch;
+  sleep: (ms: number) => Promise<void>;
+  attempts: number;
+}): Promise<void> {
+  const url = `${input.host}/api/ce/task?id=${encodeURIComponent(input.taskId)}`;
+  for (let attempt = 1; attempt <= input.attempts; attempt += 1) {
+    const status = readTaskStatus(await readJson(url, input.token, input.fetchImpl));
+    if (status === "SUCCESS") return;
+    if (status === "FAILED" || status === "CANCELED") {
+      throw new Error(`analysis task ${status}`);
+    }
+    await input.sleep(analysisPauseMs);
+  }
+  throw new Error("analysis task timed out");
+}
+
+async function readJson(url: string, token: string, fetchImpl: typeof fetch): Promise<unknown> {
+  const response = await fetchImpl(url, {
+    headers: { Authorization: `Basic ${Buffer.from(`${token}:`).toString("base64")}` },
+  });
+  if (!response.ok) throw new Error(`sonar request failed: ${response.status}`);
+  return response.json() as Promise<unknown>;
+}
+
+function readTaskStatus(body: unknown): string {
+  if (!isRecord(body) || !isRecord(body.task)) throw new Error("analysis task status missing");
+  const status = body.task.status;
+  if (typeof status !== "string" || status.length === 0) {
+    throw new Error("analysis task status missing");
+  }
+  return status;
+}
+
+function readDensity(body: unknown): number {
+  if (!isRecord(body) || !isRecord(body.component) || !Array.isArray(body.component.measures)) {
+    throw new Error("duplicated lines density missing");
+  }
+  for (const measure of body.component.measures) {
+    if (!isRecord(measure) || measure.metric !== "duplicated_lines_density") continue;
+    if (typeof measure.value !== "string") throw new Error("duplicated lines density missing");
+    const value = Number(measure.value);
+    if (!Number.isFinite(value)) throw new Error("duplicated lines density missing");
+    return value;
+  }
+  throw new Error("duplicated lines density missing");
+}
+
+function assertDensity(value: number): void {
+  if (value > 1) throw new Error(`duplicated lines density above 1%: ${value}`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function lcovText(files: Map<string, IstanbulFile>): string {

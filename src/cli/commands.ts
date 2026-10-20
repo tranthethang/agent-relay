@@ -6,7 +6,7 @@ import { findRelayDir, runIdFromName, runSlugFromName } from "../core/discover.j
 import { exitCodes, RelayError } from "../core/error.js";
 import { type EventLine } from "../core/event.js";
 import { reviewIntegrity } from "../core/lifecycle.js";
-import { explainNext, nextStep } from "../core/next.js";
+import { explainNextWithChoices, nextActions, nextStep, nextText } from "../core/next.js";
 import { installCommand, preflightResult } from "../core/preflight.js";
 import { type RunState } from "../core/reduce.js";
 import { oneToken, selectRun } from "../core/select.js";
@@ -19,7 +19,9 @@ import { registerDistill } from "./distill.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
 import { registerPlan } from "./plan.js";
+import { registerPolicy } from "./policy.js";
 import { registerReview } from "./review.js";
+import { registerWorktree } from "./worktree.js";
 
 export function registerCommands(program: Command): void {
   program
@@ -64,7 +66,7 @@ export function registerCommands(program: Command): void {
 
   program
     .command("next")
-    .description("Print the next command for a run")
+    .description("Show run state, available actions, and a recommendation")
     .argument("[run]", "run id, slug, name, or path")
     .action(async (run: string | undefined, _opts: unknown, command: Command) => {
       const token = oneToken(run, flagRun(command));
@@ -81,7 +83,19 @@ export function registerCommands(program: Command): void {
         ? await indexForImplement(runDir, loaded.run.state)
         : null;
       const step = nextStep(loaded.run.id, loaded.run.state, loaded.events, reviews, index);
-      writeResult(explainNext(step), commandJson(command), (row) => `${row.command}\n`);
+      const choices = nextActions(
+        loaded.run.id,
+        loaded.run.state,
+        loaded.events,
+        step,
+        reviews,
+        index,
+      );
+      writeResult(
+        explainNextWithChoices(step, loaded.run.state, choices),
+        commandJson(command),
+        nextText,
+      );
     });
 
   program
@@ -111,6 +125,8 @@ export function registerCommands(program: Command): void {
   registerClaim(program);
   registerReview(program);
   registerDistill(program);
+  registerPolicy(program);
+  registerWorktree(program);
 }
 
 function commandJson(command: Command): boolean {

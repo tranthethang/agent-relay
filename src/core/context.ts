@@ -29,6 +29,7 @@ export type ContextResult = {
     title: string;
     base: string;
     from?: string;
+    worktree?: { path: string; branch: string };
   };
   stage: RunState["stage"];
   lifecycle: RunState["lifecycle"];
@@ -103,6 +104,9 @@ function runFields(runDir: string, run: RunJson): ContextResult["run"] {
     base: run.base,
   };
   if (run.from !== undefined) fields.from = run.from;
+  if (run.worktree !== undefined) {
+    fields.worktree = { path: run.worktree.path, branch: run.worktree.branch };
+  }
   return fields;
 }
 

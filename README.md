@@ -80,6 +80,7 @@ atry review done <run> self|cross
 atry review decide <run> Q<n> <answer>
 atry close <run> --via confirm|arg [--ack-open] [--ack-fixes]
 atry close <run> --waive-review "<reason>" [--ack-open]
+atry worktree cleanup [run]
 atry distill <run>
 ```
 
@@ -108,7 +109,8 @@ requirements. A missing file uses these defaults:
 {
   "schema": 1,
   "requireReviews": ["self", "cross"],
-  "smallChange": 20
+  "smallChange": 20,
+  "strict": { "scope": false, "plan": false, "reviewIntegrity": false }
 }
 ```
 
@@ -119,12 +121,61 @@ platform shell, records its exit code, duration, and tree, and writes the last
 200 stdout and stderr lines to `NN.test.log`. A non-zero exit records failure
 but does not refuse `review done`.
 
+The optional `strict` policy groups control scope, plan, and review-integrity
+gates independently. Each group defaults to `false`, which reports a warning
+and continues when the command can preserve the relevant evidence. Set a group
+to `true` to keep its blocking behavior. Existing policy files that omit
+`strict` remain valid.
+
 Review JSON contains `schema`, `kind`, `tool`, `model`, `fixed`, and `open`.
 The `tool` and `model` values must match the review start event. Cross-review
 requires `--model`. Question cards at column zero must match `open.length`.
 After a user answers a completed review's open item, record the answer with
 `atry review decide <run> Q<n> <answer>`. A decision is stored in
 `events.jsonl`; a later review can then close that question.
+
+`atry policy init` writes a template `.agent-relay.json` at the git root. The
+template holds the defaults and `"worktree": { "enabled": false }`. The command
+refuses when the file exists. It does not stage or commit the file. You must
+commit it, because runs read policy only at their base commit.
+
+`atry policy check` validates `.agent-relay.json` in the working tree. Run it
+before you commit the file. It uses the same schema and field paths as runs do.
+
+### Worktree isolation
+
+Worktree isolation remains off by default. Set `"worktree": { "enabled": true }` in `.agent-relay.json` and commit it.
+`run new` reads policy at `HEAD`, so an uncommitted change has no effect.
+`worktree.dir` sets the folder for worktrees. A relative `dir` resolves from
+the git root. It cannot point to the git root or any folder inside the repo.
+Without `dir`, the folder is `<repo>_work-tree` next to the repo.
+
+`run new` exclusively reserves the run directory name. A failure during run
+setup rolls back the symlink, the worktree, and the branch.
+With worktree on, `run new` runs `git worktree add -b <run> <dir>/<run> HEAD`.
+`HEAD` must be on a branch. `run.json` records the worktree path and the
+original branch. The worktree gets `.agent-relay` as a link to the main repo
+folder (a junction on Windows), and `.agent-relay` goes into the shared
+`info/exclude`. Work, commit, and run `atry` in that worktree. Every git check
+for the run uses the worktree. `atry context --json` shows `run.worktree`.
+
+`stage start implement` checks the worktree before work begins. It verifies
+that the worktree directory exists, is registered with Git, is not detached,
+and matches the run branch.
+
+The merge stays manual. Merge the run branch into the original branch before
+`close`. `close` removes the worktree only when the run branch is an ancestor
+of the original branch and the worktree has no uncommitted changes. Otherwise it
+keeps the worktree and says why. If removal fails, `close` keeps the run closed
+and reports `worktree: kept (<reason>)`. A successful removal records a `cleaned`
+run event. `atry worktree cleanup [run]` retries removal on a closed run.
+A squash merge does not make the run branch an ancestor. `close` never deletes
+the run branch, and the run history stays in the main repo. Ignored files
+remain outside this change.
+
+With worktree off, `stage start implement` refuses a tree with changes outside
+`.agent-relay/`. On a clean tree, it moves `base` to `HEAD` and records a `run`
+`rebased` event.
 
 ### Parallel tasks
 
@@ -135,7 +186,8 @@ atry list <run>
 ```
 
 `claim` refuses a task whose `files` overlap a lock held by another session.
-It does not create worktrees. The sessions share one tree. `task done` ignores
+`claim` does not create worktrees. The sessions on one run share one tree.
+With worktree isolation on, each run has its own tree. `task done` ignores
 a path that another in-progress task's `files` covers. `atry guard <run> <path>`
 exits 0 when that path is inside an in-progress task. `--session <tag>` limits
 the check to that session.
@@ -200,6 +252,9 @@ scaffold that already has every key. Task status lives in events.
 npm test
 npm run check
 npm run sync:check
+git config core.hooksPath .githooks
+brew install dprint
+brew install sonar-scanner
 ```
 
 Contributor rules: [`AGENTS.md`](AGENTS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).

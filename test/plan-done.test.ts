@@ -1,10 +1,14 @@
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { RelayError } from "../src/core/error.js";
 import { indexFromTasks } from "../src/core/plan.js";
 import { gitCommit, runCli, withTempGitRepo } from "./helper.js";
 import { createRun, writeTasks } from "./plan-helper.js";
+
+const execFileAsync = promisify(execFile);
 
 test("indexFromTasks assigns ids and rejects dep errors", () => {
   const index = indexFromTasks([
@@ -81,6 +85,16 @@ test("plan done and plan amend reject root and escaping files", async () => {
 
 test("atry plan done reports dep errors and the 8-task gate", async () => {
   await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self", "cross"],
+        smallChange: 20,
+        strict: { plan: true },
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
     await gitCommit(dir);
     const run = await createRun(dir, "plan-done");
     const missing = await runCli(["plan", "done", run], dir);
@@ -110,5 +124,23 @@ test("atry plan done reports dep errors and the 8-task gate", async () => {
     expect(gate.stderr).toContain("plan has more than 8 tasks");
     const events = await readFile(join(run, "events.jsonl"), "utf8");
     expect(events).not.toContain("\"action\":\"completed\"");
+  });
+});
+
+test("plan done allows more than eight tasks with a warning in non-strict mode", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "plan-done-large");
+    await writeTasks(
+      run,
+      Array.from({ length: 9 }, (_, index) => ({ title: `Task ${index + 1}` })),
+    );
+    const result = await runCli(["plan", "done", run], dir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("warning: plan has 9 tasks");
+    const index = JSON.parse(await readFile(join(run, "10-plan/index.json"), "utf8")) as {
+      tasks: unknown[];
+    };
+    expect(index.tasks).toHaveLength(9);
   });
 });

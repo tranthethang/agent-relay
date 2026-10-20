@@ -1,6 +1,7 @@
-import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { exists } from "./claim.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
@@ -12,6 +13,7 @@ import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
 import { runTestCommand } from "./testrun.js";
 import { schemaVersion, toolSchema } from "./vocab.js";
+import { runGitCwd } from "./worktree.js";
 
 export const reviewKinds = ["self", "cross"] as const;
 
@@ -133,7 +135,7 @@ export async function reviewNew(input: {
     const dir = join(input.runDir, place.dir);
     await mkdir(dir, { recursive: true });
     const label = await nextLabel(dir);
-    const tree = await workTree(input.runDir);
+    const tree = await workTree(await runGitCwd(input.runDir, loaded.run));
     const markdown = join(dir, `${label}.md`);
     const json = join(dir, `${label}.json`);
     await atomicWrite(markdown, reviewMarkdown(kind));
@@ -185,18 +187,19 @@ export async function reviewDone(input: {
         lastProvenance(loaded.events, "self-review"),
       )
       : [];
-    const policy = await readPolicy(input.runDir, loaded.run.base);
+    const cwd = await runGitCwd(input.runDir, loaded.run);
+    const policy = await readPolicy(cwd, loaded.run.base);
     const execution = await runTestCommand(
-      await gitRoot(input.runDir),
+      await gitRoot(cwd),
       policy.testCommand,
       input.testTimeoutMs,
     );
-    const head = await gitHead(input.runDir);
-    const tree = await workTree(input.runDir);
-    const size = await treeDiffSize(input.runDir, loaded.run.base, tree);
+    const head = await gitHead(cwd);
+    const tree = await workTree(cwd);
+    const size = await treeDiffSize(cwd, loaded.run.base, tree);
     const startedTree = lastReviewStartTree(loaded.events, place.stage);
     const delta = startedTree !== undefined && startedTree !== tree
-      ? await treeDiffSize(input.runDir, startedTree, tree)
+      ? await treeDiffSize(cwd, startedTree, tree)
       : undefined;
     const label = String(reviewNumber(review.rel)).padStart(2, "0");
     const logPath = join(input.runDir, place.dir, `${label}.test.log`);
@@ -381,6 +384,14 @@ async function readLatestReview(
   const latest = files.at(-1);
   if (latest === undefined) throw new RelayError("not_found", "review not found", dirName);
   const rel = `${dirName}/${latest}`;
+  const value = await readReviewDocument(runDir, rel);
+  if (value.kind !== kind) {
+    throw new RelayError("validation", "kind does not match", `${rel}:kind`);
+  }
+  return { rel, value };
+}
+
+export async function readReviewDocument(runDir: string, rel: string): Promise<ReviewJson> {
   let value: unknown;
   try {
     value = await readJson(join(runDir, rel));
@@ -396,10 +407,7 @@ async function readLatestReview(
     const fieldPath = issue.fieldPath.length === 0 ? rel : `${rel}:${issue.fieldPath}`;
     throw new RelayError("validation", issue.message, fieldPath);
   }
-  if (parsed.data.kind !== kind) {
-    throw new RelayError("validation", "kind does not match", `${rel}:kind`);
-  }
-  return { rel, value: parsed.data };
+  return parsed.data;
 }
 
 function reviewNumber(name: string): number {
@@ -478,14 +486,4 @@ function parseKind(value: string): ReviewKind {
 function parseModel(value: string): string {
   if (value.trim().length === 0) throw new RelayError("validation", "model is empty", "model");
   return value;
-}
-
-async function exists(filePath: string): Promise<boolean> {
-  try {
-    await stat(filePath);
-    return true;
-  } catch (error) {
-    if (isEnoent(error)) return false;
-    throw error;
-  }
 }

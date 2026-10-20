@@ -25,6 +25,10 @@ export const runJsonSchema = z.object({
   title: z.string().min(1),
   base: z.string().min(1),
   from: z.string().min(1).optional(),
+  worktree: z.object({
+    path: z.string().min(1),
+    branch: z.string().min(1),
+  }).strict().optional(),
   state: z.object({
     lifecycle: lifecycleSchema,
     stage: stageSchema,

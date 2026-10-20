@@ -20,3 +20,9 @@ temporary `HOME`. It needs network access the first time `npx` fetches
 
 `npm run check` runs dprint and `tsc --noEmit`. CI does the same. CI does not
 prove that an agent follows a skill.
+
+`.githooks/pre-commit` runs `npm run build`. When that exits zero, it runs
+`npm run coverage`. When coverage exits zero, it runs `dprint check`. The hook
+exits non-zero when one command exits non-zero. Enable it with
+`git config core.hooksPath .githooks`. `npm run coverage` needs `sonar-scanner`
+on `PATH`, plus `SONAR_HOST_URL` and `SONAR_TOKEN`.

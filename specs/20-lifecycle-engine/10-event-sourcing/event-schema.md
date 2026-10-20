@@ -8,7 +8,7 @@ Every line has `schema` (`1`), `ts` (UTC timestamp, such as `2026-10-19T06:00:00
 
 `stage` is one of `brainstorm`, `plan`, `implement`, `self-review`, `cross-review`, `distill`, or `run`.
 
-`action` is one of `created`, `started`, `completed`, `decided`, `approved`, `closed`, `waived`, `abandoned`, `task-started`, `task-done`, `task-skipped`, `claimed`, `released`, or `stolen`.
+`action` is one of `created`, `started`, `completed`, `decided`, `approved`, `closed`, `waived`, `abandoned`, `task-started`, `task-done`, `task-skipped`, `claimed`, `released`, `stolen`, or `rebased`.
 
 Optional fields, when the command records them:
 
@@ -25,3 +25,5 @@ Optional fields, when the command records them:
 | `question`, `answer`, `ref` | A decision and the review file it answers.                      |
 
 There is no `event` type field. The pair `stage` + `action` names the record.
+
+`run` `rebased` records that `stage start implement` moved `base` to `HEAD` on a run without a worktree. Its `ref` is the new base commit. It does not change lifecycle, stage, or tasks.

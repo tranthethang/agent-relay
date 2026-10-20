@@ -10,7 +10,7 @@ import {
 } from "../core/claim.js";
 import { RelayError } from "../core/error.js";
 import { guardExit, guardPath, guardText } from "../core/guard.js";
-import { oneToken, selectRun } from "../core/select.js";
+import { commandJson, flagRun, takeRun } from "./distill.js";
 import { writeResult } from "./output.js";
 
 export function registerClaim(program: Command): void {
@@ -102,19 +102,4 @@ function parseTtl(value: string): number {
     throw new RelayError("usage", "ttl must be a non-negative number", "ttl");
   }
   return ttl;
-}
-
-async function takeRun(command: Command, positional: string | undefined): Promise<string> {
-  const token = oneToken(positional, flagRun(command));
-  if (token === undefined) throw new RelayError("usage", "run is required", "run");
-  return selectRun(process.cwd(), token);
-}
-
-function commandJson(command: Command): boolean {
-  return command.optsWithGlobals().json === true;
-}
-
-function flagRun(command: Command): string | undefined {
-  const run = command.optsWithGlobals().run;
-  return typeof run === "string" ? run : undefined;
 }

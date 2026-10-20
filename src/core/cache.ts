@@ -99,6 +99,7 @@ function withState(current: RunJson, state: RunState): RunJson {
     state,
   };
   if (current.from !== undefined) next.from = current.from;
+  if (current.worktree !== undefined) next.worktree = current.worktree;
   return runJsonSchema.parse(next);
 }
 

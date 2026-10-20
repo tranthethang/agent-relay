@@ -21,6 +21,7 @@ test("statusList skips a directory that has no run.json", async () => {
       lifecycle: "planned",
       age: "2h",
       next: "atry approve 1792208725",
+      actions: ["atry approve 1792208725"],
     });
   });
 });
@@ -50,6 +51,7 @@ test("statusDetail rebuilds a stale cache", async () => {
     expect(detail.approved).toBe(true);
     expect(detail.warnings).toEqual(["run.json disagreed with events.jsonl; rebuilt"]);
     expect(detail.next).toBe("atry stage start 1792208725 implement");
+    expect(detail.actions).toEqual(["atry stage start 1792208725 implement"]);
     const stored = JSON.parse(await readFile(join(runDir, "run.json"), "utf8")) as {
       state: { approved: boolean };
     };

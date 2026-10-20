@@ -9,6 +9,7 @@ guides start at [`specs/90-maintainer/00-index/index.md`](specs/90-maintainer/00
 git clone https://github.com/tranthethang/agent-relay.git
 cd agent-relay
 npm ci
+git config core.hooksPath .githooks
 npm test
 ```
 
@@ -32,9 +33,13 @@ and skill-reference sync.
 
 ```bash
 brew install dprint
+brew install sonar-scanner
 make fmt
 make fmt-check
 ```
+
+`sonar-scanner` is required by `npm run coverage`. Set `SONAR_HOST_URL` and
+`SONAR_TOKEN` in the environment. Do not commit the token.
 
 `dprint.json` formats TypeScript, markdown, and yaml. Edit convention parts
 under `specs/70-storage-and-git/00-directory-conventions/`, then run `make fmt`

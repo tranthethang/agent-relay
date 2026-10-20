@@ -20,6 +20,7 @@ import { overlappingTask } from "./overlap.js";
 import { type RunState } from "./reduce.js";
 import { type PlanIndex, planIndexSchema } from "./tasks.js";
 import { schemaVersion, taskIdSchema, taskStatuses } from "./vocab.js";
+import { runGitCwd } from "./worktree.js";
 
 type TaskStatus = (typeof taskStatuses)[number];
 
@@ -102,7 +103,7 @@ export async function claimTask(
       throw error;
     }
     const implement = await ensureImplement(runDir, item.id, item.title);
-    const tree = await workTree(runDir);
+    const tree = await workTree(await runGitCwd(runDir, loaded.run));
     await appendAll(loaded, runDir, [
       { stage: "implement", action: "claimed", task: id, session },
       { stage: "implement", action: "task-started", task: id, session, tree },
@@ -183,7 +184,7 @@ export async function stealTask(
       await assertNoOverlap(runDir, index, id, session);
       await stealLock(runDir, id, session, ttlMinutes * 60_000);
       const implement = await ensureImplement(runDir, item.id, item.title);
-      const tree = await workTree(runDir);
+      const tree = await workTree(await runGitCwd(runDir, loaded.run));
       await appendEvent(loaded, runDir, {
         stage: "implement",
         action: "stolen",
@@ -211,9 +212,9 @@ export async function listTasks(runDir: string): Promise<ListResult> {
   const index = await loadPlanIndex(runDir);
   const tasks: ListTask[] = [];
   for (const item of index.tasks) {
-    const blocked = item.deps.filter((dep) => !isClear(statusOf(loaded.run.state, dep)));
+    const blocked = item.deps.filter((dep) => !isClear(taskStatus(loaded.run.state, dep)));
     const owner = await ownerOf(runDir, item.id, loaded.run.state);
-    const row: ListTask = { id: item.id, status: statusOf(loaded.run.state, item.id), blocked };
+    const row: ListTask = { id: item.id, status: taskStatus(loaded.run.state, item.id), blocked };
     if (owner !== undefined) row.owner = owner;
     tasks.push(row);
   }
@@ -307,7 +308,7 @@ function requireSession(session: string): void {
 }
 
 function refuseFinished(state: RunState, id: string, verb: string): void {
-  const current = statusOf(state, id);
+  const current = taskStatus(state, id);
   if (current === "done" || current === "skipped") {
     throw new RelayError("gate", `${verb} refused: ${id} is ${current}`, id);
   }
@@ -315,7 +316,7 @@ function refuseFinished(state: RunState, id: string, verb: string): void {
 
 function assertDeps(state: RunState, id: string, deps: readonly string[], verb: string): void {
   for (const dep of deps) {
-    const status = statusOf(state, dep);
+    const status = taskStatus(state, dep);
     if (!isClear(status)) {
       throw new RelayError("gate", `${verb} refused: ${dep} is ${status}`, `${id}.deps`);
     }
@@ -331,17 +332,17 @@ function assertImplementing(state: RunState, verb: string): void {
   throw new RelayError("gate", `${verb} refused: run is ${state.lifecycle}`, "state.lifecycle");
 }
 
-function statusOf(state: RunState, id: string): TaskStatus {
+export function taskStatus(state: RunState, id: string): TaskStatus {
   return state.tasks.find((task) => task.id === id)?.status ?? "pending";
 }
 
-function parseTaskId(value: string): string {
+export function parseTaskId(value: string): string {
   const parsed = taskIdSchema.safeParse(value);
   if (!parsed.success) throw new RelayError("validation", "invalid task id", "task");
   return parsed.data;
 }
 
-function requireTask(index: PlanIndex, id: string): PlanIndex["tasks"][number] {
+export function requireTask(index: PlanIndex, id: string): PlanIndex["tasks"][number] {
   const found = index.tasks.find((task) => task.id === id);
   if (found === undefined) throw new RelayError("not_found", "task not found", "task");
   return found;
@@ -360,12 +361,12 @@ async function ownerOf(
   return state.tasks.find((task) => task.id === id)?.session;
 }
 
-async function loadPlanIndex(runDir: string): Promise<PlanIndex> {
+export async function loadPlanIndex(runDir: string): Promise<PlanIndex> {
   const rel = "10-plan/index.json";
   return readSchema(join(runDir, rel), rel, planIndexSchema, "index.json not found");
 }
 
-async function readSchema<T>(
+export async function readSchema<T>(
   filePath: string,
   rel: string,
   schema: ZodType<T>,
@@ -390,7 +391,7 @@ async function readSchema<T>(
   return parsed.data;
 }
 
-async function ensureImplement(runDir: string, id: string, title: string): Promise<string> {
+export async function ensureImplement(runDir: string, id: string, title: string): Promise<string> {
   const file = join(runDir, "20-implement", `${id}.md`);
   await mkdir(join(runDir, "20-implement"), { recursive: true });
   if (!(await exists(file))) {
@@ -399,7 +400,7 @@ async function ensureImplement(runDir: string, id: string, title: string): Promi
   return file;
 }
 
-async function exists(filePath: string): Promise<boolean> {
+export async function exists(filePath: string): Promise<boolean> {
   try {
     await stat(filePath);
     return true;

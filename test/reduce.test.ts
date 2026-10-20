@@ -94,3 +94,18 @@ test("reduceEvents ignores a task action that has no task id", () => {
   const state = reduceEvents([ev({ stage: "implement", action: "task-done" })]);
   expect(state.tasks).toEqual([]);
 });
+
+test("reduceEvents preserves closed lifecycle on cleaned action", () => {
+  const state = reduceEvents([
+    ev({ stage: "run", action: "created" }),
+    ev({ stage: "plan", action: "approved" }),
+    ev({ stage: "implement", action: "started" }),
+    ev({ stage: "implement", action: "completed" }),
+    ev({ stage: "self-review", action: "started" }),
+    ev({ stage: "self-review", action: "completed" }),
+    ev({ stage: "run", action: "closed" }),
+    ev({ stage: "run", action: "cleaned" }),
+  ]);
+  expect(state.lifecycle).toBe("closed");
+  expect(state.stage).toBe("self-review");
+});
