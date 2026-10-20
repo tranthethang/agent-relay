@@ -29,19 +29,28 @@ Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigr
 ## Loop
 
 Run `atry next <run> --json`.
-Read each path in `read` before you run `command`.
-Stop when `command` is `none`.
-When `command` is approve, stop. This skill does not approve.
-When `command` names cross-review, stop. Use the cross-review skill for that stage.
-When `command` contains `close`, run `atry close <run> --preview`.
+Read `state`, `actions`, and `recommendation` from the result.
+Follow the recommendation when only one action is available.
+When several actions are available, show them and ask the developer to select one.
+Then follow the developer's selection.
+Read the selected action's paths before you run its command.
+Stop when the state is closed or abandoned and no action is available.
+When the selected action is approve, stop. This skill does not approve.
+When the selected action names cross-review, stop. Use the cross-review skill for that stage.
+When the selected action contains `close`, run `atry close <run> --preview`.
 Show that preview and ask the user to answer `y` or `n`.
+When it recommends `n`, read `strict.reviewIntegrity` from the run base policy.
+When that setting is `true`, stop without closing.
+When it is `false`, show the listed integrity warnings and let the user decide.
 When the skill call includes a `yes` token, use that token as `y`.
-Run `atry close <run> --via confirm` only when the preview says `recommend: y` and the user answers `y`.
+When the user answers `n`, stop and do not record an event.
+When the preview says `recommend: n` and `strict.reviewIntegrity` is `true`, stop and do not record an event.
+When the user answers `y` and the preview says `recommend: y`, run `atry close <run> --via confirm`.
+When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm`.
 When the `yes` token is that answer, run `atry close <run> --via arg`.
-When the preview says `recommend: n`, or the user answers `n`, stop and do not record an event.
-When `command` contains `review new`, run `atry review new <run> self --tool <tool>`.
+When the selected action contains `review new`, run `atry review new <run> self --tool <tool>`.
 Add `--model <model>` when you know the model.
-When `command` contains `review done`, follow the review method, then run `atry review done <run> self`.
+When the selected action contains `review done`, follow the review method, then run `atry review done <run> self`.
 Repeat from the first step in this section.
 
 ## Review method

@@ -14,6 +14,7 @@ test("policy init writes the template at the git root", async () => {
     expect(result.code).toBe(0);
     const text = await readFile(join(dir, ".agent-relay.json"), "utf8");
     expect(JSON.parse(text)).toEqual(policyTemplate);
+    expect(policyTemplate.strict).toEqual({ scope: false, plan: false, reviewIntegrity: false });
     expect(text.endsWith("}\n")).toBe(true);
     expect(result.stdout).toContain("commit the file to apply it");
   });

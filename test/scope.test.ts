@@ -11,3 +11,11 @@ test("outsidePaths keeps covered paths and drops run files", () => {
     "src/other.ts",
   ]);
 });
+
+test("outsidePaths treats previously accepted extras as covered", () => {
+  expect(outsidePaths(
+    ["src/accepted.ts", "src/new.ts"],
+    ["src/own.ts"],
+    ["src/accepted.ts"],
+  )).toEqual(["src/new.ts"]);
+});

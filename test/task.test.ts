@@ -1,8 +1,12 @@
+import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { gitCommit, runCli, withTempGitRepo } from "./helper.js";
 import { createRun, writeTasks } from "./plan-helper.js";
+
+const execFileAsync = promisify(execFile);
 
 test("atry task start done and skip record events and check deps", async () => {
   await withTempGitRepo(async (dir) => {
@@ -72,6 +76,16 @@ test("atry task start done and skip record events and check deps", async () => {
 
 test("task done checks edits against task files", async () => {
   await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self", "cross"],
+        smallChange: 20,
+        strict: { scope: true },
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
     await gitCommit(dir);
     const run = await createRun(dir, "task-scope");
     await writeTasks(run, [
@@ -149,6 +163,59 @@ test("task done checks edits against task files", async () => {
     expect(done?.reason).toBe("shared types");
     expect(done?.extra).toHaveLength(11);
     expect(done?.extra).toContain("src/out-10.ts");
+  });
+});
+
+test("non-strict scope records extras and continues through implement completion", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self", "cross"],
+        smallChange: 20,
+        strict: { scope: false },
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+    await gitCommit(dir);
+    const run = await createRun(dir, "task-scope-warning");
+    await writeTasks(run, [{ title: "Own file", files: ["src/own.ts"] }]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
+    expect(
+      (await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir))
+        .code,
+    ).toBe(0);
+    expect((await runCli(["task", "start", run, "T1"], dir)).code).toBe(0);
+    await mkdir(join(dir, "src"), { recursive: true });
+    await writeFile(join(dir, "src/unplanned.ts"), "export {} as unplanned;\n");
+    const taskDone = await runCli(["task", "done", run, "T1"], dir);
+    expect(taskDone.code).toBe(0);
+    expect(taskDone.stdout).toContain("scope warning");
+    expect(taskDone.stdout).toContain("src/unplanned.ts");
+
+    await writeFile(join(dir, "src/late.ts"), "export {} as late;\n");
+    const stageDone = await runCli(["stage", "done", run, "implement", "--tool", "cursor"], dir);
+    expect(stageDone.code).toBe(0);
+    expect(stageDone.stdout).toContain("src/late.ts");
+    const events = (await readFile(join(run, "events.jsonl"), "utf8")).trim().split("\n")
+      .map((line) =>
+        JSON.parse(line) as {
+          action: string;
+          stage: string;
+          extra?: string[];
+          reason?: string;
+        }
+      );
+    const taskEvent = events.find((event) => event.action === "task-done");
+    const stageEvent = events.find((event) =>
+      event.action === "completed" && event.stage === "implement"
+    );
+    expect(taskEvent?.extra).toContain("src/unplanned.ts");
+    expect(taskEvent?.reason).toContain("strict.scope=false");
+    expect(stageEvent?.extra).toContain("src/late.ts");
+    expect(stageEvent?.reason).toContain("strict.scope=false");
   });
 });
 

@@ -29,21 +29,27 @@ Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigr
 ## Loop
 
 Run `atry next <run> --json`.
-Read each path in `read` before you run `command`.
-Stop when `command` is `none`.
-When `needsHuman` is true for approve, run `atry approve <run> --preview`.
+Read `state`, `actions`, and `recommendation` from the result.
+Follow the recommendation when only one action is available.
+When several actions are available, show them and ask the developer to select one.
+Then follow the developer's selection.
+Read the selected action's paths before you run its command.
+Stop when the state is closed or abandoned and no action is available.
+When the selected action is approve, run `atry approve <run> --preview`.
 Show that preview and ask the user to answer `y` or `n`.
 When the skill call includes a `yes` token, use that token as `y`.
 When the user answers `n`, stop and do not record an event.
 When the user answers `y` for approve, run `atry approve <run> --via confirm`.
 When the `yes` token is that answer, run `atry approve <run> --via arg`.
-When `command` contains `review` or `close`, stop.
-When `command` is stage start, run `atry stage start <run> implement --tool <tool>`.
-When `command` is stage done, run `atry stage done <run> implement --tool <tool>`.
+When the selected action contains `review` or `close`, stop.
+When the selected action is stage start, run `atry stage start <run> implement --tool <tool>`.
+When the selected action is stage done, run `atry stage done <run> implement --tool <tool>`.
 When `stage done` refuses, read the paths in the message.
-Ask the user before you pass `--allow-extra <reason>`.
+When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.
+When `strict.scope` is false, continue after the warning and check that the
+accepted paths appear in the task completion event.
 Add `--model <model>` when you know the model.
-When `needsHuman` is false and `command` is a task command, follow One task.
+When the selected action is a task command, follow One task.
 Repeat from the first step in this section.
 
 ## One task
@@ -58,7 +64,8 @@ Repeat from the first step in this section.
 8. Record the files, the assumptions, and the risks in that file.
 9. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.
 10. When `task done` refuses, read the paths in the message.
-11. Ask the user before you pass `--allow-extra <reason>`.
+11. When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.
+    When it is false, continue after the warning and check the recorded extras.
 12. Put that reason in the task report.
 13. When a task is not feasible, run `atry task skip <run> <task> --reason <text>`.
 14. Add `--session <tag>` to `task skip` when you hold a claim.

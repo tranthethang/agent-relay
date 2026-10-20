@@ -109,7 +109,8 @@ requirements. A missing file uses these defaults:
 {
   "schema": 1,
   "requireReviews": ["self", "cross"],
-  "smallChange": 20
+  "smallChange": 20,
+  "strict": { "scope": false, "plan": false, "reviewIntegrity": false }
 }
 ```
 
@@ -119,6 +120,12 @@ optional `testCommand`. `review done` runs it at the repo root through the
 platform shell, records its exit code, duration, and tree, and writes the last
 200 stdout and stderr lines to `NN.test.log`. A non-zero exit records failure
 but does not refuse `review done`.
+
+The optional `strict` policy groups control scope, plan, and review-integrity
+gates independently. Each group defaults to `false`, which reports a warning
+and continues when the command can preserve the relevant evidence. Set a group
+to `true` to keep its blocking behavior. Existing policy files that omit
+`strict` remain valid.
 
 Review JSON contains `schema`, `kind`, `tool`, `model`, `fixed`, and `open`.
 The `tool` and `model` values must match the review start event. Cross-review

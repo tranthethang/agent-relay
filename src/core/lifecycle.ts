@@ -55,6 +55,7 @@ export type StageResult = {
   head?: string;
   tree?: string;
   size?: { files: number; added: number; deleted: number };
+  warning?: string;
 };
 
 export type ApproveResult = {
@@ -95,6 +96,7 @@ export function stageText(result: StageResult): string {
   if (result.size !== undefined) {
     lines.push(`size: ${result.size.files} ${result.size.added} ${result.size.deleted}`);
   }
+  if (result.warning !== undefined) lines.push(`warning: ${result.warning}`);
   return `${lines.join("\n")}\n`;
 }
 
@@ -168,25 +170,7 @@ export async function approvePreview(runDir: string): Promise<ApprovePreview> {
 
 export async function closePreview(runDir: string): Promise<ClosePreview> {
   const loaded = await rebuildRun(runDir);
-  const reasons: string[] = [];
-  const integrity = await reviewIntegrity(runDir, loaded.run.base, loaded.events);
-  for (const kind of integrity.required) {
-    if (!integrity.done.includes(kind)) reasons.push(`missing ${kind} review`);
-  }
-  if (integrity.treeMatch === false) reasons.push("tree mismatch");
-  if (integrity.delta !== undefined) reasons.push("delta");
-  const latest = await latestReview(runDir, loaded.events);
-  if (latest !== null && latest.open > 0) reasons.push("open items");
-  const completed = [...loaded.events].reverse().find((event) =>
-    event.action === "completed"
-    && (event.stage === "self-review" || event.stage === "cross-review")
-  );
-  if (
-    completed?.tests !== undefined && completed.tests !== "not-configured"
-    && completed.tests.exit !== 0
-  ) {
-    reasons.push("failed tests");
-  }
+  const reasons = await closeReasons(runDir, loaded.run.base, loaded.events);
   const preview: ClosePreview = {
     schema: schemaVersion,
     recommend: reasons.length === 0 ? "y" : "n",
@@ -201,6 +185,33 @@ export async function closePreview(runDir: string): Promise<ClosePreview> {
     preview.worktree = reason === null ? { remove: true } : { remove: false, reason };
   }
   return preview;
+}
+
+async function closeReasons(
+  runDir: string,
+  base: string,
+  events: readonly EventLine[],
+): Promise<string[]> {
+  const reasons: string[] = [];
+  const integrity = await reviewIntegrity(runDir, base, events);
+  for (const kind of integrity.required) {
+    if (!integrity.done.includes(kind)) reasons.push(`missing ${kind} review`);
+  }
+  if (integrity.treeMatch === false) reasons.push("tree mismatch");
+  if (integrity.delta !== undefined) reasons.push("reviewer changes after latest review");
+  const latest = await latestReview(runDir, events);
+  if (latest !== null && latest.open > 0) reasons.push("open items");
+  const completed = [...events].reverse().find((event) =>
+    event.action === "completed"
+    && (event.stage === "self-review" || event.stage === "cross-review")
+  );
+  if (
+    completed?.tests !== undefined && completed.tests !== "not-configured"
+    && completed.tests.exit !== 0
+  ) {
+    reasons.push("failed tests");
+  }
+  return reasons;
 }
 
 export function brainstormDoneText(result: BrainstormDoneResult): string {
@@ -280,7 +291,14 @@ export async function closeRun(input: {
       return { schema: schemaVersion, path: input.runDir, lifecycle: saved.run.state.lifecycle };
     }
     assertMove(loaded.run.state, "close");
-    if (input.ackOpen !== true) await assertNoOpenQuestions(input.runDir, loaded.events);
+    const policy = await readPolicy(await gitCwd(input.runDir), loaded.run.base);
+    const softClose = !policy.strict.reviewIntegrity && via !== undefined;
+    if (input.ackOpen !== true && !softClose) {
+      await assertNoOpenQuestions(input.runDir, loaded.events);
+    }
+    const warnings = softClose
+      ? await closeReasons(input.runDir, loaded.run.base, loaded.events)
+      : [];
     if (waiveReason !== undefined) {
       await appendEvent(loaded, input.runDir, {
         stage: "run",
@@ -289,7 +307,7 @@ export async function closeRun(input: {
         actor,
         ...(via === undefined ? {} : { via }),
       });
-    } else {
+    } else if (!softClose) {
       await assertReviewIntegrity(
         input.runDir,
         loaded.run.base,
@@ -301,6 +319,9 @@ export async function closeRun(input: {
       stage: "run",
       action: "closed",
       actor,
+      ...(warnings.length === 0
+        ? {}
+        : { reason: `non-strict review-integrity warnings: ${warnings.join(", ")}` }),
       ...(via === undefined ? {} : { via }),
     });
     if (saved.run.state.lifecycle !== "closed") {
@@ -535,6 +556,9 @@ async function recordStage(
       result.tree = measured.tree;
       result.size = measured.size;
     }
+    if (scope?.extra !== undefined) {
+      result.warning = `accepted out-of-scope edits: ${scope.extra.join(", ")}`;
+    }
     return result;
   });
 }
@@ -595,7 +619,8 @@ async function implementScope(
     recorded,
   );
   if (outside.length === 0) return {};
-  if (allowExtra === undefined) {
+  const strict = (await readPolicy(cwd, base)).strict.scope;
+  if (allowExtra === undefined && strict) {
     const shown = outside.slice(0, 10).join(", ");
     throw new RelayError(
       "gate",
@@ -603,7 +628,9 @@ async function implementScope(
       "files",
     );
   }
-  const reason = allowExtra.trim();
+  const reason = allowExtra === undefined
+    ? `scope warning: accepted edits under strict.scope=false (${outside.join(", ")})`
+    : allowExtra.trim();
   if (reason.length === 0) throw new RelayError("validation", "reason is empty", "allow-extra");
   return { extra: outside, reason };
 }

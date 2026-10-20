@@ -143,3 +143,21 @@ test("atry plan amend does not reuse the id of a dropped task", async () => {
     expect(await readFile(join(run, "10-plan", "T2.md"), "utf8")).toContain("# T2: Second");
   });
 });
+
+test("plan amend allows more than eight tasks with a warning in non-strict mode", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "plan-amend-large");
+    await writeTasks(run, [{ title: "First" }]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await writeTasks(
+      run,
+      Array.from({ length: 9 }, (_, index) => ({
+        title: index === 0 ? "First" : `Task ${index + 1}`,
+      })),
+    );
+    const result = await runCli(["plan", "amend", run], dir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("warning: plan has 9 tasks");
+  });
+});

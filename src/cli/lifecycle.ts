@@ -99,7 +99,7 @@ export function registerLifecycle(program: Command): void {
 
   program
     .command("close")
-    .description("Close or abandon a run")
+    .description("Close or abandon a run; --via confirms closure with non-strict review warnings")
     .argument("[run]", "run id, slug, name, or path")
     .option("--ack-open", "close while the latest review has open questions")
     .option("--ack-fixes", "accept fixes made after the latest review started")

@@ -26,7 +26,7 @@ export function registerPlan(program: Command): void {
     });
   plan
     .command("done")
-    .description("Validate tasks and write the plan index")
+    .description("Validate tasks and write the plan index; non-strict plans can exceed eight tasks")
     .argument("<run>", "run id, slug, name, or path")
     .action(async (run: string, _opts: unknown, command: Command) => {
       const runDir = await takeRun(command, run);
@@ -34,7 +34,7 @@ export function registerPlan(program: Command): void {
     });
   plan
     .command("amend")
-    .description("Keep existing task ids and append new ones")
+    .description("Keep existing task ids and append new ones; honor the strict.plan task limit")
     .argument("<run>", "run id, slug, name, or path")
     .action(async (run: string, _opts: unknown, command: Command) => {
       const runDir = await takeRun(command, run);

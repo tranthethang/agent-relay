@@ -10,21 +10,28 @@ Repository governance policies are committed in `.agent-relay.json` at the root 
   "requireReviews": ["self", "cross"],
   "smallChange": 20,
   "testCommand": "npm test",
-  "worktree": { "enabled": false, "dir": "../wt" }
+  "worktree": { "enabled": false, "dir": "../wt" },
+  "strict": { "scope": false, "plan": false, "reviewIntegrity": false }
 }
 ```
 
 ## Policy Fields
 
-| Field              | Type       | Default                        | Description                                                                                           |
-| ------------------ | ---------- | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `requireReviews`   | `string[]` | `["self", "cross"]`            | Review kinds required before a run can be closed.                                                     |
-| `smallChange`      | `number`   | `20`                           | Combined line threshold (additions + deletions). Changes below this count require only `self` review. |
-| `testCommand`      | `string`   | `undefined`                    | Test command executed automatically during `atry review done`.                                        |
-| `worktree.enabled` | `boolean`  | off when `worktree` is missing | When `true`, `run new` creates a git worktree and a branch for each run.                              |
-| `worktree.dir`     | `string`   | `<repo>_work-tree`             | Optional and non-empty. The folder for run worktrees. A relative path resolves from the git root.     |
+| Field                    | Type       | Default                        | Description                                                                                                     |
+| ------------------------ | ---------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `requireReviews`         | `string[]` | `["self", "cross"]`            | Review kinds required before a run can be closed.                                                               |
+| `smallChange`            | `number`   | `20`                           | Combined line threshold (additions + deletions). Changes below this count require only `self` review.           |
+| `testCommand`            | `string`   | `undefined`                    | Test command executed automatically during `atry review done`.                                                  |
+| `worktree.enabled`       | `boolean`  | off when `worktree` is missing | When `true`, `run new` creates a git worktree and a branch for each run.                                        |
+| `worktree.dir`           | `string`   | `<repo>_work-tree`             | Optional and non-empty. The folder for run worktrees. A relative path resolves from the git root.               |
+| `strict.scope`           | `boolean`  | `false`                        | Block scope warnings when `true`; otherwise report them and continue when evidence can be preserved.            |
+| `strict.plan`            | `boolean`  | `false`                        | Block plan warnings when `true`; otherwise report them and continue when evidence can be preserved.             |
+| `strict.reviewIntegrity` | `boolean`  | `false`                        | Block review-integrity warnings when `true`; otherwise report them and continue when evidence can be preserved. |
 
 The `worktree` object is strict, so an unknown key in it fails validation.
+The `strict` object is strict, so an unknown key in it fails validation. Each
+strict group defaults to `false` when omitted, including when the whole object
+is omitted. Existing policy files remain valid.
 
 ## Worktree Settings
 

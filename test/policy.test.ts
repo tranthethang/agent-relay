@@ -21,6 +21,7 @@ test("readPolicy uses defaults when the base has no policy", async () => {
       schema: 1,
       requireReviews: ["self", "cross"],
       smallChange: 20,
+      strict: { scope: false, plan: false, reviewIntegrity: false },
     });
   });
 });
@@ -34,6 +35,7 @@ test("readPolicy reads a valid policy from the base", async () => {
         requireReviews: ["cross"],
         smallChange: 5,
         testCommand: "npm test",
+        strict: { scope: false, plan: false, reviewIntegrity: false },
       }),
     );
     await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
@@ -43,6 +45,7 @@ test("readPolicy reads a valid policy from the base", async () => {
       requireReviews: ["cross"],
       smallChange: 5,
       testCommand: "npm test",
+      strict: { scope: false, plan: false, reviewIntegrity: false },
     });
   });
 });
@@ -84,6 +87,7 @@ test("readPolicy ignores a policy that exists only in the working tree", async (
       schema: 1,
       requireReviews: ["self", "cross"],
       smallChange: 20,
+      strict: { scope: false, plan: false, reviewIntegrity: false },
     });
   });
 });
@@ -102,12 +106,14 @@ test("readPolicy reads the worktree key from the base", async () => {
       requireReviews: ["self"],
       smallChange: 0,
       worktree: { enabled: true, dir: "../wt" },
+      strict: { scope: false, plan: false, reviewIntegrity: false },
     });
     expect(await readPolicy(dir, commit)).toEqual({
       schema: 1,
       requireReviews: ["self"],
       smallChange: 0,
       worktree: { enabled: true, dir: "../wt" },
+      strict: { scope: false, plan: false, reviewIntegrity: false },
     });
   });
 });
@@ -149,4 +155,18 @@ test("parsePolicy reports invalid JSON", () => {
       fieldPath: ".agent-relay.json",
     }),
   );
+});
+
+test("parsePolicy defaults strict gate groups to false and accepts overrides", () => {
+  const base = { schema: 1, requireReviews: ["self"], smallChange: 0 };
+  expect(parsePolicy(JSON.stringify(base)).strict).toEqual({
+    scope: false,
+    plan: false,
+    reviewIntegrity: false,
+  });
+  expect(parsePolicy(JSON.stringify({ ...base, strict: { scope: true } })).strict).toEqual({
+    scope: true,
+    plan: false,
+    reviewIntegrity: false,
+  });
 });

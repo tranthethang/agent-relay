@@ -25,6 +25,18 @@ test("parseEventLine accepts optional event fields", () => {
   expect(event.size?.added).toBe(2);
 });
 
+test("parseEventLine preserves accepted extra paths and their warning reason", () => {
+  const event = parseEventLine({
+    ...validEvent,
+    action: "task-done",
+    task: "T1",
+    extra: ["src/shared.ts"],
+    reason: "scope warning: accepted outside task files under strict.scope=false",
+  });
+  expect(event.extra).toEqual(["src/shared.ts"]);
+  expect(event.reason).toContain("strict.scope=false");
+});
+
 test("parseEventLine accepts SHA-1 and SHA-256 trees only", () => {
   expect(parseEventLine({ ...validEvent, tree: "a".repeat(40) }).tree).toHaveLength(40);
   expect(parseEventLine({ ...validEvent, tree: "b".repeat(64) }).tree).toHaveLength(64);

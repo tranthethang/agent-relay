@@ -19,6 +19,11 @@ export const policySchema = z.object({
     enabled: z.boolean(),
     dir: z.string().min(1).optional(),
   }).strict().optional(),
+  strict: z.object({
+    scope: z.boolean().default(false),
+    plan: z.boolean().default(false),
+    reviewIntegrity: z.boolean().default(false),
+  }).strict().default({ scope: false, plan: false, reviewIntegrity: false }),
 }).strict();
 
 export type Policy = z.infer<typeof policySchema>;
@@ -27,6 +32,7 @@ export const defaultPolicy: Policy = {
   schema: 1,
   requireReviews: ["self", "cross"],
   smallChange: 20,
+  strict: { scope: false, plan: false, reviewIntegrity: false },
 };
 
 export const policyTemplate: Policy = {

@@ -8,6 +8,7 @@ import { atomicWrite, isEnoent, readJson } from "./files.js";
 import { changedPaths, workTree } from "./git.js";
 import { appendEvent, openRun, withRunLock } from "./mutate.js";
 import { normalizePath } from "./overlap.js";
+import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
 import { outsidePaths } from "./scope.js";
 import { type PlanIndex, planIndexSchema, type TasksInput, tasksInputSchema } from "./tasks.js";
@@ -41,6 +42,7 @@ export type PlanDoneResult = {
   path: string;
   tasks: string[];
   index: string;
+  warning?: string;
 };
 
 export type TaskMoveResult = {
@@ -58,7 +60,8 @@ export function planNewText(result: PlanNewResult): string {
 
 export function planDoneText(result: PlanDoneResult): string {
   const tasks = result.tasks.length === 0 ? "none" : result.tasks.join(", ");
-  return `tasks: ${tasks}\nindex: ${result.index}\n`;
+  const warning = result.warning === undefined ? "" : `warning: ${result.warning}\n`;
+  return `tasks: ${tasks}\nindex: ${result.index}\n${warning}`;
 }
 
 export function taskMoveText(result: TaskMoveResult): string {
@@ -75,8 +78,12 @@ export function tasksInputScaffold(): string {
   return `${JSON.stringify({ schema: schemaVersion, tasks: [] })}\n`;
 }
 
-export function indexFromTasks(tasks: TasksInput["tasks"], ids?: readonly string[]): PlanIndex {
-  if (tasks.length > maxPlanTasks) {
+export function indexFromTasks(
+  tasks: TasksInput["tasks"],
+  ids?: readonly string[],
+  strictPlan = true,
+): PlanIndex {
+  if (strictPlan && tasks.length > maxPlanTasks) {
     throw new RelayError("gate", "plan has more than 8 tasks", "tasks");
   }
   const assigned = tasks.map((task, index) => {
@@ -125,10 +132,17 @@ export async function planDone(runDir: string): Promise<PlanDoneResult> {
     }
     const input = await readTasksInput(runDir);
     assertPlanFiles(input.tasks);
-    const index = indexFromTasks(input.tasks);
+    const cwd = await runGitCwd(runDir, loaded.run);
+    const policy = await readPolicy(cwd, loaded.run.base);
+    const index = indexFromTasks(input.tasks, undefined, policy.strict.plan);
     await writePlanFiles(runDir, index);
     await appendEvent(loaded, runDir, { stage: "plan", action: "completed" });
-    return doneResult(runDir, index);
+    const result = doneResult(runDir, index);
+    if (!policy.strict.plan && index.tasks.length > maxPlanTasks) {
+      result.warning =
+        `plan has ${index.tasks.length} tasks; strict.plan=false allows more than ${maxPlanTasks}`;
+    }
+    return result;
   });
 }
 
@@ -137,6 +151,8 @@ export async function planAmend(runDir: string): Promise<PlanDoneResult> {
     const current = await readIndex(runDir);
     const input = await readTasksInput(runDir);
     assertPlanFiles(input.tasks);
+    const cwd = await runGitCwd(runDir, loaded.run);
+    const policy = await readPolicy(cwd, loaded.run.base);
     const unmatched = new Map<string, string[]>();
     for (const task of current.tasks) {
       unmatched.set(task.title, [...(unmatched.get(task.title) ?? []), task.id]);
@@ -166,9 +182,14 @@ export async function planAmend(runDir: string): Promise<PlanDoneResult> {
       next += 1;
       return `T${next}`;
     });
-    const index = indexFromTasks(input.tasks, ids);
+    const index = indexFromTasks(input.tasks, ids, policy.strict.plan);
     await writePlanFiles(runDir, index);
-    return doneResult(runDir, index);
+    const result = doneResult(runDir, index);
+    if (!policy.strict.plan && index.tasks.length > maxPlanTasks) {
+      result.warning =
+        `plan has ${index.tasks.length} tasks; strict.plan=false allows more than ${maxPlanTasks}`;
+    }
+    return result;
   });
 }
 
@@ -221,12 +242,13 @@ export async function taskDone(
       throw new RelayError("gate", `task done refused: ${id} has no start tree`, id);
     }
     const cwd = await runGitCwd(runDir, loaded.run);
+    const policy = await readPolicy(cwd, loaded.run.base);
     const outside = outsidePaths(
       await changedPaths(cwd, from, await workTree(cwd)),
       item.files,
       otherFiles(index, loaded.run.state, loaded.events, id),
     );
-    const extra = extraFields(id, outside, allowExtra);
+    const extra = extraFields(id, outside, allowExtra, policy.strict.scope);
     await appendEvent(loaded, runDir, {
       stage: "implement",
       action: "task-done",
@@ -234,7 +256,9 @@ export async function taskDone(
       ...extra,
     });
     await releaseClaimLock(runDir, id, session);
-    return moveResult(runDir, id, "done", join(runDir, "20-implement", `${id}.md`));
+    const result = moveResult(runDir, id, "done", join(runDir, "20-implement", `${id}.md`));
+    if (extra.reason !== undefined) result.reason = extra.reason;
+    return result;
   });
 }
 
@@ -308,9 +332,10 @@ function extraFields(
   id: string,
   outside: readonly string[],
   allowExtra: string | undefined,
+  strict: boolean,
 ): { extra?: string[]; reason?: string } {
   if (outside.length === 0) return {};
-  if (allowExtra === undefined) {
+  if (allowExtra === undefined && strict) {
     const shown = outside.slice(0, 10).join(", ");
     throw new RelayError(
       "gate",
@@ -318,7 +343,9 @@ function extraFields(
       id,
     );
   }
-  const reason = allowExtra.trim();
+  const reason = allowExtra === undefined
+    ? `scope warning: accepted outside task files under strict.scope=false (${outside.join(", ")})`
+    : allowExtra.trim();
   if (reason.length === 0) throw new RelayError("validation", "reason is empty", "allow-extra");
   return { extra: [...outside], reason };
 }

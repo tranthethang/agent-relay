@@ -2,6 +2,12 @@
 
 The review workflow enforces a two-step cycle: scaffolding initialization followed by comprehensive validation (`src/core/review.ts`).
 
+`atry close <run> --preview` lists missing reviews, tree mismatches, reviewer
+changes, open items, and failed tests. When `strict.reviewIntegrity` is false,
+these items are warnings. The developer can choose to continue by invoking
+`atry close` with `--via confirm` or `--via arg`. The close event records any
+warnings. When the setting is true, existing close gates remain in force.
+
 ## Review Lifecycle Steps
 
 ```mermaid
