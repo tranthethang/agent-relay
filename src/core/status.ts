@@ -6,7 +6,7 @@ import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { isEnoent, readJson } from "./files.js";
 import { type ReviewIntegrity, reviewIntegrity, reviewProgress } from "./lifecycle.js";
-import { formatAge, nextStep } from "./next.js";
+import { formatAge, nextActions, nextStep } from "./next.js";
 import { type RunState } from "./reduce.js";
 import { reviewJsonSchema } from "./review.js";
 import { type RunJson } from "./run.js";
@@ -20,6 +20,7 @@ export type StatusRow = {
   lifecycle: RunState["lifecycle"];
   age: string;
   next: string;
+  actions: string[];
   reviews: StatusReviews;
   actors: RunActors;
 };
@@ -45,8 +46,10 @@ export type StatusDetail = {
   age: string;
   tasks: RunState["tasks"];
   next: string;
+  actions: string[];
   reviews: StatusReviews;
   actors: RunActors;
+  drift: number;
   warnings?: string[];
 };
 
@@ -84,6 +87,15 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
       const index = loaded.run.state.lifecycle === "implementing"
         ? await indexForImplement(runDir, loaded.run.state)
         : null;
+      const next = nextStep(loaded.run.id, loaded.run.state, loaded.events, reviews, index);
+      const actions = nextActions(
+        loaded.run.id,
+        loaded.run.state,
+        loaded.events,
+        next,
+        reviews,
+        index,
+      );
       runs.push(rowFrom({
         name,
         run: loaded.run,
@@ -93,6 +105,8 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
         mtimeMs: await cacheMtime(runDir),
         nowMs,
         index,
+        next,
+        actions,
       }));
     } catch (error) {
       if (!(error instanceof RelayError)) throw error;
@@ -114,6 +128,7 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
   const index = run.state.lifecycle === "implementing"
     ? await indexForImplement(runDir, run.state)
     : null;
+  const next = nextStep(run.id, run.state, loaded.events, reviews, index);
   const detail: StatusDetail = {
     schema: schemaVersion,
     name: basename(runDir),
@@ -127,9 +142,18 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
     approved: run.state.approved,
     age: ageOf(loaded.events, await cacheMtime(runDir), nowMs),
     tasks: run.state.tasks,
-    next: nextStep(run.id, run.state, loaded.events, reviews, index),
+    next,
+    actions: nextActions(
+      run.id,
+      run.state,
+      loaded.events,
+      next,
+      reviews,
+      index,
+    ),
     reviews,
     actors: runActors(loaded.events),
+    drift: driftCount(loaded.events),
   };
   if (run.from !== undefined) detail.from = run.from;
   if (loaded.warning !== null) detail.warnings = [loaded.warning];
@@ -180,7 +204,7 @@ export function statusListText(result: StatusList): string {
     result.runs.map((run) =>
       `${run.name} ${run.stage} ${run.lifecycle} ${run.age}\nnext: ${run.next}\n${
         reviewsLine(run.reviews)
-      }\n${actorsLine(run.actors)}`
+      }\nactions: ${run.actions.join(", ") || "none"}\n${actorsLine(run.actors)}`
     ).join("\n\n")
   }\n`;
 }
@@ -195,8 +219,10 @@ export function statusDetailText(result: StatusDetail): string {
     `age: ${result.age}`,
     `tasks: ${taskLine(result.tasks)}`,
     `next: ${result.next}`,
+    `actions: ${result.actions.join(", ") || "none"}`,
     reviewsLine(result.reviews),
     actorsLine(result.actors),
+    `drift: ${result.drift}`,
   ];
   return `${lines.join("\n")}\n`;
 }
@@ -226,15 +252,18 @@ function rowFrom(input: {
   mtimeMs: number;
   nowMs: number;
   index: PlanIndex | null;
+  next: string;
+  actions: string[];
 }): StatusRow {
-  const { name, run, events, reviews, actors, mtimeMs, nowMs, index } = input;
+  const { name, run, events, reviews, actors, mtimeMs, nowMs, next, actions } = input;
   return {
     name,
     id: run.id,
     stage: run.state.stage,
     lifecycle: run.state.lifecycle,
     age: ageOf(events, mtimeMs, nowMs),
-    next: nextStep(run.id, run.state, events, reviews, index),
+    next,
+    actions,
     reviews,
     actors,
   };
@@ -353,4 +382,8 @@ async function hasCache(runDir: string): Promise<boolean> {
 async function cacheMtime(runDir: string): Promise<number> {
   const info = await stat(join(runDir, "run.json"));
   return info.mtimeMs;
+}
+
+export function driftCount(events: readonly EventLine[]): number {
+  return events.filter((event) => event.stage === "run" && event.action === "drifted").length;
 }

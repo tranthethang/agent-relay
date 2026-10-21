@@ -20,6 +20,7 @@ Run `atry preflight --requires "<requires-atry>"` before any other command in th
 Stop when that command exits non-zero.
 When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
+When the context JSON has `run.worktree`, edit files and run git in `run.worktree.path`.
 
 <!-- END PREFLIGHT -->
 
@@ -29,8 +30,10 @@ Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigr
 
 Count the goals and the tasks before you create a run.
 Stop when the draft has more than one goal.
-Stop when the draft has more than eight tasks.
-Ask the user to split the work or to pick one plan.
+Read `strict.plan` from the policy at the run base.
+When it is `true`, stop when the draft has more than eight tasks and ask the user to split the work or pick one plan.
+When it is `false`, `plan done` and `plan amend` allow more than eight tasks and print a warning.
+Show that warning and ask the user whether to keep the larger plan before you finalize it.
 Continue only after the user chooses.
 
 ## Create

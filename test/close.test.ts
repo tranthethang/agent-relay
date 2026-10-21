@@ -229,7 +229,131 @@ test("close --preview names open items, delta, a tree mismatch, and failed tests
     expect(preview.code).toBe(0);
     expect(JSON.parse(preview.stdout)).toMatchObject({
       recommend: "n",
-      reasons: ["tree mismatch", "delta", "failed tests"],
+      reasons: ["tree mismatch", "reviewer changes after latest review", "failed tests"],
     });
+  });
+});
+
+test("non-strict close lets the developer continue and records integrity warnings", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self", "cross"],
+        smallChange: 0,
+        strict: { reviewIntegrity: false },
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+    await gitCommit(dir, "non-strict policy");
+    const created = await runCli([
+      "run",
+      "new",
+      "--slug",
+      "non-strict-close",
+      "--title",
+      "Non-strict close",
+      "--json",
+    ], dir);
+    const run = JSON.parse(created.stdout) as { path: string };
+    await reachReview(run.path, dir);
+    const started = await runCli(
+      ["review", "new", run.path, "self", "--tool", "cursor", "--json"],
+      dir,
+    );
+    const reviewPaths = JSON.parse(started.stdout) as { markdown: string; json: string };
+    await writeFile(
+      reviewPaths.markdown,
+      "# self\n\n## Findings\n\n- Q1: Continue without cross review?\n  - a. Stop\n  - b. Close anyway\n",
+    );
+    await writeFile(
+      reviewPaths.json,
+      `${
+        JSON.stringify({
+          schema: 1,
+          kind: "self",
+          tool: "cursor",
+          model: "unknown",
+          fixed: 0,
+          open: [{ q: "Continue without cross review?", a: "Stop", b: "Close anyway" }],
+        })
+      }\n`,
+    );
+    expect((await runCli(["review", "done", run.path, "self"], dir)).code).toBe(0);
+
+    const preview = await runCli(["close", run.path, "--preview", "--json"], dir);
+    expect(JSON.parse(preview.stdout)).toMatchObject({
+      recommend: "n",
+      reasons: ["missing cross review", "open items"],
+    });
+    const unconfirmed = await runCli(["close", run.path], dir);
+    expect(unconfirmed.code).toBe(4);
+    const closed = await runCli(["close", run.path, "--via", "arg", "--json"], dir);
+    expect(closed.code).toBe(0);
+    const events = (await readFile(join(run.path, "events.jsonl"), "utf8")).trim().split("\n")
+      .map((line) => JSON.parse(line) as { action: string; reason?: string; via?: string });
+    expect(events.find((event) => event.action === "closed")).toMatchObject({
+      via: "arg",
+      reason: "non-strict review-integrity warnings: missing cross review, open items",
+    });
+  });
+});
+
+test("strict review integrity still blocks close when reviews are missing", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self", "cross"],
+        smallChange: 0,
+        strict: { reviewIntegrity: true },
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+    await gitCommit(dir, "strict policy");
+    const created = await runCli([
+      "run",
+      "new",
+      "--slug",
+      "strict-close",
+      "--title",
+      "Strict close",
+      "--json",
+    ], dir);
+    const run = JSON.parse(created.stdout) as { path: string };
+    await reachReview(run.path, dir);
+    const blocked = await runCli(["close", run.path, "--via", "arg"], dir);
+    expect(blocked.code).toBe(4);
+    expect(blocked.stderr).toContain("required self review is missing");
+  });
+});
+
+test("close --preview names run.json drift after the cache is rebuilt", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const created = await runCli(
+      ["run", "new", "--slug", "preview-drift", "--title", "Drift", "--json"],
+      dir,
+    );
+    const run = JSON.parse(created.stdout) as { path: string };
+    await reachReview(run.path, dir);
+    await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+    await runCli(["review", "done", run.path, "self"], dir);
+    const cachePath = join(run.path, "run.json");
+    const cache = JSON.parse(await readFile(cachePath, "utf8")) as { state: { approved: boolean } };
+    cache.state.approved = false;
+    await writeFile(cachePath, `${JSON.stringify(cache)}\n`);
+    const first = await runCli(["close", run.path, "--preview", "--json"], dir);
+    expect(first.stderr).toContain("run.json disagreed with events.jsonl; rebuilt");
+    expect(JSON.parse(first.stdout)).toEqual({
+      schema: 1,
+      recommend: "n",
+      reasons: ["run.json drifted 1 times"],
+    });
+    const second = await runCli(["close", run.path, "--preview"], dir);
+    expect(second.stderr).toBe("");
+    expect(second.stdout).toBe("recommend: n\nrun.json drifted 1 times\n");
   });
 });

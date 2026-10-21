@@ -73,6 +73,13 @@ export async function readJson(filePath: string): Promise<unknown> {
 }
 
 export async function readJsonl(filePath: string): Promise<unknown[]> {
+  return (await readJsonlLines(filePath)).map((line) => line.value);
+}
+
+// Each row keeps its raw text, so a hash covers the line as stored.
+export async function readJsonlLines(
+  filePath: string,
+): Promise<Array<{ raw: string; value: unknown }>> {
   const text = await readText(filePath);
   if (text.length === 0) return [];
   const lines = text.split("\n");
@@ -82,7 +89,7 @@ export async function readJsonl(filePath: string): Promise<unknown[]> {
       throw new RelayError("validation", "invalid JSON", `${filePath}:lines[${index}]`);
     }
     try {
-      return JSON.parse(line) as unknown;
+      return { raw: line, value: JSON.parse(line) as unknown };
     } catch {
       throw new RelayError("validation", "invalid JSON", `${filePath}:lines[${index}]`);
     }

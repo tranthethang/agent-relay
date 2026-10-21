@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { type EventLine } from "../src/core/event.js";
-import { explainNext, formatAge, nextStep } from "../src/core/next.js";
+import { explainNext, formatAge, nextActions, nextStep } from "../src/core/next.js";
 import { reduceEvents } from "../src/core/reduce.js";
 import { runCli, withTempDir } from "./helper.js";
 import { plannedState, runCache, seedRelay, seedRun } from "./seed.js";
@@ -83,6 +83,31 @@ test("nextStep closes after the reviews required by policy", () => {
   })).toBe("atry review done 1792208725 self");
 });
 
+test("nextActions lists eligible tasks and review or close choices", () => {
+  const events = [ev("implement", "started")];
+  const state = reduceEvents(events);
+  const index = {
+    schema: 1 as const,
+    tasks: [
+      { id: "T1" as const, title: "First", deps: [], files: [], path: "10-plan/T1.md" },
+      { id: "T2" as const, title: "Second", deps: [], files: [], path: "10-plan/T2.md" },
+    ],
+  };
+  expect(nextActions("1792208725", state, events, "atry task start 1792208725", undefined, index))
+    .toEqual(["atry task start 1792208725 T1", "atry task start 1792208725 T2"]);
+
+  const reviewingEvents = [ev("implement", "completed")];
+  const reviewing = reduceEvents(reviewingEvents);
+  expect(nextActions("1792208725", reviewing, reviewingEvents, "atry review new 1792208725 self", {
+    required: ["self", "cross"],
+    done: [],
+  })).toEqual([
+    "atry review new 1792208725 self",
+    "atry review new 1792208725 cross",
+    "atry close 1792208725 --preview",
+  ]);
+});
+
 test("atry next covers each lifecycle", async () => {
   const cases: { lifecycle: string; events: EventLine[]; command: string; needsHuman: boolean }[] =
     [
@@ -106,7 +131,7 @@ test("atry next covers each lifecycle", async () => {
           ev("implement", "started"),
           { ...ev("implement", "task-started"), task: "T1" },
         ],
-        command: "atry task start 1792208725",
+        command: "atry list 1792208725",
         needsHuman: false,
       },
       {
@@ -155,7 +180,9 @@ test("atry next covers each lifecycle", async () => {
         read: item.needsHuman ? ["10-plan/overview.md"] : [],
       });
       const text = await runCli(["next", name], root);
-      expect(text.stdout).toBe(`${command}\n`);
+      expect(text.stdout).toContain(`recommendation: ${command}`);
+      expect(text.stdout).toContain("state:");
+      expect(text.stdout).toContain("actions:");
     }
   });
 });

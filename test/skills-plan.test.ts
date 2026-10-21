@@ -13,6 +13,11 @@ test("plan uses run new, plan new, and plan done", () => {
   expect(text).toContain("atry approve <run> --preview");
   expect(text).toContain("atry close <run> --preview");
   expect(text).toContain("tasks.input.json");
+  expect(text).toContain("Read `strict.plan` from the policy at the run base.");
+  expect(text).toContain(
+    "When it is `false`, `plan done` and `plan amend` allow more than eight tasks and print a warning.",
+  );
+  expect(text).toContain("ask the user whether to keep the larger plan");
   expect(text).not.toContain("run-init");
   expect(text).not.toContain("plan.md");
   expect(assertNoShellSnippet(text)).toBeUndefined();

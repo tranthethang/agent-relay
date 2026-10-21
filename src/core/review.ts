@@ -1,6 +1,8 @@
-import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { type RebuildResult } from "./cache.js";
+import { exists } from "./claim.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
@@ -10,8 +12,9 @@ import { modelLine, modelVendor } from "./model.js";
 import { appendEvent, withRunLock } from "./mutate.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
-import { runTestCommand } from "./testrun.js";
+import { runTestCommand, type TestExecution } from "./testrun.js";
 import { schemaVersion, toolSchema } from "./vocab.js";
+import { runGitCwd } from "./worktree.js";
 
 export const reviewKinds = ["self", "cross"] as const;
 
@@ -133,7 +136,7 @@ export async function reviewNew(input: {
     const dir = join(input.runDir, place.dir);
     await mkdir(dir, { recursive: true });
     const label = await nextLabel(dir);
-    const tree = await workTree(input.runDir);
+    const tree = await workTree(await runGitCwd(input.runDir, loaded.run));
     const markdown = join(dir, `${label}.md`);
     const json = join(dir, `${label}.json`);
     await atomicWrite(markdown, reviewMarkdown(kind));
@@ -164,74 +167,130 @@ export async function reviewDone(input: {
   testTimeoutMs?: number;
 }): Promise<ReviewDoneResult & { warnings: string[] }> {
   const kind = parseKind(input.kind);
-  const place = reviewPlaces[kind];
+  // Tests can outlast the stale-lock age, so they run between two lock holds.
+  const first = await withRunLock(input.runDir, async (loaded) => {
+    const checked = await checkReviewDone(input.runDir, kind, loaded);
+    if (checked.testCommand !== undefined) return { checked };
+    const execution = await runTestCommand(checked.root, undefined);
+    return { done: await recordReviewDone(input.runDir, loaded, checked, execution) };
+  });
+  if (first.done !== undefined) return first.done;
+  const checked = first.checked;
+  const execution = await runTestCommand(checked.root, checked.testCommand, input.testTimeoutMs);
   return withRunLock(input.runDir, async (loaded) => {
-    if (loaded.run.state.lifecycle !== "reviewing") {
+    assertReviewingLifecycle(loaded.run.state);
+    if (stageEventCount(loaded.events, checked.place.stage) !== checked.stageEvents) {
       throw new RelayError(
         "gate",
-        `review refused: run is ${loaded.run.state.lifecycle}`,
-        "state.lifecycle",
+        "review refused: the review stage changed while tests ran",
+        "events.jsonl",
       );
     }
-    const review = await readLatestReview(input.runDir, place.dir, kind);
-    const started = lastReviewStart(loaded.events, place.stage);
-    assertReviewMatchesStart(review, started);
-    await assertQuestionCards(input.runDir, review);
-    await assertPriorQuestionsDecided(input.runDir, loaded.events, review);
-    const warnings = kind === "cross"
-      ? diversityWarnings(
-        review.value,
-        lastProvenance(loaded.events, "implement"),
-        lastProvenance(loaded.events, "self-review"),
-      )
-      : [];
-    const policy = await readPolicy(input.runDir, loaded.run.base);
-    const execution = await runTestCommand(
-      await gitRoot(input.runDir),
-      policy.testCommand,
-      input.testTimeoutMs,
-    );
-    const head = await gitHead(input.runDir);
-    const tree = await workTree(input.runDir);
-    const size = await treeDiffSize(input.runDir, loaded.run.base, tree);
-    const startedTree = lastReviewStartTree(loaded.events, place.stage);
-    const delta = startedTree !== undefined && startedTree !== tree
-      ? await treeDiffSize(input.runDir, startedTree, tree)
-      : undefined;
-    const label = String(reviewNumber(review.rel)).padStart(2, "0");
-    const logPath = join(input.runDir, place.dir, `${label}.test.log`);
-    const log = execution.tests === "not-configured"
-      ? "test command not configured\n"
-      : `stdout (last 200 lines):\n${tailLines(execution.stdout)}\n\nstderr (last 200 lines):\n${
-        tailLines(execution.stderr)
-      }\n`;
-    await atomicWrite(logPath, log);
-    const saved = await appendEvent(loaded, input.runDir, {
-      stage: place.stage,
-      action: "completed",
-      tool: review.value.tool,
-      model: review.value.model,
-      head,
-      tree,
-      size,
-      ...(delta === undefined ? {} : { delta }),
-      tests: execution.tests === "not-configured"
-        ? execution.tests
-        : { ...execution.tests, tree },
-      ref: review.rel,
-    });
-    return {
-      schema: schemaVersion,
-      path: input.runDir,
-      review: review.rel,
-      stage: place.stage,
-      action: "completed",
-      lifecycle: saved.run.state.lifecycle,
-      head,
-      size,
-      warnings,
-    };
+    return recordReviewDone(input.runDir, loaded, checked, execution);
   });
+}
+
+type CheckedReview = {
+  place: (typeof reviewPlaces)[ReviewKind];
+  review: { rel: string; value: ReviewJson };
+  warnings: string[];
+  cwd: string;
+  root: string;
+  testCommand: string | undefined;
+  testTree: string | undefined;
+  stageEvents: number;
+};
+
+async function checkReviewDone(
+  runDir: string,
+  kind: ReviewKind,
+  loaded: RebuildResult,
+): Promise<CheckedReview> {
+  const place = reviewPlaces[kind];
+  assertReviewingLifecycle(loaded.run.state);
+  const review = await readLatestReview(runDir, place.dir, kind);
+  const started = lastReviewStart(loaded.events, place.stage);
+  assertReviewMatchesStart(review, started);
+  await assertQuestionCards(runDir, review);
+  await assertPriorQuestionsDecided(runDir, loaded.events, review);
+  const warnings = kind === "cross"
+    ? diversityWarnings(
+      review.value,
+      lastProvenance(loaded.events, "implement"),
+      lastProvenance(loaded.events, "self-review"),
+    )
+    : [];
+  const cwd = await runGitCwd(runDir, loaded.run);
+  const policy = await readPolicy(cwd, loaded.run.base);
+  return {
+    place,
+    review,
+    warnings,
+    cwd,
+    root: await gitRoot(cwd),
+    testCommand: policy.testCommand,
+    testTree: policy.testCommand === undefined ? undefined : await workTree(cwd),
+    stageEvents: stageEventCount(loaded.events, place.stage),
+  };
+}
+
+async function recordReviewDone(
+  runDir: string,
+  loaded: RebuildResult,
+  checked: CheckedReview,
+  execution: TestExecution,
+): Promise<ReviewDoneResult & { warnings: string[] }> {
+  const { place, review, cwd } = checked;
+  const head = await gitHead(cwd);
+  const tree = await workTree(cwd);
+  const size = await treeDiffSize(cwd, loaded.run.base, tree);
+  const startedTree = lastReviewStartTree(loaded.events, place.stage);
+  const delta = startedTree !== undefined && startedTree !== tree
+    ? await treeDiffSize(cwd, startedTree, tree)
+    : undefined;
+  const label = String(reviewNumber(review.rel)).padStart(2, "0");
+  const logPath = join(runDir, place.dir, `${label}.test.log`);
+  const log = execution.tests === "not-configured"
+    ? "test command not configured\n"
+    : `stdout (last 200 lines):\n${tailLines(execution.stdout)}\n\nstderr (last 200 lines):\n${
+      tailLines(execution.stderr)
+    }\n`;
+  await atomicWrite(logPath, log);
+  const saved = await appendEvent(loaded, runDir, {
+    stage: place.stage,
+    action: "completed",
+    tool: review.value.tool,
+    model: review.value.model,
+    head,
+    tree,
+    size,
+    ...(delta === undefined ? {} : { delta }),
+    tests: execution.tests === "not-configured"
+      ? execution.tests
+      : { ...execution.tests, tree: checked.testTree ?? tree },
+    ref: review.rel,
+  });
+  return {
+    schema: schemaVersion,
+    path: runDir,
+    review: review.rel,
+    stage: place.stage,
+    action: "completed",
+    lifecycle: saved.run.state.lifecycle,
+    head,
+    size,
+    warnings: checked.warnings,
+  };
+}
+
+function assertReviewingLifecycle(state: RunState): void {
+  if (state.lifecycle !== "reviewing") {
+    throw new RelayError("gate", `review refused: run is ${state.lifecycle}`, "state.lifecycle");
+  }
+}
+
+function stageEventCount(events: readonly EventLine[], stage: ReviewStage): number {
+  return events.filter((event) => event.stage === stage).length;
 }
 
 function assertReviewMatchesStart(
@@ -269,7 +328,7 @@ async function assertPriorQuestionsDecided(
 ): Promise<void> {
   const previous = latestCompletedReview(events);
   if (previous?.ref === undefined) return;
-  const previousReview = await readReviewAt(runDir, previous);
+  const previousReview = await readReviewAt(runDir, previous.stage, previous.ref);
   for (const item of previousReview.open) {
     if (review.value.open.some((next) => next.q === item.q)) continue;
     const decided = events.some((event) =>
@@ -381,6 +440,14 @@ async function readLatestReview(
   const latest = files.at(-1);
   if (latest === undefined) throw new RelayError("not_found", "review not found", dirName);
   const rel = `${dirName}/${latest}`;
+  const value = await readReviewDocument(runDir, rel);
+  if (value.kind !== kind) {
+    throw new RelayError("validation", "kind does not match", `${rel}:kind`);
+  }
+  return { rel, value };
+}
+
+export async function readReviewDocument(runDir: string, rel: string): Promise<ReviewJson> {
   let value: unknown;
   try {
     value = await readJson(join(runDir, rel));
@@ -396,10 +463,7 @@ async function readLatestReview(
     const fieldPath = issue.fieldPath.length === 0 ? rel : `${rel}:${issue.fieldPath}`;
     throw new RelayError("validation", issue.message, fieldPath);
   }
-  if (parsed.data.kind !== kind) {
-    throw new RelayError("validation", "kind does not match", `${rel}:kind`);
-  }
-  return { rel, value: parsed.data };
+  return parsed.data;
 }
 
 function reviewNumber(name: string): number {
@@ -426,12 +490,12 @@ function latestCompletedReview(events: readonly EventLine[]): EventLine | undefi
 
 async function readReviewAt(
   runDir: string,
-  event: EventLine,
+  stage: EventLine["stage"],
+  rel: string,
 ): Promise<ReviewJson> {
-  const dir = event.stage === "self-review" ? reviewPlaces.self.dir : reviewPlaces.cross.dir;
-  const rel = event.ref;
-  if (rel === undefined || !new RegExp(String.raw`^${dir}/\d+\.json$`).test(rel)) {
-    throw new RelayError("validation", "invalid review ref", rel ?? "review.ref");
+  const dir = stage === "self-review" ? reviewPlaces.self.dir : reviewPlaces.cross.dir;
+  if (!new RegExp(String.raw`^${dir}/\d+\.json$`).test(rel)) {
+    throw new RelayError("validation", "invalid review ref", rel);
   }
   let value: unknown;
   try {
@@ -478,14 +542,4 @@ function parseKind(value: string): ReviewKind {
 function parseModel(value: string): string {
   if (value.trim().length === 0) throw new RelayError("validation", "model is empty", "model");
   return value;
-}
-
-async function exists(filePath: string): Promise<boolean> {
-  try {
-    await stat(filePath);
-    return true;
-  } catch (error) {
-    if (isEnoent(error)) return false;
-    throw error;
-  }
 }

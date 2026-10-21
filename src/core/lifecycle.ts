@@ -1,20 +1,30 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { z } from "zod";
-import { rebuildRun } from "./cache.js";
+import { type RebuildResult, rebuildRun } from "./cache.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { isEnoent, readJson } from "./files.js";
-import { changedPaths, gitHead, treeDiffSize, workTree } from "./git.js";
+import { changedPaths, gitHead, treeDiffSize, treeStatus, workTree } from "./git.js";
 import { appendEvent, withRunLock } from "./mutate.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
-import { parseReviewJson, reviewJsonSchema } from "./review.js";
+import { parseReviewJson, readReviewDocument } from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
 import { outsidePaths } from "./scope.js";
 import { openPlanTasks, planIndexSchema, readPlanIndex } from "./tasks.js";
 import { schemaVersion, toolSchema, viaSchema } from "./vocab.js";
+import {
+  gitCwd,
+  keepReason,
+  mainRoot,
+  removeMergedWorktree,
+  runGitCwd,
+  validateRunWorktree,
+  type WorktreeRecord,
+  type WorktreeRemoval,
+} from "./worktree.js";
 
 const workflowStages = ["plan", "implement", "self-review", "cross-review"] as const;
 const workflowStageSchema = z.enum(workflowStages);
@@ -46,6 +56,7 @@ export type StageResult = {
   head?: string;
   tree?: string;
   size?: { files: number; added: number; deleted: number };
+  warning?: string;
 };
 
 export type ApproveResult = {
@@ -59,6 +70,7 @@ export type CloseResult = {
   schema: 1;
   path: string;
   lifecycle: "closed" | "abandoned";
+  worktree?: WorktreeRemoval;
 };
 
 export type ReviewIntegrity = {
@@ -85,6 +97,7 @@ export function stageText(result: StageResult): string {
   if (result.size !== undefined) {
     lines.push(`size: ${result.size.files} ${result.size.added} ${result.size.deleted}`);
   }
+  if (result.warning !== undefined) lines.push(`warning: ${result.warning}`);
   return `${lines.join("\n")}\n`;
 }
 
@@ -93,7 +106,12 @@ export function approveText(result: ApproveResult): string {
 }
 
 export function closeText(result: CloseResult): string {
-  return `lifecycle: ${result.lifecycle}\n`;
+  const lines = [`lifecycle: ${result.lifecycle}`];
+  if (result.worktree?.removed === true) lines.push("worktree: removed");
+  if (result.worktree?.reason !== undefined) {
+    lines.push(`worktree: kept (${result.worktree.reason})`);
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 export type ApprovePreview = {
@@ -107,6 +125,7 @@ export type ClosePreview = {
   schema: 1;
   recommend: "y" | "n";
   reasons: string[];
+  worktree?: { remove: boolean; reason?: string };
 };
 
 export function approvePreviewText(result: ApprovePreview): string {
@@ -115,7 +134,12 @@ export function approvePreviewText(result: ApprovePreview): string {
 
 export function closePreviewText(result: ClosePreview): string {
   const reasons = result.reasons.length === 0 ? "" : `${result.reasons.join("\n")}\n`;
-  return `recommend: ${result.recommend}\n${reasons}`;
+  let worktree = "";
+  if (result.worktree?.remove === true) worktree = "worktree: close will remove it\n";
+  if (result.worktree?.reason !== undefined) {
+    worktree = `worktree: close will keep it (${result.worktree.reason})\n`;
+  }
+  return `recommend: ${result.recommend}\n${reasons}${worktree}`;
 }
 
 export function sectionText(markdown: string, heading: string): string {
@@ -147,16 +171,38 @@ export async function approvePreview(runDir: string): Promise<ApprovePreview> {
 
 export async function closePreview(runDir: string): Promise<ClosePreview> {
   const loaded = await rebuildRun(runDir);
+  const reasons = await closeReasons(runDir, loaded.run.base, loaded.events);
+  const preview: ClosePreview = {
+    schema: schemaVersion,
+    recommend: reasons.length === 0 ? "y" : "n",
+    reasons,
+  };
+  if (loaded.run.worktree !== undefined) {
+    const reason = await keepReason(
+      await mainRoot(runDir),
+      basename(runDir),
+      loaded.run.worktree,
+    );
+    preview.worktree = reason === null ? { remove: true } : { remove: false, reason };
+  }
+  return preview;
+}
+
+async function closeReasons(
+  runDir: string,
+  base: string,
+  events: readonly EventLine[],
+): Promise<string[]> {
   const reasons: string[] = [];
-  const integrity = await reviewIntegrity(runDir, loaded.run.base, loaded.events);
+  const integrity = await reviewIntegrity(runDir, base, events);
   for (const kind of integrity.required) {
     if (!integrity.done.includes(kind)) reasons.push(`missing ${kind} review`);
   }
   if (integrity.treeMatch === false) reasons.push("tree mismatch");
-  if (integrity.delta !== undefined) reasons.push("delta");
-  const latest = await latestReview(runDir, loaded.events);
+  if (integrity.delta !== undefined) reasons.push("reviewer changes after latest review");
+  const latest = await latestReview(runDir, events);
   if (latest !== null && latest.open > 0) reasons.push("open items");
-  const completed = [...loaded.events].reverse().find((event) =>
+  const completed = [...events].reverse().find((event) =>
     event.action === "completed"
     && (event.stage === "self-review" || event.stage === "cross-review")
   );
@@ -166,11 +212,9 @@ export async function closePreview(runDir: string): Promise<ClosePreview> {
   ) {
     reasons.push("failed tests");
   }
-  return {
-    schema: schemaVersion,
-    recommend: reasons.length === 0 ? "y" : "n",
-    reasons,
-  };
+  const drift = events.filter((event) => event.stage === "run" && event.action === "drifted");
+  if (drift.length > 0) reasons.push(`run.json drifted ${drift.length} times`);
+  return reasons;
 }
 
 export function brainstormDoneText(result: BrainstormDoneResult): string {
@@ -219,6 +263,63 @@ export async function approveRun(input: {
   });
 }
 
+async function executeAbandon(
+  loaded: RebuildResult,
+  runDir: string,
+  rawReason: string,
+  actor: "agent-env" | "unknown",
+  via?: EventLine["via"],
+): Promise<CloseResult> {
+  const reason = rawReason.trim();
+  if (reason.length === 0) throw new RelayError("validation", "reason is empty", "reason");
+  const saved = await appendEvent(loaded, runDir, {
+    stage: "run",
+    action: "abandoned",
+    reason,
+    actor,
+    ...(via === undefined ? {} : { via }),
+  });
+  if (saved.run.state.lifecycle !== "abandoned") {
+    throw new RelayError("validation", "close did not abandon the run", "state.lifecycle");
+  }
+  return { schema: schemaVersion, path: runDir, lifecycle: saved.run.state.lifecycle };
+}
+
+async function cleanupWorktreeOnClose(
+  runDir: string,
+  worktree: WorktreeRecord,
+  saved: { run: RebuildResult["run"]; event: EventLine },
+  loadedEvents: readonly EventLine[],
+  actor: "agent-env" | "unknown",
+): Promise<WorktreeRemoval> {
+  try {
+    const root = await mainRoot(runDir);
+    const removal = await removeMergedWorktree(root, {
+      name: basename(runDir),
+      worktree,
+    });
+    if (removal.removed) {
+      try {
+        await appendEvent(
+          { run: saved.run, events: [...loadedEvents, saved.event], warning: null },
+          runDir,
+          {
+            stage: "run",
+            action: "cleaned",
+            actor,
+          },
+        );
+      } catch {
+        // Swallow event write failure to report removal and preserve closed run
+      }
+    }
+    return removal;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { removed: false, reason: `worktree cleanup failed: ${message}` };
+  }
+}
+
 export async function closeRun(input: {
   runDir: string;
   via?: string;
@@ -235,22 +336,17 @@ export async function closeRun(input: {
   }
   return withRunLock(input.runDir, async (loaded) => {
     if (input.abandon !== undefined) {
-      const reason = input.abandon.trim();
-      if (reason.length === 0) throw new RelayError("validation", "reason is empty", "reason");
-      const saved = await appendEvent(loaded, input.runDir, {
-        stage: "run",
-        action: "abandoned",
-        reason,
-        actor,
-        ...(via === undefined ? {} : { via }),
-      });
-      if (saved.run.state.lifecycle !== "abandoned") {
-        throw new RelayError("validation", "close did not abandon the run", "state.lifecycle");
-      }
-      return { schema: schemaVersion, path: input.runDir, lifecycle: saved.run.state.lifecycle };
+      return executeAbandon(loaded, input.runDir, input.abandon, actor, via);
     }
     assertMove(loaded.run.state, "close");
-    if (input.ackOpen !== true) await assertNoOpenQuestions(input.runDir, loaded.events);
+    const policy = await readPolicy(await gitCwd(input.runDir), loaded.run.base);
+    const softClose = !policy.strict.reviewIntegrity && via !== undefined;
+    if (input.ackOpen !== true && !softClose) {
+      await assertNoOpenQuestions(input.runDir, loaded.events);
+    }
+    const warnings = softClose
+      ? await closeReasons(input.runDir, loaded.run.base, loaded.events)
+      : [];
     if (waiveReason !== undefined) {
       await appendEvent(loaded, input.runDir, {
         stage: "run",
@@ -259,7 +355,7 @@ export async function closeRun(input: {
         actor,
         ...(via === undefined ? {} : { via }),
       });
-    } else {
+    } else if (!softClose) {
       await assertReviewIntegrity(
         input.runDir,
         loaded.run.base,
@@ -271,12 +367,29 @@ export async function closeRun(input: {
       stage: "run",
       action: "closed",
       actor,
+      ...(warnings.length === 0
+        ? {}
+        : { reason: `non-strict review-integrity warnings: ${warnings.join(", ")}` }),
       ...(via === undefined ? {} : { via }),
     });
     if (saved.run.state.lifecycle !== "closed") {
       throw new RelayError("validation", "close did not close the run", "state.lifecycle");
     }
-    return { schema: schemaVersion, path: input.runDir, lifecycle: saved.run.state.lifecycle };
+    const result: CloseResult = {
+      schema: schemaVersion,
+      path: input.runDir,
+      lifecycle: saved.run.state.lifecycle,
+    };
+    if (loaded.run.worktree !== undefined) {
+      result.worktree = await cleanupWorktreeOnClose(
+        input.runDir,
+        loaded.run.worktree,
+        saved,
+        loaded.events,
+        actor,
+      );
+    }
+    return result;
   });
 }
 
@@ -301,9 +414,11 @@ export async function reviewIntegrity(
   base: string,
   events: readonly EventLine[],
 ): Promise<ReviewIntegrity> {
-  const policy = await readPolicy(runDir, base);
-  const tree = await workTree(runDir);
-  const size = await treeDiffSize(runDir, base, tree);
+  const cwd = await integrityCwd(runDir, events);
+  if (cwd === null) return removedIntegrity(runDir, base, events);
+  const policy = await readPolicy(cwd, base);
+  const tree = await workTree(cwd);
+  const size = await treeDiffSize(cwd, base, tree);
   const required = size.added + size.deleted < policy.smallChange
     ? ["self"] as const
     : policy.requireReviews;
@@ -312,6 +427,41 @@ export async function reviewIntegrity(
     required: [...required],
     done,
     treeMatch: latest === undefined ? null : latest.tree === tree,
+    ...(latest?.delta === undefined ? {} : { delta: latest.delta }),
+    waived: events.some((event) => event.action === "waived"),
+  };
+}
+
+// `null` means `close` removed the worktree of this closed run.
+async function integrityCwd(runDir: string, events: readonly EventLine[]): Promise<string | null> {
+  try {
+    return await gitCwd(runDir);
+  } catch (error) {
+    const removed = error instanceof RelayError && error.fieldPath === "run.json:worktree.path"
+      && events.some((event) => event.action === "closed");
+    if (removed) return null;
+    throw error;
+  }
+}
+
+// A closed run without its worktree has no live tree. Size comes from the latest review tree.
+async function removedIntegrity(
+  runDir: string,
+  base: string,
+  events: readonly EventLine[],
+): Promise<ReviewIntegrity> {
+  const policy = await readPolicy(runDir, base);
+  const { done, latest } = reviewProgress(events);
+  const size = latest?.tree === undefined
+    ? { added: 0, deleted: 0 }
+    : await treeDiffSize(runDir, base, latest.tree);
+  const required = size.added + size.deleted < policy.smallChange
+    ? ["self"] as const
+    : policy.requireReviews;
+  return {
+    required: [...required],
+    done,
+    treeMatch: null,
     ...(latest?.delta === undefined ? {} : { delta: latest.delta }),
     waived: events.some((event) => event.action === "waived"),
   };
@@ -357,6 +507,57 @@ export async function finishBrainstorm(path: string): Promise<BrainstormDoneResu
   return { schema: schemaVersion, path, open: parsed.data.open.length };
 }
 
+async function prepareImplementStart(
+  runDir: string,
+  locked: RebuildResult,
+): Promise<RebuildResult> {
+  if (locked.run.worktree !== undefined) {
+    await validateRunWorktree(runDir, locked.run.worktree);
+    return locked;
+  }
+  return rebaseRun(runDir, locked);
+}
+
+async function assertImplementDoneTasks(runDir: string, state: RunState): Promise<void> {
+  const index = await readPlanIndex(runDir);
+  if (index === null) {
+    throw new RelayError("not_found", "index.json not found", "10-plan/index.json");
+  }
+  const open = openPlanTasks(index, state);
+  if (open.length > 0) {
+    throw new RelayError(
+      "gate",
+      `implement done refused: open tasks: ${open.join(", ")}`,
+      "tasks",
+    );
+  }
+}
+
+async function measureStageCompletion(
+  runDir: string,
+  loaded: RebuildResult,
+  stage: (typeof workflowStages)[number],
+  allowExtra?: string,
+): Promise<{
+  measured?: Awaited<ReturnType<typeof measure>>;
+  scope?: Awaited<ReturnType<typeof implementScope>>;
+}> {
+  if (!sizedStages.has(stage)) return {};
+  const cwd = await runGitCwd(runDir, loaded.run);
+  const measured = await measure(cwd, loaded.run.base);
+  const scope = stage === "implement"
+    ? await implementScope(
+      runDir,
+      cwd,
+      loaded.run.base,
+      loaded.events,
+      measured.tree,
+      allowExtra,
+    )
+    : undefined;
+  return { measured, scope };
+}
+
 async function recordStage(
   input: {
     runDir: string;
@@ -374,34 +575,17 @@ async function recordStage(
   if (detected !== undefined && detected !== tool) {
     process.stderr.write(`warning: detected tool ${detected} differs from declared ${tool}\n`);
   }
-  return withRunLock(input.runDir, async (loaded) => {
-    assertMove(loaded.run.state, stageMove(stage, action));
+  return withRunLock(input.runDir, async (locked) => {
+    assertMove(locked.run.state, stageMove(stage, action));
+    const loaded = action === "started" && stage === "implement"
+      ? await prepareImplementStart(input.runDir, locked)
+      : locked;
     if (action === "completed" && stage === "implement") {
-      const index = await readPlanIndex(input.runDir);
-      if (index === null) {
-        throw new RelayError("not_found", "index.json not found", "10-plan/index.json");
-      }
-      const open = openPlanTasks(index, loaded.run.state);
-      if (open.length > 0) {
-        throw new RelayError(
-          "gate",
-          `implement done refused: open tasks: ${open.join(", ")}`,
-          "tasks",
-        );
-      }
+      await assertImplementDoneTasks(input.runDir, loaded.run.state);
     }
-    const measured = action === "completed" && sizedStages.has(stage)
-      ? await measure(input.runDir, loaded.run.base)
-      : undefined;
-    const scope = action === "completed" && stage === "implement"
-      ? await implementScope(
-        input.runDir,
-        loaded.run.base,
-        loaded.events,
-        measured?.tree ?? await workTree(input.runDir),
-        input.allowExtra,
-      )
-      : undefined;
+    const { measured, scope } = action === "completed"
+      ? await measureStageCompletion(input.runDir, loaded, stage, input.allowExtra)
+      : {};
     const saved = await appendEvent(loaded, input.runDir, {
       stage,
       action,
@@ -427,8 +611,25 @@ async function recordStage(
       result.tree = measured.tree;
       result.size = measured.size;
     }
+    if (scope?.extra !== undefined) {
+      result.warning = `accepted out-of-scope edits: ${scope.extra.join(", ")}`;
+    }
     return result;
   });
+}
+
+// Without a worktree, implement starts from a clean tree, and `base` moves to HEAD.
+async function rebaseRun(runDir: string, loaded: RebuildResult): Promise<RebuildResult> {
+  if ((await treeStatus(runDir)).length > 0) {
+    throw new RelayError("gate", "working tree has changes", "tree");
+  }
+  const head = await gitHead(runDir);
+  const saved = await appendEvent({ ...loaded, run: { ...loaded.run, base: head } }, runDir, {
+    stage: "run",
+    action: "rebased",
+    ref: head,
+  });
+  return { ...loaded, run: saved.run, events: [...loaded.events, saved.event] };
 }
 
 function stageMove(
@@ -459,6 +660,7 @@ function assertMove(state: RunState, move: Move): void {
 
 async function implementScope(
   runDir: string,
+  cwd: string,
   base: string,
   events: readonly EventLine[],
   tree: string,
@@ -467,12 +669,13 @@ async function implementScope(
   const own = await plannedFiles(runDir);
   const recorded = events.flatMap((event) => event.extra ?? []);
   const outside = outsidePaths(
-    await changedPaths(runDir, base, tree),
+    await changedPaths(cwd, base, tree),
     own,
     recorded,
   );
   if (outside.length === 0) return {};
-  if (allowExtra === undefined) {
+  const strict = (await readPolicy(cwd, base)).strict.scope;
+  if (allowExtra === undefined && strict) {
     const shown = outside.slice(0, 10).join(", ");
     throw new RelayError(
       "gate",
@@ -480,7 +683,9 @@ async function implementScope(
       "files",
     );
   }
-  const reason = allowExtra.trim();
+  const reason = allowExtra === undefined
+    ? `scope warning: accepted edits under strict.scope=false (${outside.join(", ")})`
+    : allowExtra.trim();
   if (reason.length === 0) throw new RelayError("validation", "reason is empty", "allow-extra");
   return { extra: outside, reason };
 }
@@ -516,16 +721,16 @@ async function plannedFiles(runDir: string): Promise<string[]> {
 }
 
 async function measure(
-  runDir: string,
+  cwd: string,
   base: string,
 ): Promise<{
   head: string;
   tree: string;
   size: { files: number; added: number; deleted: number };
 }> {
-  const head = await gitHead(runDir);
-  const tree = await workTree(runDir);
-  return { head, tree, size: await treeDiffSize(runDir, base, tree) };
+  const head = await gitHead(cwd);
+  const tree = await workTree(cwd);
+  return { head, tree, size: await treeDiffSize(cwd, base, tree) };
 }
 
 async function assertNoOpenQuestions(runDir: string, events: readonly EventLine[]): Promise<void> {
@@ -548,10 +753,10 @@ function newestCompletedReview(events: readonly EventLine[]): EventLine | undefi
 async function reviewFromRef(
   runDir: string,
   newest: EventLine,
+  ref: string,
   events: readonly EventLine[],
 ): Promise<{ path: string; open: number }> {
   const dir = reviewDirs.find((review) => review.stage === newest.stage)?.dir;
-  const ref = newest.ref ?? "";
   if (dir === undefined || !new RegExp(String.raw`^${dir}/\d+\.json$`).test(ref)) {
     throw new RelayError("validation", "invalid review ref", ref);
   }
@@ -596,7 +801,7 @@ async function latestReview(
   events: readonly EventLine[],
 ): Promise<{ path: string; open: number } | null> {
   const newest = newestCompletedReview(events);
-  if (newest?.ref !== undefined) return reviewFromRef(runDir, newest, events);
+  if (newest?.ref !== undefined) return reviewFromRef(runDir, newest, newest.ref, events);
   const latest = (await reviewHits(runDir, events)).at(-1);
   if (latest === undefined) return null;
   const openItems = await readReview(runDir, latest.rel);
@@ -610,22 +815,7 @@ async function readReview(
   runDir: string,
   rel: string,
 ): Promise<Awaited<ReturnType<typeof parseReviewJson>>["open"]> {
-  let value: unknown;
-  try {
-    value = await readJson(join(runDir, rel));
-  } catch (error) {
-    if (error instanceof RelayError && error.message === "invalid JSON") {
-      throw new RelayError("validation", "invalid JSON", rel);
-    }
-    throw error;
-  }
-  const parsed = reviewJsonSchema.safeParse(value);
-  if (!parsed.success) {
-    const issue = fromZod(parsed.error);
-    const fieldPath = issue.fieldPath.length === 0 ? rel : `${rel}:${issue.fieldPath}`;
-    throw new RelayError("validation", issue.message, fieldPath);
-  }
-  return parsed.data.open;
+  return (await readReviewDocument(runDir, rel)).open;
 }
 
 function unresolvedOpenCount(

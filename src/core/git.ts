@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { RelayError } from "./error.js";
 
-export const gitProgram = process.platform === "win32"
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : "/usr/bin/git";
+export function gitProgramFor(platform: NodeJS.Platform = process.platform): string {
+  return platform === "win32" ? String.raw`C:\Program Files\Git\cmd\git.exe` : "/usr/bin/git";
+}
+
+export const gitProgram = gitProgramFor();
 
 export type DiffSize = {
   files: number;
@@ -23,14 +25,14 @@ export async function gitRoot(cwd: string): Promise<string> {
 }
 
 export async function gitHead(cwd: string): Promise<string> {
+  let head: string;
   try {
-    const head = (await git(cwd, ["rev-parse", "HEAD"])).trim();
-    if (head.length === 0) throw new Error("empty");
-    return head;
-  } catch (error) {
-    if (error instanceof RelayError) throw error;
+    head = (await git(cwd, ["rev-parse", "HEAD"])).trim();
+  } catch {
     throw new RelayError("validation", "git HEAD not found", "base");
   }
+  if (head.length === 0) throw new RelayError("validation", "git HEAD not found", "base");
+  return head;
 }
 
 // Run artifacts under .agent-relay/ are not part of the change.
@@ -80,6 +82,16 @@ export async function workTree(cwd: string): Promise<string> {
     throw new RelayError("validation", "git working tree hash failed", "base");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+// Changes outside .agent-relay/, staged or not, plus untracked files that are not ignored.
+export async function treeStatus(cwd: string): Promise<string> {
+  try {
+    const root = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
+    return await git(root, ["status", "--porcelain", "--", ...outsideRuns]);
+  } catch {
+    throw new RelayError("validation", "git status failed", "tree");
   }
 }
 

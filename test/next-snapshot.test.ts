@@ -29,7 +29,7 @@ test("atry next --json snapshots each lifecycle", async () => {
         ev("implement", "started"),
         { ...ev("implement", "task-started"), task: "T1" },
       ],
-      command: "atry task start",
+      command: "atry list",
     },
     {
       lifecycle: "reviewing",
@@ -73,48 +73,120 @@ test("atry next --json snapshots each lifecycle", async () => {
     expect(bodies).toMatchInlineSnapshot(`
       [
         {
+          "actions": [
+            {
+              "command": "atry approve 1792208700",
+              "needsHuman": true,
+              "read": [
+                "10-plan/overview.md",
+              ],
+              "reason": "The plan is waiting for approval.",
+            },
+          ],
           "command": "atry approve 1792208700",
           "needsHuman": true,
           "read": [
             "10-plan/overview.md",
           ],
           "reason": "The plan is waiting for approval.",
+          "recommendation": "atry approve 1792208700",
           "schema": 1,
+          "state": {
+            "approved": false,
+            "lifecycle": "planned",
+            "stage": "plan",
+          },
         },
         {
+          "actions": [
+            {
+              "command": "atry stage start 1792208701 implement",
+              "needsHuman": false,
+              "read": [],
+              "reason": "Implement has not started.",
+            },
+          ],
           "command": "atry stage start 1792208701 implement",
           "needsHuman": false,
           "read": [],
           "reason": "Implement has not started.",
+          "recommendation": "atry stage start 1792208701 implement",
           "schema": 1,
+          "state": {
+            "approved": true,
+            "lifecycle": "approved",
+            "stage": "plan",
+          },
         },
         {
-          "command": "atry task start 1792208702",
+          "actions": [
+            {
+              "command": "atry list 1792208702",
+              "needsHuman": false,
+              "read": [],
+              "reason": "The next command comes from the run state.",
+            },
+          ],
+          "command": "atry list 1792208702",
           "needsHuman": false,
           "read": [],
-          "reason": "An implement task is still open.",
+          "reason": "The next command comes from the run state.",
+          "recommendation": "atry list 1792208702",
           "schema": 1,
+          "state": {
+            "approved": true,
+            "lifecycle": "implementing",
+            "stage": "implement",
+          },
         },
         {
+          "actions": [
+            {
+              "command": "atry review new 1792208703 self",
+              "needsHuman": false,
+              "read": [],
+              "reason": "Self-review has not started.",
+            },
+          ],
           "command": "atry review new 1792208703 self",
           "needsHuman": false,
           "read": [],
           "reason": "Self-review has not started.",
+          "recommendation": "atry review new 1792208703 self",
           "schema": 1,
+          "state": {
+            "approved": true,
+            "lifecycle": "reviewing",
+            "stage": "implement",
+          },
         },
         {
+          "actions": [],
           "command": "none",
           "needsHuman": false,
           "read": [],
           "reason": "The run is closed or abandoned.",
+          "recommendation": "none",
           "schema": 1,
+          "state": {
+            "approved": false,
+            "lifecycle": "closed",
+            "stage": "plan",
+          },
         },
         {
+          "actions": [],
           "command": "none",
           "needsHuman": false,
           "read": [],
           "reason": "The run is closed or abandoned.",
+          "recommendation": "none",
           "schema": 1,
+          "state": {
+            "approved": false,
+            "lifecycle": "abandoned",
+            "stage": "plan",
+          },
         },
       ]
     `);

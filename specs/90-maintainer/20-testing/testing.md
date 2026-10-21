@@ -18,5 +18,18 @@ macOS, Linux, and Windows.
 temporary `HOME`. It needs network access the first time `npx` fetches
 `skills`.
 
-`npm run check` runs dprint and `tsc --noEmit`. CI does the same. CI does not
+`npm run check` runs dprint and `tsc --noEmit`. `tsconfig.json` sets
+`noUnusedLocals` and `noUnusedParameters`, so an unused import fails the check.
+CI does the same. CI does not
 prove that an agent follows a skill.
+
+`.githooks/pre-commit` runs `npm run build`. When that exits zero, it runs
+`npm run coverage`. When coverage exits zero, it runs `dprint check`. The hook
+exits non-zero when one command exits non-zero. Enable it with
+`git config core.hooksPath .githooks`. `npm run coverage` needs `sonar-scanner`
+on `PATH`, plus `SONAR_HOST_URL` and `SONAR_TOKEN`.
+
+`npm run coverage` applies four bars to `src/**` and `scripts/maint/**`:
+overall lines plus branches at least 95%, each file's lines plus branches above
+90%, each file's branches at least 90%, and duplicated lines density at most 1%.
+A file at exactly 90% branches passes. A file with no branches passes.

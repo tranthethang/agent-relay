@@ -15,5 +15,6 @@ Early AI agent workflows relied heavily on long markdown skill instructions expl
 All lifecycle state validation, dependency checking, gate verification, and version comparisons were moved into the compiled TypeScript binary `atry`.
 
 - Skill markdown files (`SKILL.md`) are reduced to concise procedural instructions.
-- State branching is computed by `atry next` and returned as a single deterministic command.
-- The agent simply calls `atry next`, reads the requested paths, and executes the returned command.
+- State and available actions are computed by `atry next`, which marks one option as its recommendation.
+- Skills present multiple actions to the developer and follow the selected action.
+- The agent reads the selected action's paths before running its command.

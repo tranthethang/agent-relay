@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { contextFor } from "../src/core/context.js";
@@ -200,5 +200,61 @@ test("atry context --json returns the same fields", async () => {
     expect(bad.code).toBe(2);
     const unknown = await runCli(["context", runName, "--task", "T9"], root);
     expect(unknown.code).toBe(3);
+  });
+});
+
+test("atry context outputs readable text and handles edge cases", async () => {
+  await withTempDir(async (root) => {
+    const runDir = await seedContext(root);
+    const textCli = await runCli(["context", runName, "--task", "T1"], root);
+    expect(textCli.code).toBe(0);
+    expect(textCli.stdout).toContain(`run: ${runName}`);
+    expect(textCli.stdout).toContain("stage: cross-review");
+    expect(textCli.stdout).toContain("plan: 10-plan/T1.md");
+    expect(textCli.stdout).toContain("implement: 20-implement/T1.md");
+
+    // Test invalid JSON in index.json
+    await writeFile(join(runDir, "10-plan", "index.json"), "{ invalid json");
+    await expect(contextFor(runDir, undefined)).rejects.toThrow("invalid JSON");
+
+    // Test invalid schema in index.json
+    await writeFile(join(runDir, "10-plan", "index.json"), JSON.stringify({ schema: 99 }));
+    await expect(contextFor(runDir, undefined)).rejects.toThrow();
+
+    // Test run with worktree, reason, no brainstorm, and empty tasks
+    await writeFile(
+      join(runDir, "run.json"),
+      JSON.stringify({
+        schema: 1,
+        id: "1792208725",
+        ymd: "20261017",
+        slug: "next-state-cli-base",
+        title: "v2 P3",
+        base: "abc",
+        worktree: { path: "/tmp/wt", branch: "feat" },
+        state: {
+          lifecycle: "planned",
+          stage: "plan",
+          approved: false,
+          tasks: [{ id: "T1", status: "skipped", reason: "not needed" }],
+        },
+      }),
+    );
+    await rm(join(runDir, "10-plan", "index.json"), { force: true });
+    await writeFile(
+      join(runDir, "events.jsonl"),
+      JSON.stringify({
+        schema: 1,
+        ts: "2026-10-17T00:00:00.000Z",
+        stage: "implement",
+        action: "task-skipped",
+        task: "T1",
+        reason: "not needed",
+      }) + "\n",
+    );
+    const emptyResult = await contextFor(runDir, undefined);
+    expect(emptyResult.brainstorm).toBeNull();
+    expect(emptyResult.run.worktree).toEqual({ path: "/tmp/wt", branch: "feat" });
+    expect(emptyResult.tasks[0]?.reason).toBe("not needed");
   });
 });

@@ -6,6 +6,7 @@ import { gitRoot } from "./git.js";
 import { normalizePath, pathsOverlap } from "./overlap.js";
 import { type PlanIndex, planIndexSchema } from "./tasks.js";
 import { schemaVersion } from "./vocab.js";
+import { gitCwd } from "./worktree.js";
 
 const runRoot = ".agent-relay";
 
@@ -26,7 +27,7 @@ export async function guardPath(
   inputPath: string,
   session?: string,
 ): Promise<GuardResult> {
-  const root = await gitRoot(runDir);
+  const root = await gitRoot(await gitCwd(runDir));
   const relativePath = repoRelative(root, inputPath);
   if (relativePath === null) return { schema: schemaVersion, allowed: false, task: null };
   if (relativePath === runRoot || relativePath.startsWith(`${runRoot}/`)) {

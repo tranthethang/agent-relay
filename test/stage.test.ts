@@ -103,6 +103,16 @@ test("atry stage start and done record tool, model, head, and size", async () =>
 
 test("implement done refuses a file edited after the last task done", async () => {
   await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self", "cross"],
+        smallChange: 20,
+        strict: { scope: true },
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
     await gitCommit(dir);
     const clean = await createRun(dir, "clean-scope");
     expect((await runCli(["approve", clean, "--via", "arg"], dir)).code).toBe(0);

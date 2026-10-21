@@ -30,7 +30,7 @@ install.
 ## Hard constraints
 
 - Node.js 22 or newer for the CLI and the tests.
-- No bash scripts. Sync shared skill text with `npm run sync`.
+- No bash scripts. `.githooks/pre-commit` is the shell exception. Sync shared skill text with `npm run sync`.
 - No `sudo`. Do not write an installer that targets `$HOME`.
 - Do not invent orchestration. Record state in `events.jsonl`.
 - Do not claim CI proves skills work end-to-end. CI runs `npm run check`,
@@ -75,6 +75,15 @@ npm test
 npm run check
 npm run sync:check
 ```
+
+`npm run coverage` exits non-zero when a bar misses. Overall coverage for
+`src/**` and `scripts/maint/**` is at least 95%. That figure is covered lines
+plus covered branches, divided by the line total plus the branch total.
+Per-file coverage in those trees is above 90%. A file at 90.0% misses. A file
+with no lines to cover is skipped. Per-file branch coverage in those trees is
+at least 90%. A file at 90.0% branches passes. A file with no branches passes.
+`tsup.config.ts` and `vitest.config.ts` stay outside these bars. Duplicated lines density for project `agent-relay` is at most
+1%.
 
 ## Versioning
 

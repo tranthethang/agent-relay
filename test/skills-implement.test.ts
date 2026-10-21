@@ -7,6 +7,8 @@ test("implement asks before approve and uses task verbs", () => {
   expect(text).toContain(`requires-atry: ">=${requiredVersion()}"`);
   expect(text).toContain(preflightBody());
   expect(text).toContain("atry next <run> --json");
+  expect(text).toContain("Read `state`, `actions`, and `recommendation` from the result.");
+  expect(text).toContain("follow the developer's selection");
   expect(text).toContain("atry approve <run> --preview");
   expect(text).toContain("atry approve <run> --via arg");
   expect(text).toContain("atry approve <run> --via confirm");
@@ -14,7 +16,10 @@ test("implement asks before approve and uses task verbs", () => {
   expect(text).toContain("atry task start <run> <task>");
   expect(text).toContain("atry task done <run> <task>");
   expect(text).toContain("When `task done` refuses, read the paths in the message.");
-  expect(text).toContain("Ask the user before you pass `--allow-extra <reason>`.");
+  expect(text).toContain(
+    "When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.",
+  );
+  expect(text).toContain("continue after the warning");
   expect(text).toContain("Put that reason in the task report.");
   expect(text).toContain("atry task skip <run> <task> --reason <text>");
   expect(text).toContain("atry claim <run> <task> --session <tag>");

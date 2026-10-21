@@ -1,5 +1,4 @@
 import { type Command } from "commander";
-import { RelayError } from "../core/error.js";
 import {
   planAmend,
   planDone,
@@ -11,7 +10,7 @@ import {
   taskSkip,
   taskStart,
 } from "../core/plan.js";
-import { oneToken, selectRun } from "../core/select.js";
+import { commandJson, takeRun } from "./distill.js";
 import { writeResult } from "./output.js";
 
 export function registerPlan(program: Command): void {
@@ -26,7 +25,7 @@ export function registerPlan(program: Command): void {
     });
   plan
     .command("done")
-    .description("Validate tasks and write the plan index")
+    .description("Validate tasks and write the plan index; non-strict plans can exceed eight tasks")
     .argument("<run>", "run id, slug, name, or path")
     .action(async (run: string, _opts: unknown, command: Command) => {
       const runDir = await takeRun(command, run);
@@ -34,7 +33,7 @@ export function registerPlan(program: Command): void {
     });
   plan
     .command("amend")
-    .description("Keep existing task ids and append new ones")
+    .description("Keep existing task ids and append new ones; honor the strict.plan task limit")
     .argument("<run>", "run id, slug, name, or path")
     .action(async (run: string, _opts: unknown, command: Command) => {
       const runDir = await takeRun(command, run);
@@ -91,19 +90,4 @@ export function registerPlan(program: Command): void {
         taskMoveText,
       );
     });
-}
-
-async function takeRun(command: Command, positional: string | undefined): Promise<string> {
-  const token = oneToken(positional, flagRun(command));
-  if (token === undefined) throw new RelayError("usage", "run is required", "run");
-  return selectRun(process.cwd(), token);
-}
-
-function commandJson(command: Command): boolean {
-  return command.optsWithGlobals().json === true;
-}
-
-function flagRun(command: Command): string | undefined {
-  const run = command.optsWithGlobals().run;
-  return typeof run === "string" ? run : undefined;
 }

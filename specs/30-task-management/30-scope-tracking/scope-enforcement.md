@@ -12,9 +12,11 @@ Scope enforcement (`src/core/lifecycle.ts` and `src/core/plan.ts`) guarantees th
      - The current task's `files` list.
      - Files of other tasks that are `in-progress`.
      - Files of tasks that became `done` after this task's latest `task-started` or `stolen` event.
-   - A path outside those sets throws `RelayError("gate", ...)` and the process exits `4`.
+   - With `strict.scope: true`, a path outside those sets throws `RelayError("gate", ...)` and the process exits `4`.
+   - With `strict.scope: false`, the command reports a warning, records the paths and reason in `events.jsonl`, and continues.
+   - Later implement integrity checks treat recorded extra paths as covered.
 
 2. **The `--allow-extra` Override**:
-   - If an unexpected file modification was legitimately required (such as generated build artifacts or configuration adjustments), the agent must pass `--allow-extra <reason>`.
-   - The CLI appends the allowed extra paths and reason to `events.jsonl`.
-   - The reason must also be documented in `20-implement/T<n>.md`.
+   - In strict mode, an unexpected file modification requires `--allow-extra <reason>` after the developer confirms it.
+   - The CLI appends accepted extra paths and the reason to `events.jsonl`.
+   - In non-strict mode, the CLI records the warning and continues without asking for a reason.

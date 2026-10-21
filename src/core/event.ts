@@ -49,6 +49,8 @@ export const eventLineSchema = z.object({
   reason: z.string().min(1).optional(),
   extra: z.array(z.string().min(1)).min(1).optional(),
   ref: z.string().min(1).optional(),
+  // sha256 hex of the previous raw line in events.jsonl.
+  prev: z.string().regex(/^[0-9a-f]{64}$/).optional(),
 }).strict();
 
 export type EventLine = z.infer<typeof eventLineSchema>;
