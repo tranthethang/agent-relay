@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { changedPaths, workTree } from "../src/core/git.js";
@@ -41,6 +41,50 @@ test("workTree ignores changes under .agent-relay", async () => {
     const before = await workTree(dir);
     await writeFile(join(dir, ".agent-relay", "run", "events.jsonl"), "after\n");
     expect(await workTree(dir)).toBe(before);
+  });
+});
+
+test("workTree stores an edited file outside the repo object directory", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(join(dir, "tracked.txt"), "one\n");
+    await execFileAsync("git", ["add", "tracked.txt"], { cwd: dir });
+    await gitCommit(dir);
+    await writeFile(join(dir, "tracked.txt"), "two\nextra\n");
+    const tree = await workTree(dir);
+    const repoObjects = resolve(
+      dir,
+      (await execFileAsync("git", ["rev-parse", "--git-path", "objects"], { cwd: dir })).stdout
+        .trim(),
+    );
+    const stored = join(dir, ".agent-relay", "objects", tree.slice(0, 2), tree.slice(2));
+    await expect(readFile(stored)).resolves.toBeInstanceOf(Buffer);
+    await expect(readFile(join(repoObjects, tree.slice(0, 2), tree.slice(2)))).rejects.toThrow();
+    expect(await changedPaths(dir, "HEAD", tree)).toContain("tracked.txt");
+  });
+});
+
+test("workTree appends a preset alternate object directory", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(join(dir, "tracked.txt"), "one\n");
+    await execFileAsync("git", ["add", "tracked.txt"], { cwd: dir });
+    await gitCommit(dir);
+    const repoObjects = resolve(
+      dir,
+      (await execFileAsync("git", ["rev-parse", "--git-path", "objects"], { cwd: dir })).stdout
+        .trim(),
+    );
+    const previous = process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+    process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES = repoObjects;
+    try {
+      await writeFile(join(dir, "tracked.txt"), "two\nextra\n");
+      const tree = await workTree(dir);
+      const stored = join(dir, ".agent-relay", "objects", tree.slice(0, 2), tree.slice(2));
+      await expect(readFile(stored)).resolves.toBeInstanceOf(Buffer);
+      expect(await changedPaths(dir, "HEAD", tree)).toContain("tracked.txt");
+    } finally {
+      if (previous === undefined) delete process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+      else process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES = previous;
+    }
   });
 });
 

@@ -26,7 +26,7 @@ async function withWorktree(
       try {
         await fn(repo, worktree);
       } finally {
-        await rm(join(worktree, ".agent-relay"), { force: true });
+        await rm(join(worktree, ".agent-relay"), { recursive: true, force: true });
         await execFileAsync("git", ["worktree", "remove", "--force", worktree], { cwd: repo });
       }
     });
@@ -72,6 +72,8 @@ test("excludeRelay adds one line and keeps the existing lines", async () => {
 test("the linked .agent-relay does not change the worktree status or tree", async () => {
   await withWorktree(async (repo, worktree) => {
     const before = await workTree(worktree);
+    // The hash writes a local object directory. Remove it so the link can use the main store.
+    await rm(join(worktree, ".agent-relay"), { recursive: true, force: true });
     await linkRelay(worktree, join(repo, ".agent-relay"));
     await excludeRelay(repo);
     const status = await execFileAsync("git", ["status", "--porcelain"], { cwd: worktree });

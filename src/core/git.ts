@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { RelayError } from "./error.js";
 
 export function gitProgramFor(platform: NodeJS.Platform = process.platform): string {
@@ -41,16 +41,21 @@ const outsideRuns = [".", ":(exclude).agent-relay"];
 export async function workTree(cwd: string): Promise<string> {
   let root: string;
   let indexPath: string;
+  let repoObjects: string;
   try {
     root = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
     indexPath = resolve(root, (await git(root, ["rev-parse", "--git-path", "index"])).trim());
+    repoObjects = resolve(root, (await git(root, ["rev-parse", "--git-path", "objects"])).trim());
   } catch {
     throw new RelayError("validation", "git index not found", "base");
   }
+  const objectDir = join(root, ".agent-relay", "objects");
   const tempDir = await mkdtemp(join(tmpdir(), "atry-index-"));
   const tempIndex = join(tempDir, "index");
   try {
-    const env = { ...process.env, GIT_INDEX_FILE: tempIndex };
+    await mkdir(objectDir, { recursive: true });
+    const indexEnv = { ...process.env, GIT_INDEX_FILE: tempIndex };
+    const writeEnv = objectWriteEnv(indexEnv, objectDir, repoObjects);
     try {
       await copyFile(indexPath, tempIndex);
     } catch (error) {
@@ -59,8 +64,8 @@ export async function workTree(cwd: string): Promise<string> {
     // `git add -A` errors when `.agent-relay` is ignored. `git add -A -f` also
     // hashes other ignored files, so update tracked paths and add untracked
     // paths that are not ignored.
-    const tracked = await git(root, ["ls-files", "-z"], env);
-    if (tracked.length > 0) await git(root, ["add", "-u", "--", ...outsideRuns], env);
+    const tracked = await git(root, ["ls-files", "-z"], indexEnv);
+    if (tracked.length > 0) await git(root, ["add", "-u", "--", ...outsideRuns], writeEnv);
     const untracked = await git(root, [
       "ls-files",
       "--others",
@@ -68,16 +73,16 @@ export async function workTree(cwd: string): Promise<string> {
       "-z",
       "--",
       ...outsideRuns,
-    ], env);
+    ], indexEnv);
     if (untracked.length > 0) {
       await git(
         root,
         ["add", "--pathspec-from-file=-", "--pathspec-file-nul", "--"],
-        env,
+        writeEnv,
         untracked,
       );
     }
-    return (await git(root, ["write-tree"], env)).trim();
+    return (await git(root, ["write-tree"], writeEnv)).trim();
   } catch {
     throw new RelayError("validation", "git working tree hash failed", "base");
   } finally {
@@ -98,7 +103,11 @@ export async function treeStatus(cwd: string): Promise<string> {
 export async function changedPaths(cwd: string, from: string, to: string): Promise<string[]> {
   let text: string;
   try {
-    text = await git(cwd, ["diff", "--name-only", "--no-renames", "-z", from, to]);
+    text = await git(
+      cwd,
+      ["diff", "--name-only", "--no-renames", "-z", from, to],
+      await objectReadEnv(cwd),
+    );
   } catch {
     throw new RelayError("validation", "git diff failed", "base");
   }
@@ -108,7 +117,7 @@ export async function changedPaths(cwd: string, from: string, to: string): Promi
 export async function treeDiffSize(cwd: string, from: string, to: string): Promise<DiffSize> {
   let text: string;
   try {
-    text = await git(cwd, ["diff", "--numstat", from, to]);
+    text = await git(cwd, ["diff", "--numstat", from, to], await objectReadEnv(cwd));
   } catch {
     throw new RelayError("validation", "git diff failed", "base");
   }
@@ -184,6 +193,49 @@ async function lineCount(cwd: string, name: string): Promise<number> {
 function count(value: string | undefined): number {
   if (value === undefined || !/^\d+$/.test(value)) return 0;
   return Number(value);
+}
+
+function objectWriteEnv(
+  indexEnv: NodeJS.ProcessEnv,
+  objectDir: string,
+  repoObjects: string,
+): NodeJS.ProcessEnv {
+  return {
+    ...indexEnv,
+    GIT_OBJECT_DIRECTORY: objectDir,
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: appendAlternate(
+      indexEnv.GIT_ALTERNATE_OBJECT_DIRECTORIES,
+      repoObjects,
+    ),
+  };
+}
+
+// Diffs keep the repo object directory. New trees live under .agent-relay/objects.
+async function objectReadEnv(cwd: string): Promise<NodeJS.ProcessEnv | undefined> {
+  const root = (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
+  const objectDir = join(root, ".agent-relay", "objects");
+  if (!(await directoryExists(objectDir))) return undefined;
+  return {
+    ...process.env,
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: appendAlternate(
+      process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES,
+      objectDir,
+    ),
+  };
+}
+
+function appendAlternate(current: string | undefined, next: string): string {
+  if (current === undefined || current.length === 0) return next;
+  return `${current}${delimiter}${next}`;
+}
+
+async function directoryExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function git(
