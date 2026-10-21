@@ -1,7 +1,8 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
-import { cacheWarning, rebuildRun } from "../src/core/cache.js";
+import { cacheWarning, rebuildRun, rebuildRunLocked } from "../src/core/cache.js";
+import { acquireRunLock, releaseRunLock } from "../src/core/runlock.js";
 import { withTempDir } from "./helper.js";
 
 const run = {
@@ -77,6 +78,25 @@ test("rebuildRun rewrites a stale state and warns once", async () => {
   });
 });
 
+test("rebuildRun records one drifted event per detected drift", async () => {
+  await withTempDir(async (dir) => {
+    const runDir = await seed(dir, run.state, [
+      created,
+      { schema: 1, ts: "2026-10-17T00:01:00.000Z", stage: "plan", action: "approved" },
+    ]);
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const first = await rebuildRun(runDir);
+    const second = await rebuildRun(runDir);
+    spy.mockRestore();
+    expect(first.events.at(-1)).toMatchObject({ stage: "run", action: "drifted" });
+    expect(second.warning).toBeNull();
+    const lines = (await readFile(join(runDir, "events.jsonl"), "utf8")).trim().split("\n");
+    expect(lines).toHaveLength(3);
+    expect(JSON.parse(lines[2] ?? "")).toMatchObject({ stage: "run", action: "drifted" });
+    expect(second.run.state.lifecycle).toBe("approved");
+  });
+});
+
 test("rebuildRun reports a missing cache and a bad event line", async () => {
   await withTempDir(async (dir) => {
     const runDir = await seed(dir);
@@ -121,3 +141,56 @@ test("rebuildRun rejects run.json identity that differs from the directory name"
     });
   });
 });
+
+test("rebuildRun waits for the run lock before it writes a drift", async () => {
+  await withTempDir(async (dir) => {
+    const runDir = await seed(dir, run.state, [
+      created,
+      { schema: 1, ts: "2026-10-17T00:01:00.000Z", stage: "plan", action: "approved" },
+    ]);
+    const lock = await acquireRunLock(runDir);
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const pending = rebuildRun(runDir);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const before = (await readFile(join(runDir, "events.jsonl"), "utf8")).trim().split("\n");
+    expect(before).toHaveLength(2);
+    await releaseRunLock(lock);
+    const result = await pending;
+    spy.mockRestore();
+    expect(result.warning).toBe(cacheWarning);
+    expect(await exists(join(runDir, "locks", "run.lock"))).toBe(false);
+  });
+});
+
+test("rebuildRunLocked skips the write when the drift is gone", async () => {
+  await withTempDir(async (dir) => {
+    const approved = {
+      schema: 1,
+      ts: "2026-10-17T00:01:00.000Z",
+      stage: "plan",
+      action: "approved",
+    };
+    const runDir = await seed(dir, run.state, [created, approved]);
+    const lock = await acquireRunLock(runDir);
+    const pending = rebuildRun(runDir);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The lock holder commits run.json before it releases the lock.
+    const fixed = { ...run, state: { ...run.state, lifecycle: "approved", approved: true } };
+    await writeFile(join(runDir, "run.json"), `${JSON.stringify(fixed)}\n`, "utf8");
+    await releaseRunLock(lock);
+    const result = await pending;
+    expect(result.warning).toBeNull();
+    const lines = (await readFile(join(runDir, "events.jsonl"), "utf8")).trim().split("\n");
+    expect(lines).toHaveLength(2);
+    await expect(rebuildRunLocked(runDir)).resolves.toMatchObject({ warning: null });
+  });
+});
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}

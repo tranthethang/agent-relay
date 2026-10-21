@@ -29,9 +29,14 @@ export function versionMeets(installed: string, range: string): boolean {
   if (have === undefined) {
     throw new RelayError("usage", "installed version must be X.Y.Z", "version");
   }
-  for (let index = 0; index < 3; index += 1) {
-    const left = have[index] ?? 0;
-    const right = required[index] ?? 0;
+  const [haveMajor, haveMinor, havePatch] = have;
+  const [needMajor, needMinor, needPatch] = required;
+  const pairs: [number, number][] = [
+    [haveMajor, needMajor],
+    [haveMinor, needMinor],
+    [havePatch, needPatch],
+  ];
+  for (const [left, right] of pairs) {
     if (left !== right) return left > right;
   }
   return true;

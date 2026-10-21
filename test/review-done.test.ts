@@ -368,3 +368,78 @@ test.skipIf(process.platform === "win32")(
   },
   20000,
 );
+
+async function reviewWithTestCommand(
+  dir: string,
+  slug: string,
+  testCommand: string,
+): Promise<{ run: string; done: Awaited<ReturnType<typeof runCli>> }> {
+  await writeFile(
+    join(dir, ".agent-relay.json"),
+    JSON.stringify({ schema: 1, requireReviews: ["self"], smallChange: 100, testCommand }),
+  );
+  await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+  await gitCommit(dir);
+  const run = await createRun(dir, slug);
+  await reachReview(run, dir);
+  await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+  return { run, done: await runCli(["review", "done", run, "self"], dir) };
+}
+
+async function selfReviewEvents(
+  run: string,
+): Promise<{ action?: string; tree?: string; tests?: { exit: number; tree: string } }[]> {
+  return (await readFile(join(run, "events.jsonl"), "utf8"))
+    .trim().split("\n").map((line) =>
+      JSON.parse(line) as {
+        stage?: string;
+        action?: string;
+        tree?: string;
+        tests?: { exit: number; tree: string };
+      }
+    ).filter((event) => event.stage === "self-review");
+}
+
+test("atry review done releases the run lock while the test command runs", async () => {
+  await withTempGitRepo(async (dir) => {
+    const { run, done } = await reviewWithTestCommand(
+      dir,
+      "review-test-unlocked",
+      `node -e "const f=require('fs');process.exit(f.readdirSync('.agent-relay').some(d=>f.existsSync('.agent-relay/'+d+'/locks/run.lock'))?1:0)"`,
+    );
+    expect(done.code).toBe(0);
+    const completed = (await selfReviewEvents(run)).find((event) => event.action === "completed");
+    expect(completed?.tests).toMatchObject({ exit: 0 });
+  });
+});
+
+test("atry review done records the tree the tests started on", async () => {
+  await withTempGitRepo(async (dir) => {
+    const { run, done } = await reviewWithTestCommand(
+      dir,
+      "review-test-tree",
+      `node -e "require('fs').appendFileSync('source.txt','edited by tests')"`,
+    );
+    expect(done.code).toBe(0);
+    const completed = (await selfReviewEvents(run)).find((event) => event.action === "completed");
+    expect(completed?.tests?.tree).toMatch(/^[0-9a-f]{40}$/);
+    expect(completed?.tree).toMatch(/^[0-9a-f]{40}$/);
+    expect(completed?.tests?.tree).not.toBe(completed?.tree);
+  });
+});
+
+test("atry review done refuses when the review stage changed during tests", async () => {
+  await withTempGitRepo(async (dir) => {
+    const { run, done } = await reviewWithTestCommand(
+      dir,
+      "review-test-race",
+      `node "${cliPath}" review new review-test-race self --tool cursor`,
+    );
+    expect(done.code).not.toBe(0);
+    expect(done.stderr).toContain("review stage changed while tests ran");
+    expect(done.stderr).toContain("events.jsonl");
+    const events = await selfReviewEvents(run);
+    expect(events.filter((event) => event.action === "started")).toHaveLength(2);
+    expect(events.some((event) => event.action === "completed")).toBe(false);
+  });
+});

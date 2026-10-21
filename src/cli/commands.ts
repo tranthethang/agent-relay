@@ -15,7 +15,8 @@ import { indexForImplement } from "../core/tasks.js";
 import { schemaVersion } from "../core/vocab.js";
 import { packageVersion } from "../version.js";
 import { registerClaim } from "./claim.js";
-import { registerDistill } from "./distill.js";
+import { flagRun, registerDistill } from "./distill.js";
+import { registerHook } from "./hook.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
 import { registerPlan } from "./plan.js";
@@ -127,18 +128,14 @@ export function registerCommands(program: Command): void {
   registerDistill(program);
   registerPolicy(program);
   registerWorktree(program);
+  registerHook(program);
 }
 
 function commandJson(command: Command): boolean {
   return command.optsWithGlobals().json === true;
 }
 
-function flagRun(command: Command): string | undefined {
-  const run = command.optsWithGlobals().run;
-  return typeof run === "string" ? run : undefined;
-}
-
-async function reviewsForNext(
+export async function reviewsForNext(
   runDir: string,
   base: string,
   events: readonly EventLine[],

@@ -20,6 +20,7 @@ import {
 } from "../core/lifecycle.js";
 import { brainstormNewText, createBrainstorm, createRun, runNewText } from "../core/scaffold.js";
 import { oneToken, selectRun } from "../core/select.js";
+import { flagRun } from "./distill.js";
 import { writeResult } from "./output.js";
 
 export function registerLifecycle(program: Command): void {
@@ -181,9 +182,4 @@ async function brainstormDir(token: string): Promise<string> {
 
 function commandJson(command: Command): boolean {
   return command.optsWithGlobals().json === true;
-}
-
-function flagRun(command: Command): string | undefined {
-  const run = command.optsWithGlobals().run;
-  return typeof run === "string" ? run : undefined;
 }

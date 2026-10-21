@@ -9,12 +9,13 @@ export function registerPolicy(program: Command): void {
 
   policy
     .command("init")
-    .description("Write a default .agent-relay.json at the git root")
-    .action(async (_opts: unknown, command: Command) => {
+    .description("Write a preset .agent-relay.json at the git root")
+    .option("--preset <name>", "lenient, standard, or strict", "standard")
+    .action(async (opts: { preset: string }, command: Command) => {
       writeResult(
-        await initPolicy(process.cwd()),
+        await initPolicy(process.cwd(), opts.preset),
         commandJson(command),
-        (row) => `path: ${row.path}\ncommit the file to apply it\n`,
+        (row) => `path: ${row.path}\npreset: ${row.preset}\ncommit the file to apply it\n`,
       );
     });
 

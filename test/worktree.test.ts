@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
@@ -11,11 +11,7 @@ import {
   excludeRelay,
   gitCwd,
   linkRelay,
-  listWorktrees,
-  mainRoot,
-  removeMergedWorktree,
   rollbackWorktree,
-  runGitCwd,
   validateRunWorktree,
   worktreeCleanupText,
   worktreeSettings,
@@ -261,7 +257,6 @@ test("addWorktree and rollbackWorktree handle lifecycle and conflict errors", as
         .rejects.toThrow("worktree path already exists");
 
       // Branch already exists
-      const existingBranchPath = join(outside, "run-diff-path");
       await expect(addWorktree({ dir: outside, branch: "main" }, { relayDir, name: "run-1", head }))
         .rejects.toThrow("worktree path already exists");
 

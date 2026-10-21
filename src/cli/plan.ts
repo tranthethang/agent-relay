@@ -10,7 +10,7 @@ import {
   taskSkip,
   taskStart,
 } from "../core/plan.js";
-import { commandJson, flagRun, takeRun } from "./distill.js";
+import { commandJson, takeRun } from "./distill.js";
 import { writeResult } from "./output.js";
 
 export function registerPlan(program: Command): void {

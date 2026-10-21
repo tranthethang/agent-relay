@@ -80,8 +80,9 @@ npm run sync:check
 `src/**` and `scripts/maint/**` is at least 95%. That figure is covered lines
 plus covered branches, divided by the line total plus the branch total.
 Per-file coverage in those trees is above 90%. A file at 90.0% misses. A file
-with no lines to cover is skipped. `tsup.config.ts` and `vitest.config.ts` stay
-outside that bar. Duplicated lines density for project `agent-relay` is at most
+with no lines to cover is skipped. Per-file branch coverage in those trees is
+at least 90%. A file at 90.0% branches passes. A file with no branches passes.
+`tsup.config.ts` and `vitest.config.ts` stay outside these bars. Duplicated lines density for project `agent-relay` is at most
 1%.
 
 ## Versioning

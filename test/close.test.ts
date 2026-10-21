@@ -329,3 +329,31 @@ test("strict review integrity still blocks close when reviews are missing", asyn
     expect(blocked.stderr).toContain("required self review is missing");
   });
 });
+
+test("close --preview names run.json drift after the cache is rebuilt", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const created = await runCli(
+      ["run", "new", "--slug", "preview-drift", "--title", "Drift", "--json"],
+      dir,
+    );
+    const run = JSON.parse(created.stdout) as { path: string };
+    await reachReview(run.path, dir);
+    await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+    await runCli(["review", "done", run.path, "self"], dir);
+    const cachePath = join(run.path, "run.json");
+    const cache = JSON.parse(await readFile(cachePath, "utf8")) as { state: { approved: boolean } };
+    cache.state.approved = false;
+    await writeFile(cachePath, `${JSON.stringify(cache)}\n`);
+    const first = await runCli(["close", run.path, "--preview", "--json"], dir);
+    expect(first.stderr).toContain("run.json disagreed with events.jsonl; rebuilt");
+    expect(JSON.parse(first.stdout)).toEqual({
+      schema: 1,
+      recommend: "n",
+      reasons: ["run.json drifted 1 times"],
+    });
+    const second = await runCli(["close", run.path, "--preview"], dir);
+    expect(second.stderr).toBe("");
+    expect(second.stdout).toBe("recommend: n\nrun.json drifted 1 times\n");
+  });
+});

@@ -10,7 +10,7 @@ import {
 } from "../core/claim.js";
 import { RelayError } from "../core/error.js";
 import { guardExit, guardPath, guardText } from "../core/guard.js";
-import { commandJson, flagRun, takeRun } from "./distill.js";
+import { commandJson, takeRun } from "./distill.js";
 import { writeResult } from "./output.js";
 
 export function registerClaim(program: Command): void {

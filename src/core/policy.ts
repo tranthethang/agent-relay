@@ -35,13 +35,34 @@ export const defaultPolicy: Policy = {
   strict: { scope: false, plan: false, reviewIntegrity: false },
 };
 
-export const policyTemplate: Policy = {
-  ...defaultPolicy,
-  requireReviews: [...defaultPolicy.requireReviews],
-  worktree: { enabled: false },
-};
+export const policyPresets = {
+  lenient: {
+    schema: 1,
+    requireReviews: ["self"],
+    smallChange: 100,
+    worktree: { enabled: false },
+    strict: { scope: false, plan: false, reviewIntegrity: false },
+  },
+  standard: {
+    ...defaultPolicy,
+    requireReviews: [...defaultPolicy.requireReviews],
+    worktree: { enabled: false },
+    strict: { ...defaultPolicy.strict },
+  },
+  strict: {
+    schema: 1,
+    requireReviews: ["self", "cross"],
+    smallChange: 0,
+    worktree: { enabled: false },
+    strict: { scope: true, plan: true, reviewIntegrity: true },
+  },
+} as const satisfies Record<string, Policy>;
 
-export type PolicyInitResult = { schema: 1; path: string };
+export type PolicyPreset = keyof typeof policyPresets;
+
+export const policyTemplate: Policy = policyPresets.standard;
+
+export type PolicyInitResult = { schema: 1; path: string; preset: PolicyPreset };
 
 export type PolicyCheckResult = { schema: 1; path: string; policy: Policy };
 
@@ -90,17 +111,20 @@ export function parsePolicy(text: string): Policy {
   return parsed.data;
 }
 
-export async function initPolicy(cwd: string): Promise<PolicyInitResult> {
+export async function initPolicy(cwd: string, preset = "standard"): Promise<PolicyInitResult> {
+  if (!isPolicyPreset(preset)) {
+    throw new RelayError("usage", "preset must be lenient, standard, or strict", "preset");
+  }
   const path = join(await gitRoot(cwd), ".agent-relay.json");
   try {
-    await writeFile(path, `${JSON.stringify(policyTemplate, null, 2)}\n`, { flag: "wx" });
+    await writeFile(path, `${JSON.stringify(policyPresets[preset], null, 2)}\n`, { flag: "wx" });
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "EEXIST") {
       throw new RelayError("gate", ".agent-relay.json already exists", ".agent-relay.json");
     }
     throw error;
   }
-  return { schema: 1, path };
+  return { schema: 1, path, preset };
 }
 
 export async function checkPolicy(cwd: string): Promise<PolicyCheckResult> {
@@ -145,4 +169,8 @@ async function canonicalPath(filePath: string): Promise<string> {
     if (parent === filePath) return filePath;
     return join(await canonicalPath(parent), basename(filePath));
   }
+}
+
+function isPolicyPreset(value: string): value is PolicyPreset {
+  return Object.hasOwn(policyPresets, value);
 }

@@ -29,9 +29,11 @@ sequenceDiagram
     alt Mismatch
         CLI-->>Reviewer: Refuse: Question count mismatch
     end
+    CLI->>Git: Capture tree hash for tests, then release the run lock
+    CLI->>Git: Execute base testCommand if configured, without the run lock
+    CLI->>FS: Take the run lock again and refuse if the review stage changed
     CLI->>Git: Capture current working tree hash
     CLI->>Git: Compute reviewer delta (files, lines added, lines deleted)
-    CLI->>Git: Execute base testCommand if configured
     CLI->>FS: Append review completed event to events.jsonl
     CLI-->>Reviewer: Review validated and recorded
 ```

@@ -148,7 +148,6 @@ function requireConventionParts(convDir: string): void {
 }
 
 function syncSkillBundles(
-  root: string,
   convDir: string,
   dirs: readonly string[],
   checkOnly: boolean,
@@ -300,7 +299,7 @@ function main(): void {
   let drift = false;
   const dirs = skillDirs(root);
   if (dirs.length === 0) fail("Error: no skills/*/ directories");
-  if (syncSkillBundles(root, convDir, dirs, checkOnly)) drift = true;
+  if (syncSkillBundles(convDir, dirs, checkOnly)) drift = true;
   if (syncWriting(root, checkOnly)) drift = true;
   if (syncReviewTemplates(root, checkOnly)) drift = true;
   if (syncPreflight(root, dirs, checkOnly)) drift = true;

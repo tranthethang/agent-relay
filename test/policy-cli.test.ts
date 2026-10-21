@@ -3,7 +3,7 @@ import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
-import { policyTemplate } from "../src/core/policy.js";
+import { initPolicy, policyPresets, policyTemplate } from "../src/core/policy.js";
 import { runCli, withTempDir, withTempGitRepo } from "./helper.js";
 
 const execFileAsync = promisify(execFile);
@@ -177,5 +177,33 @@ test("policy check accepts valid outside worktree.dir and symlink pointing outsi
       );
       expect((await runCli(["policy", "check"], repo)).code).toBe(0);
     });
+  });
+});
+
+test("policy init writes each preset and each one passes policy check", async () => {
+  for (const preset of ["lenient", "standard", "strict"] as const) {
+    await withTempGitRepo(async (dir) => {
+      const result = await runCli(["policy", "init", "--preset", preset, "--json"], dir);
+      expect(result.code).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ schema: 1, preset });
+      const written = JSON.parse(await readFile(join(dir, ".agent-relay.json"), "utf8")) as unknown;
+      expect(written).toEqual(policyPresets[preset]);
+      expect((await runCli(["policy", "check"], dir)).code).toBe(0);
+    });
+  }
+  expect(policyTemplate).toEqual(policyPresets.standard);
+  expect(policyPresets.lenient).toMatchObject({ requireReviews: ["self"], smallChange: 100 });
+  expect(policyPresets.strict.strict).toEqual({ scope: true, plan: true, reviewIntegrity: true });
+});
+
+test("policy init names the default preset and refuses an unknown one", async () => {
+  await withTempGitRepo(async (dir) => {
+    const unknown = await runCli(["policy", "init", "--preset", "loose"], dir);
+    expect(unknown.code).toBe(1);
+    expect(unknown.stderr).toContain("preset: preset must be lenient, standard, or strict");
+    await expect(initPolicy(dir, "toString")).rejects.toThrow("preset must be");
+    const result = await runCli(["policy", "init"], dir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("preset: standard");
   });
 });
