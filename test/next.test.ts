@@ -34,6 +34,51 @@ test("explainNext marks approve, close, and decide as human steps", () => {
   });
 });
 
+test("each action carries a kind, args, and its requirement flags", () => {
+  const id = "1792208725";
+  const approve = explainNext(`atry approve ${id}`).actions[0];
+  expect(approve).toMatchObject({ kind: "approve", args: { run: id } });
+
+  const task = explainNext(`atry task start ${id} T2`).actions[0];
+  expect(task).toMatchObject({
+    kind: "task-start",
+    args: { run: id, task: "T2" },
+    requiresSession: true,
+  });
+  expect(task?.read).toEqual(["10-plan/overview.md", "10-plan/T2.md"]);
+
+  const cross = explainNext(`atry review new ${id} cross`).actions[0];
+  expect(cross).toMatchObject({
+    kind: "review-new",
+    args: { run: id, review: "cross" },
+    requiresModel: true,
+  });
+  expect(cross?.read.length).toBeGreaterThan(0);
+
+  const selfDone = explainNext(`atry review done ${id} self`).actions[0];
+  expect(selfDone).toMatchObject({ kind: "review-done", args: { run: id, review: "self" } });
+  expect(selfDone?.requiresModel).toBeUndefined();
+
+  const stageStart = explainNext(`atry stage start ${id} implement`).actions[0];
+  expect(stageStart).toMatchObject({
+    kind: "stage-start",
+    args: { run: id, stage: "implement" },
+  });
+  expect(stageStart?.read).toEqual(["10-plan/overview.md", "10-plan/index.json"]);
+
+  const close = explainNext(`atry close ${id} --preview`).actions[0];
+  expect(close).toMatchObject({ kind: "close", args: { run: id } });
+  expect(close?.read.length).toBeGreaterThan(0);
+
+  const decide = explainNext(`atry review decide ${id} Q1 a`).actions[0];
+  expect(decide?.kind).toBe("decide");
+  expect(decide?.needsHuman).toBe(true);
+
+  const list = explainNext(`atry list ${id}`).actions[0];
+  expect(list).toMatchObject({ kind: "none", args: { run: id } });
+  expect(list?.read).toEqual(["10-plan/index.json"]);
+});
+
 test("nextStep uses the plan index when run state has no task row", () => {
   const events = [ev("implement", "started")];
   const state = reduceEvents(events);
@@ -83,6 +128,22 @@ test("nextStep closes after the reviews required by policy", () => {
   })).toBe("atry review done 1792208725 self");
 });
 
+test("nextStep asks for a self-review after a cross-review delta", () => {
+  const id = "1792208725";
+  const reviews = { required: ["self", "cross"], done: ["self", "cross"] };
+  const events = [
+    ev("implement", "completed"),
+    ev("self-review", "completed"),
+    { ...ev("cross-review", "completed"), delta: { files: 1, added: 1, deleted: 0 } },
+  ];
+  expect(nextStep(id, reduceEvents(events), events, reviews)).toBe(`atry review new ${id} self`);
+  expect(nextActions(id, reduceEvents(events), events, `atry review new ${id} self`, reviews))
+    .toEqual([`atry review new ${id} self`, `atry close ${id} --preview`]);
+
+  const covered = [...events, ev("self-review", "completed")];
+  expect(nextStep(id, reduceEvents(covered), covered, reviews)).toBe(`atry close ${id}`);
+});
+
 test("nextActions lists eligible tasks and review or close choices", () => {
   const events = [ev("implement", "started")];
   const state = reduceEvents(events);
@@ -109,55 +170,66 @@ test("nextActions lists eligible tasks and review or close choices", () => {
 });
 
 test("atry next covers each lifecycle", async () => {
-  const cases: { lifecycle: string; events: EventLine[]; command: string; needsHuman: boolean }[] =
-    [
-      {
-        lifecycle: "planned",
-        events: [ev("run", "created")],
-        command: "atry approve 1792208725",
-        needsHuman: true,
-      },
-      {
-        lifecycle: "approved",
-        events: [ev("run", "created"), ev("plan", "approved")],
-        command: "atry stage start 1792208725 implement",
-        needsHuman: false,
-      },
-      {
-        lifecycle: "implementing",
-        events: [
-          ev("run", "created"),
-          ev("plan", "approved"),
-          ev("implement", "started"),
-          { ...ev("implement", "task-started"), task: "T1" },
-        ],
-        command: "atry list 1792208725",
-        needsHuman: false,
-      },
-      {
-        lifecycle: "reviewing",
-        events: [
-          ev("run", "created"),
-          ev("plan", "approved"),
-          ev("implement", "started"),
-          ev("implement", "completed"),
-        ],
-        command: "atry review new 1792208725 self",
-        needsHuman: false,
-      },
-      {
-        lifecycle: "closed",
-        events: [ev("run", "created"), ev("run", "closed")],
-        command: "none",
-        needsHuman: false,
-      },
-      {
-        lifecycle: "abandoned",
-        events: [ev("run", "created"), ev("run", "abandoned")],
-        command: "none",
-        needsHuman: false,
-      },
-    ];
+  const cases: {
+    lifecycle: string;
+    events: EventLine[];
+    command: string;
+    kind: string;
+    needsHuman: boolean;
+  }[] = [
+    {
+      lifecycle: "planned",
+      events: [ev("run", "created")],
+      command: "atry approve 1792208725",
+      kind: "approve",
+      needsHuman: true,
+    },
+    {
+      lifecycle: "approved",
+      events: [ev("run", "created"), ev("plan", "approved")],
+      command: "atry stage start 1792208725 implement",
+      kind: "stage-start",
+      needsHuman: false,
+    },
+    {
+      lifecycle: "implementing",
+      events: [
+        ev("run", "created"),
+        ev("plan", "approved"),
+        ev("implement", "started"),
+        { ...ev("implement", "task-started"), task: "T1" },
+      ],
+      command: "atry list 1792208725",
+      kind: "none",
+      needsHuman: false,
+    },
+    {
+      lifecycle: "reviewing",
+      events: [
+        ev("run", "created"),
+        ev("plan", "approved"),
+        ev("implement", "started"),
+        ev("implement", "completed"),
+      ],
+      command: "atry review new 1792208725 self",
+      kind: "review-new",
+      needsHuman: false,
+    },
+    {
+      lifecycle: "closed",
+      events: [ev("run", "created"), ev("run", "closed")],
+      command: "none",
+      kind: "none",
+      needsHuman: false,
+    },
+    {
+      lifecycle: "abandoned",
+      events: [ev("run", "created"), ev("run", "abandoned")],
+      command: "none",
+      kind: "none",
+      needsHuman: false,
+    },
+  ];
 
   await withTempDir(async (root) => {
     const relay = await seedRelay(root);
@@ -173,12 +245,20 @@ test("atry next covers each lifecycle", async () => {
       const command = item.command.replaceAll("1792208725", id);
       const result = await runCli(["next", "--json", name], root);
       expect(result.code, `${item.lifecycle} ${result.stderr}`).toBe(0);
-      expect(JSON.parse(result.stdout)).toMatchObject({
+      const body = JSON.parse(result.stdout) as {
+        actions: { kind: string; read: string[] }[];
+      };
+      expect(body).toMatchObject({
         schema: 1,
         command,
         needsHuman: item.needsHuman,
-        read: item.needsHuman ? ["10-plan/overview.md"] : [],
       });
+      for (const action of body.actions) {
+        expect(action.kind).toBe(item.kind);
+        if (command === "none") expect(action.read).toEqual([]);
+        else expect(action.read.length).toBeGreaterThan(0);
+      }
+      if (command === "none") expect(body.actions).toEqual([]);
       const text = await runCli(["next", name], root);
       expect(text.stdout).toContain(`recommendation: ${command}`);
       expect(text.stdout).toContain("state:");

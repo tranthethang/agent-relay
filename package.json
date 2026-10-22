@@ -11,7 +11,8 @@
     "atry": "dist/atry.js"
   },
   "files": [
-    "dist/atry.js"
+    "dist/atry.js",
+    "skills"
   ],
   "engines": {
     "node": ">=22"
@@ -22,6 +23,7 @@
     "pretest": "npm run build",
     "test": "vitest run",
     "coverage": "vitest run --coverage && node --experimental-strip-types scripts/maint/coverage-report.ts",
+    "evals": "node --experimental-strip-types evals/run.ts",
     "tokens": "node --experimental-strip-types scripts/maint/skill-tokens.ts",
     "sync": "node --experimental-strip-types scripts/maint/sync-references.ts",
     "sync:check": "node --experimental-strip-types scripts/maint/sync-references.ts --check"

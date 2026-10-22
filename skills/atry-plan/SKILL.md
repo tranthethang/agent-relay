@@ -56,6 +56,7 @@ Stop when a command fails. Show the field path to the user.
 ## Overview file
 
 Write Goal, Non-goals, Decisions, Constraints, and Flow under `10-plan/overview.md`.
+Read `references/example-overview.md` before you write that file.
 Put settled choices under Decisions.
 Put limits that apply only to this run under Constraints.
 Add Flow only when the change alters a runtime flow.

@@ -16,7 +16,13 @@ The `atry next <run> --json` command serves as an executable prompt contract bet
   },
   "actions": [
     {
+      "kind": "task-start",
       "command": "atry task start 1792385260 T1",
+      "args": {
+        "run": "1792385260",
+        "task": "T1"
+      },
+      "requiresSession": true,
       "reason": "An implement task is still open.",
       "needsHuman": false,
       "read": [
@@ -43,3 +49,48 @@ The `atry next <run> --json` command serves as an executable prompt contract bet
 - **`reason`**: A single human-readable explanatory sentence describing why this step was chosen.
 - **`read`**: An array of file paths that the agent should read into context before executing the command.
 - **`needsHuman`**: True when the recommendation requires a human decision or when the developer must choose among several actions. Each action also marks its own decision requirement.
+
+## Action Kind
+
+Each action holds a `kind`. A skill dispatches on `kind` and on `args`.
+A skill does not match the text of `command`.
+
+| `kind`        | Command shape                            | `args`           | Flags                     |
+| ------------- | ---------------------------------------- | ---------------- | ------------------------- |
+| `approve`     | `atry approve <run>`                     | `run`            |                           |
+| `stage-start` | `atry stage start <run> implement`       | `run`, `stage`   |                           |
+| `task-start`  | `atry task start <run> <task>`           | `run`, `task`    | `requiresSession`         |
+| `stage-done`  | `atry stage done <run> implement`        | `run`, `stage`   |                           |
+| `review-new`  | `atry review new <run> self`             | `run`, `review`  | `requiresModel` for cross |
+| `review-done` | `atry review done <run> cross`           | `run`, `review`  |                           |
+| `close`       | `atry close <run>`                       | `run`            |                           |
+| `decide`      | `atry review decide <run> Q<n> <answer>` | `run`            |                           |
+| `none`        | `none`, or `atry list <run>`             | `run` for a list |                           |
+
+`args.run` is the run id. `args.task` is a task id such as `T1`. `args.review`
+is `self` or `cross`. `args.stage` is `implement`.
+
+`requiresModel` marks an action where the caller must pass `--model`. Only a
+cross-review start carries it. `requiresSession` marks an action where a shared
+run needs a session tag. A task start carries it, because the caller may need
+`atry claim ... --session <tag>`.
+
+`kind` is `none` for a run that is closed or abandoned. It is also `none` for
+`atry list <run>`, which reads the plan index and changes nothing. That action
+carries `read: ["10-plan/index.json"]`, so the developer can see the blocked
+tasks. A closed run carries no actions.
+
+## Read Paths
+
+| `kind`                              | `read`                                                       |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `approve`                           | `10-plan/overview.md`                                        |
+| `task-start`                        | `10-plan/overview.md` and `10-plan/<task>.md`                |
+| `stage-start`, `stage-done`         | `10-plan/overview.md` and `10-plan/index.json`               |
+| `review-new`, `review-done` (self)  | `10-plan/overview.md` and `20-implement/`                    |
+| `review-new`, `review-done` (cross) | the self paths and `30-self-review/`                         |
+| `decide`                            | `30-self-review/` and `40-cross-review/`                     |
+| `close`                             | `10-plan/overview.md`, `30-self-review/`, `40-cross-review/` |
+| `none`                              | empty for a closed run; the plan index for `atry list`       |
+
+`command` and `recommendation` stay in the payload. `schema` stays `1`.

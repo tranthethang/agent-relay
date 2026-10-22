@@ -29,3 +29,12 @@ test("implement asks before approve and uses task verbs", () => {
   expect(text).not.toContain("implement-plan.md");
   expect(assertNoShellSnippet(text)).toBeUndefined();
 });
+
+test("implement dispatches on kind and not on command text", () => {
+  expect(text).toContain("Dispatch on `kind` and `args`.");
+  expect(text).toContain("When `kind` is `approve`");
+  expect(text).toContain("When `kind` is `stage-start`");
+  expect(text).toContain("When `kind` is `stage-done`");
+  expect(text).toContain("When `kind` is `task-start`");
+  expect(text).not.toMatch(/selected action (is|contains|names)/);
+});

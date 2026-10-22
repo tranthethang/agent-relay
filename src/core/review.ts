@@ -51,6 +51,21 @@ export const reviewPlaces = {
   cross: { dir: "40-cross-review", stage: "cross-review" },
 } as const;
 
+// A cross-review can edit code after the earlier self-review passed. The new code
+// needs a self-review recorded after that delta before `close` accepts the run.
+export function crossDeltaNeedsSelfReview(events: readonly EventLine[]): boolean {
+  let deltaAt = -1;
+  events.forEach((event, index) => {
+    if (event.stage === reviewPlaces.cross.stage && event.action === "completed") {
+      if (event.delta !== undefined) deltaAt = index;
+    }
+  });
+  if (deltaAt === -1) return false;
+  return !events.slice(deltaAt + 1).some((event) =>
+    event.stage === reviewPlaces.self.stage && event.action === "completed"
+  );
+}
+
 type ReviewKind = (typeof reviewKinds)[number];
 type ReviewStage = (typeof reviewPlaces)[ReviewKind]["stage"];
 

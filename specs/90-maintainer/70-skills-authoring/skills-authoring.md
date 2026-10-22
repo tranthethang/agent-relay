@@ -37,6 +37,31 @@ The skill text calls `atry` verbs. It does not tell the agent to run files under
 After you edit a skill, install it again with `npx skills add` if you dogfood
 from a global skill directory.
 
+## Examples
+
+Each stage skill that fills a file names one example under `references/`.
+The agent reads the example before it writes that file.
+
+| Skill | Example | Shows |
+| --- | --- | --- |
+| `atry-plan` | `references/example-overview.md` | The overview headings and one `tasks.input.json` object |
+| `atry-implement` | `references/example-implement.md` | The task report headings |
+| `atry-self-review` | `references/example-review.md` | One review pair with one card and one `open` item |
+| `atry-cross-review` | `references/example-cross-review.md` | One review pair with one card and one `open` item |
+
+Keep one example under 500 tokens. Keep the example small: one task and one
+small change. Use the writing rules, and use no secret and no real user data.
+The example shows the headings that the skill asks for, so the agent sees the
+quality bar and not only prose.
+
+An example counts toward the stage token budget. `npm run tokens` must stay
+under 2,500 tokens for each stage. A new example can push a review stage over
+that line, so check the count after you add one.
+
+`test/skills-examples.test.ts` checks that each skill names its example, that
+the file exists, that the headings are present, and that a review example has
+one card and one `open` item.
+
 ## Token baseline
 
 `npm run tokens` counts characters in each `SKILL.md` plus every

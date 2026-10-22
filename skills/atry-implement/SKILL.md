@@ -30,26 +30,27 @@ Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigr
 
 Run `atry next <run> --json`.
 Read `state`, `actions`, and `recommendation` from the result.
+Dispatch on `kind` and `args`. Do not match the `command` text.
 Follow the recommendation when only one action is available.
 When several actions are available, show them and ask the developer to select one.
 Then follow the developer's selection.
 Read the selected action's paths before you run its command.
 Stop when the state is closed or abandoned and no action is available.
-When the selected action is approve, run `atry approve <run> --preview`.
+When `kind` is `approve`, run `atry approve <run> --preview`.
 Show that preview and ask the user to answer `y` or `n`.
 When the skill call includes a `yes` token, use that token as `y`.
 When the user answers `n`, stop and do not record an event.
 When the user answers `y` for approve, run `atry approve <run> --via confirm`.
 When the `yes` token is that answer, run `atry approve <run> --via arg`.
-When the selected action contains `review` or `close`, stop. A review skill closes the run and asks the user before a soft close passes `--ack-warnings`.
-When the selected action is stage start, run `atry stage start <run> implement --tool <tool>`.
-When the selected action is stage done, run `atry stage done <run> implement --tool <tool>`.
+When `kind` is `review-new`, `review-done`, `close`, or `decide`, stop. A review skill closes the run and asks the user before a soft close passes `--ack-warnings`.
+When `kind` is `stage-start`, run `atry stage start <run> implement --tool <tool>`.
+When `kind` is `stage-done`, run `atry stage done <run> implement --tool <tool>`.
 When `stage done` refuses, read the paths in the message.
 When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.
 When `strict.scope` is false, continue after the warning and check that the
 accepted paths appear in the task completion event.
 Add `--model <model>` when you know the model.
-When the selected action is a task command, follow One task.
+When `kind` is `task-start`, follow One task.
 Repeat from the first step in this section.
 
 ## One task
@@ -60,7 +61,7 @@ Repeat from the first step in this section.
 4. When the claim fails, pick a different task or stop.
 5. When you work alone, run `atry task start <run> <task>`.
 6. Change only the files listed for that task. When `run.worktree` exists, change them in `run.worktree.path`.
-7. Fill `20-implement/<task>.md` with the edit tool.
+7. Fill `20-implement/<task>.md` with the edit tool. Read `references/example-implement.md` first.
 8. Record the files, the assumptions, and the risks in that file.
 9. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.
 10. When `task done` refuses, read the paths in the message.

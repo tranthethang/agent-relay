@@ -70,6 +70,29 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check the tarball holds the skills
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json > pack.json
+          node -e '
+          const files = require("./pack.json")[0].files.map((file) => file.path);
+          const need = [
+            "atry-brainstorm",
+            "atry-cross-review",
+            "atry-distill",
+            "atry-implement",
+            "atry-plan",
+            "atry-self-review",
+          ];
+          const missing = need.filter((name) => !files.includes(`skills/${name}/SKILL.md`));
+          if (missing.length > 0) {
+            console.error(`tarball lacks: ${missing.join(", ")}`);
+            process.exit(1);
+          }
+          console.log("tarball holds the six skills");
+          '
+          rm -f pack.json
+
       - name: Test
         run: npm test
 

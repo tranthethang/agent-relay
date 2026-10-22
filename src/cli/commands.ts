@@ -22,6 +22,7 @@ import { writeResult } from "./output.js";
 import { registerPlan } from "./plan.js";
 import { registerPolicy } from "./policy.js";
 import { registerReview } from "./review.js";
+import { registerSkills } from "./skills.js";
 import { registerWorktree } from "./worktree.js";
 
 export function registerCommands(program: Command): void {
@@ -129,6 +130,7 @@ export function registerCommands(program: Command): void {
   registerReview(program);
   registerDistill(program);
   registerPolicy(program);
+  registerSkills(program);
   registerWorktree(program);
   registerHook(program);
 }

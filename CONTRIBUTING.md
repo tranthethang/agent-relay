@@ -47,10 +47,12 @@ Detail: [`specs/90-maintainer/20-testing/testing.md`](specs/90-maintainer/20-tes
 npm test
 npm run check
 npm run sync:check
+npm run evals
 ```
 
 CI runs `npm test` on macOS, Linux, and Windows. It also checks formatting
-and skill-reference sync.
+and skill-reference sync. It also runs `npm run evals`, the deterministic skill
+layer under `evals/`.
 
 ## Formatting
 

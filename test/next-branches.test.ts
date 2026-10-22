@@ -125,7 +125,9 @@ test("nextText reports an unknown state", () => {
 });
 
 test("explainNext gives a reason for each review command", () => {
-  expect(explainNext(`atry review new ${id} self`).reason).toBe("Self-review has not started.");
+  expect(explainNext(`atry review new ${id} self`).reason).toBe(
+    "No self-review covers the current tree.",
+  );
   expect(explainNext(`atry review done ${id} self`).reason).toBe("Self-review has started.");
   expect(explainNext(`atry review new ${id} cross`).reason).toBe("Cross-review has not started.");
   expect(explainNext(`atry review done ${id} cross`).reason).toBe("Cross-review has started.");

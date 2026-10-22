@@ -10,7 +10,7 @@ import { changedPaths, gitHead, treeDiffSize, treeStatus, workTree } from "./git
 import { appendEvent, withRunLock } from "./mutate.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
-import { parseReviewJson, readReviewDocument } from "./review.js";
+import { crossDeltaNeedsSelfReview, parseReviewJson, readReviewDocument } from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
 import { outsidePaths } from "./scope.js";
 import { openPlanTasks, planIndexSchema, readPlanIndex } from "./tasks.js";
@@ -200,6 +200,9 @@ async function closeReasons(
   }
   if (integrity.treeMatch === false) reasons.push("tree mismatch");
   if (integrity.delta !== undefined) reasons.push("reviewer changes after latest review");
+  if (crossDeltaNeedsSelfReview(events)) {
+    reasons.push("cross-review changes have no later self-review");
+  }
   const latest = await latestReview(runDir, events);
   if (latest !== null && latest.open > 0) reasons.push("open items");
   const completed = [...events].reverse().find((event) =>
@@ -492,6 +495,13 @@ async function assertReviewIntegrity(
   }
   if (integrity.delta !== undefined && !ackFixes) {
     throw new RelayError("gate", "latest review has unacknowledged fixes", "review.delta");
+  }
+  if (crossDeltaNeedsSelfReview(events)) {
+    throw new RelayError(
+      "gate",
+      "cross-review changed code and no later self-review covers it",
+      "review.self",
+    );
   }
 }
 

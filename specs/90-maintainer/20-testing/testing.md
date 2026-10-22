@@ -33,3 +33,19 @@ on `PATH`, plus `SONAR_HOST_URL` and `SONAR_TOKEN`.
 overall lines plus branches at least 95%, each file's lines plus branches above
 90%, each file's branches at least 90%, and duplicated lines density at most 1%.
 A file at exactly 90% branches passes. A file with no branches passes.
+
+## Skill evals
+
+`npm run evals` runs the deterministic skill layer. It does not use a model and
+it does not use the network. CI runs it on macOS, Linux, and Windows after
+`npm test`. See [`evals/README.md`](../../../evals/README.md) for the files and
+for the steps to add a scenario.
+
+The model-backed layer runs by hand. A person installs the skills, asks the
+tool to run one scenario from `evals/scenarios.json`, and compares the commands
+the agent issues with the recorded steps. That layer shows a judgement failure.
+CI cannot run it and does not claim to.
+
+The deterministic layer does not replace `test/skills-*.test.ts`. A skill test
+checks text, such as a heading or a shared reference. An eval checks that a run
+state leads to the recorded command sequence.

@@ -43,6 +43,7 @@ install.
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `src/`                             | CLI and core                                                                                                 |
 | `test/`                            | Vitest                                                                                                       |
+| `evals/`                           | Deterministic skill evals: a fake `atry` and recorded scenarios, no model                                    |
 | `skills/<name>/`                   | Skill bundles (`SKILL.md` plus `references/`; no `scripts/`)                                                 |
 | `specs/`                           | Technical specifications, detail-design, and diagrams                                                        |
 | `specs/90-maintainer/`             | Maintainer guides. Start at [`specs/90-maintainer/00-index/index.md`](specs/90-maintainer/00-index/index.md) |
@@ -74,6 +75,7 @@ install.
 npm test
 npm run check
 npm run sync:check
+npm run evals
 ```
 
 `npm run coverage` exits non-zero when a bar misses. Overall coverage for

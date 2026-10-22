@@ -1,25 +1,37 @@
 # Install
 
-Two commands. They do not share files.
+Two paths. Both copy the same six bundles.
+
+```bash
+npm i -g @tranthethang/agent-relay
+atry skills install --tool claude-code
+atry skills status --tool claude-code
+```
 
 ```bash
 npx skills add tranthethang/agent-relay -g --copy
-npm i -g @tranthethang/agent-relay
 ```
+
+The npm tarball holds `dist/atry.js` and `skills/`. `atry skills install`
+copies the six bundles from that tarball into one tool directory, so the CLI
+and the skills come from one version. `--dir <path>` replaces the tool path.
+A second install reports each bundle as `present` and writes nothing.
+
+`atry skills status` reads `requires-atry` from each installed bundle and
+compares it with the running CLI. It exits 1 on a missing bundle or a version
+mismatch, and prints the install command. Without `--tool` or `--dir` it checks
+the three tool directories below.
+
+| Tool        | `skills` agent id | `atry skills install` directory |
+| ----------- | ----------------- | ------------------------------- |
+| Cursor      | `cursor`          | `~/.agents/skills/<name>/`      |
+| Codex       | `codex`           | `~/.agents/skills/<name>/`      |
+| Antigravity | `antigravity`     | `~/.agents/skills/<name>/`      |
+| Claude Code | `claude-code`     | `~/.claude/skills/<name>/`      |
+| Kiro        | `kiro-cli`        | `~/.kiro/skills/<name>/`        |
 
 `skills add` copies `skills/*/SKILL.md` and `references/` into tool skill
 directories. `--copy` avoids symlinks. `-g` writes under the user home.
-
-The `skills` CLI chooses the directories. Current global paths for the five
-tools this repo documents:
-
-| Tool        | `skills` agent id | Path                       |
-| ----------- | ----------------- | -------------------------- |
-| Cursor      | `cursor`          | `~/.agents/skills/<name>/` |
-| Codex       | `codex`           | `~/.agents/skills/<name>/` |
-| Antigravity | `antigravity`     | `~/.agents/skills/<name>/` |
-| Claude Code | `claude-code`     | `~/.claude/skills/<name>/` |
-| Kiro        | `kiro-cli`        | `~/.kiro/skills/<name>/`   |
 
 Cursor, Codex, and Antigravity share one directory because those agents use
 the universal `.agents/skills` layout. Claude Code and Kiro get their own

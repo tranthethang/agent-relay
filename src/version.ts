@@ -1,11 +1,27 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const devMarker = "-dev";
 
 export function isDevVersion(version: string): boolean {
   return version.includes(devMarker);
+}
+
+// The skills ship next to the bundle in the npm tarball. A source run holds
+// them two folders up from `src/cli/`.
+export function bundledSkillsRoot(moduleUrl: string = import.meta.url): string {
+  const dir = dirname(fileURLToPath(moduleUrl));
+  for (
+    const candidate of [
+      join(dir, "skills"),
+      join(dir, "..", "skills"),
+      join(dir, "..", "..", "skills"),
+    ]
+  ) {
+    if (existsSync(join(candidate, "atry-plan", "SKILL.md"))) return resolve(candidate);
+  }
+  throw new Error("bundled skills are missing");
 }
 
 // The build writes `dist/package.json` next to the bundle, because the git

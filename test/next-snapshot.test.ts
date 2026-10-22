@@ -75,7 +75,11 @@ test("atry next --json snapshots each lifecycle", async () => {
         {
           "actions": [
             {
+              "args": {
+                "run": "1792208700",
+              },
               "command": "atry approve 1792208700",
+              "kind": "approve",
               "needsHuman": true,
               "read": [
                 "10-plan/overview.md",
@@ -100,15 +104,26 @@ test("atry next --json snapshots each lifecycle", async () => {
         {
           "actions": [
             {
+              "args": {
+                "run": "1792208701",
+                "stage": "implement",
+              },
               "command": "atry stage start 1792208701 implement",
+              "kind": "stage-start",
               "needsHuman": false,
-              "read": [],
+              "read": [
+                "10-plan/overview.md",
+                "10-plan/index.json",
+              ],
               "reason": "Implement has not started.",
             },
           ],
           "command": "atry stage start 1792208701 implement",
           "needsHuman": false,
-          "read": [],
+          "read": [
+            "10-plan/overview.md",
+            "10-plan/index.json",
+          ],
           "reason": "Implement has not started.",
           "recommendation": "atry stage start 1792208701 implement",
           "schema": 1,
@@ -121,16 +136,24 @@ test("atry next --json snapshots each lifecycle", async () => {
         {
           "actions": [
             {
+              "args": {
+                "run": "1792208702",
+              },
               "command": "atry list 1792208702",
+              "kind": "none",
               "needsHuman": false,
-              "read": [],
-              "reason": "The next command comes from the run state.",
+              "read": [
+                "10-plan/index.json",
+              ],
+              "reason": "No pending task is ready to start.",
             },
           ],
           "command": "atry list 1792208702",
           "needsHuman": false,
-          "read": [],
-          "reason": "The next command comes from the run state.",
+          "read": [
+            "10-plan/index.json",
+          ],
+          "reason": "No pending task is ready to start.",
           "recommendation": "atry list 1792208702",
           "schema": 1,
           "state": {
@@ -142,16 +165,27 @@ test("atry next --json snapshots each lifecycle", async () => {
         {
           "actions": [
             {
+              "args": {
+                "review": "self",
+                "run": "1792208703",
+              },
               "command": "atry review new 1792208703 self",
+              "kind": "review-new",
               "needsHuman": false,
-              "read": [],
-              "reason": "Self-review has not started.",
+              "read": [
+                "10-plan/overview.md",
+                "20-implement/",
+              ],
+              "reason": "No self-review covers the current tree.",
             },
           ],
           "command": "atry review new 1792208703 self",
           "needsHuman": false,
-          "read": [],
-          "reason": "Self-review has not started.",
+          "read": [
+            "10-plan/overview.md",
+            "20-implement/",
+          ],
+          "reason": "No self-review covers the current tree.",
           "recommendation": "atry review new 1792208703 self",
           "schema": 1,
           "state": {

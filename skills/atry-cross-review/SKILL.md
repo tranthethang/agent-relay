@@ -32,14 +32,15 @@ Use a different tool than implement and self-review when you can.
 
 Run `atry next <run> --json`.
 Read `state`, `actions`, and `recommendation` from the result.
+Dispatch on `kind` and `args`. Do not match the `command` text.
 Follow the recommendation when only one action is available.
 When several actions are available, show them and ask the developer to select one.
 Then follow the developer's selection.
 Read the selected action's paths before you run its command.
 Stop when the state is closed or abandoned and no action is available.
-When the selected action is approve, stop. This skill does not approve.
-When the selected action names self-review, stop. Use the self-review skill for that stage.
-When the selected action contains `close`, run `atry close <run> --preview`.
+When `kind` is `approve`, stop. This skill does not approve.
+When `kind` is `review-new` or `review-done` and `args.review` is `self`, stop. Use the self-review skill for that stage.
+When `kind` is `close`, run `atry close <run> --preview`.
 Show that preview and ask the user to answer `y` or `n`.
 When it recommends `n`, read `strict.reviewIntegrity` from the run base policy.
 When that setting is `true`, stop without closing.
@@ -52,8 +53,8 @@ When the preview says `recommend: n` and `strict.reviewIntegrity` is `true`, sto
 When the user answers `y` and the preview says `recommend: y`, run `atry close <run> --via confirm`.
 When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm --ack-warnings`.
 When the `yes` token is that answer, run `atry close <run> --via arg --ack-warnings`.
-When the selected action contains `review new`, run `atry review new <run> cross --tool <tool> --model <model>`.
-When the selected action contains `review done`, follow the review method.
+When `kind` is `review-new` and `args.review` is `cross`, run `atry review new <run> cross --tool <tool> --model <model>`.
+When `kind` is `review-done` and `args.review` is `cross`, follow the review method.
 When the base policy sets `testCommand`, show `test command: <command>` and wait for the user.
 When the user agrees to that command, run `atry review done <run> cross --run-tests`.
 When the user refuses that command, stop and do not record an event.
@@ -71,7 +72,7 @@ Repeat from the first step in this section.
 question, record the answer with `atry review decide <run> Q<n> <answer>`.
 Use `a` or `b` for a choice card and the user's text for a `Need:` card.
 Let `atry review done` print `test command: <command>` and run the configured `testCommand` from the run's base policy only when you pass `--run-tests`.
-Fill the printed markdown file with the edit tool.
+Fill the printed markdown file with the edit tool. Read `references/example-cross-review.md` before you write that file.
 Set `fixed` and `open` in the printed JSON file.
 `review done` stores the configured test command's exit code, duration, and
 tree in the event and writes its last 200 output lines to `.test.log`.
@@ -80,4 +81,5 @@ It does not print that output.
 Fix a confirmed bug before `review done`.
 Leave a style-only note in the markdown file. Do not change code for style.
 Write a genuine tradeoff as a question card and in `open`.
+A fix needs a later self-review before close. `atry next` recommends it.
 `review new` records the stage start. Do not also run `atry stage start`.

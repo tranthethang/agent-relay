@@ -27,18 +27,41 @@ Does not:
 
 ## Install
 
-Node.js 22 or newer.
+Node.js 22 or newer. The npm tarball holds the CLI and the six skill bundles,
+so both come from one version.
 
 ```bash
-npx skills add tranthethang/agent-relay -g --copy
 npm i -g @tranthethang/agent-relay
+atry skills install --tool claude-code
+atry skills status --tool claude-code
 atry version
 ```
 
+`atry skills install` copies the bundled skills into the tool directory.
+`--dir <path>` writes to another directory. A second install reports every
+bundle as `present` and changes nothing.
+`atry skills status` compares `requires-atry` in each installed bundle with the
+running CLI. It exits 1 on a missing bundle or a version mismatch, and prints
+the install command.
+
+The five tool names are `claude-code`, `cursor`, `codex`, `antigravity`, and
+`kiro`. Each tool writes one of three directories:
+
+| Tool | Directory |
+| --- | --- |
+| Claude Code | `~/.claude/skills/` |
+| Cursor, Codex, Antigravity | `~/.agents/skills/` |
+| Kiro | `~/.kiro/skills/` |
+
+A user who does not install npm can copy the bundles from the Git tree:
+
+```bash
+npx skills add tranthethang/agent-relay -g --copy
+```
+
 `--copy` writes real files. Some tools refuse a symlink that points outside
-their skill directory. Skill paths depend on the `skills` CLI. Cursor, Codex,
-and Antigravity share `~/.agents/skills/`. Claude Code uses `~/.claude/skills/`.
-Kiro uses `~/.kiro/skills/`.
+their skill directory. Skill paths depend on the `skills` CLI, and they match
+the table above.
 
 ## Stages
 
@@ -108,7 +131,9 @@ add `--ack-warnings`. With the flag it closes and records the warnings in the
 add `--ack-warnings`. Without `--via`, or with `strict.reviewIntegrity` true,
 `close` refuses until each check passes; `--ack-warnings` does not change
 that. Pass `--ack-open` for open questions and `--ack-fixes` for changes
-after the latest review. `--waive-review <reason>` records a review waiver
+after the latest review. `--ack-fixes` does not replace a review: when a
+cross-review records a delta, close needs a self-review completed after it.
+`--waive-review <reason>` records a review waiver
 and skips review integrity checks. It does not skip the open-question check
 or the warning gate.
 `atry close --abandon <reason>` stops a run from any open state.

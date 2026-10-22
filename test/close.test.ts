@@ -367,3 +367,85 @@ test("close --preview names run.json drift after the cache is rebuilt", async ()
     expect(second.stdout).toBe("recommend: n\nrun.json drifted 1 times\n");
   });
 });
+
+async function crossReviewWithDelta(dir: string, runPath: string): Promise<void> {
+  await reachReview(runPath, dir);
+  await runCli(["review", "new", runPath, "self", "--tool", "cursor"], dir);
+  expect((await runCli(["review", "done", runPath, "self"], dir)).code).toBe(0);
+  await runCli(["review", "new", runPath, "cross", "--tool", "codex", "--model", "gpt-5.4"], dir);
+  await writeFile(join(dir, "fix.txt"), "fixed after review started\n");
+  expect((await runCli(["review", "done", runPath, "cross"], dir)).code).toBe(0);
+}
+
+test("strict close refuses a cross-review delta until a later self-review", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self", "cross"],
+        smallChange: 0,
+        strict: { reviewIntegrity: true },
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+    await gitCommit(dir, "policy");
+    const created = await runCli(
+      ["run", "new", "--slug", "delta-self", "--title", "Delta", "--json"],
+      dir,
+    );
+    const run = JSON.parse(created.stdout) as { path: string };
+    await crossReviewWithDelta(dir, run.path);
+
+    const next = JSON.parse((await runCli(["next", run.path, "--json"], dir)).stdout) as {
+      recommendation: string;
+      actions: { command: string }[];
+    };
+    expect(next.recommendation).toMatch(/^atry review new \S+ self$/);
+    expect(next.actions.map((action) => action.command)).toEqual([
+      next.recommendation,
+      expect.stringContaining("--preview"),
+    ]);
+
+    const refused = await runCli(["close", run.path, "--ack-fixes"], dir);
+    expect(refused.code).toBe(4);
+    expect(refused.stderr).toContain("no later self-review");
+
+    await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+    expect((await runCli(["review", "done", run.path, "self"], dir)).code).toBe(0);
+    const closed = await runCli(["close", run.path, "--json"], dir);
+    expect(closed.code).toBe(0);
+    expect(JSON.parse(closed.stdout)).toMatchObject({ lifecycle: "closed" });
+  });
+});
+
+test("soft close lists a cross-review delta without a later self-review", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const created = await runCli(
+      ["run", "new", "--slug", "delta-soft", "--title", "Delta soft", "--json"],
+      dir,
+    );
+    const run = JSON.parse(created.stdout) as { path: string };
+    await crossReviewWithDelta(dir, run.path);
+
+    const preview = await runCli(["close", run.path, "--preview", "--json"], dir);
+    expect(JSON.parse(preview.stdout)).toEqual({
+      schema: 1,
+      recommend: "n",
+      reasons: [
+        "reviewer changes after latest review",
+        "cross-review changes have no later self-review",
+      ],
+    });
+    const refused = await runCli(["close", run.path, "--via", "arg"], dir);
+    expect(refused.code).toBe(4);
+    expect(refused.stderr).toContain("cross-review changes have no later self-review");
+    const closed = await runCli(
+      ["close", run.path, "--via", "arg", "--ack-warnings", "--json"],
+      dir,
+    );
+    expect(closed.code).toBe(0);
+    expect(JSON.parse(closed.stdout)).toMatchObject({ lifecycle: "closed" });
+  });
+});

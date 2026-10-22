@@ -50,6 +50,26 @@ test("npx skills add copies skills for five agents into a temporary HOME", async
   }
 }, 120_000);
 
+test("the npm package lists skills and the six bundles are in the repo", async () => {
+  const pkg = JSON.parse(await readFile(join(repo, "package.json"), "utf8")) as {
+    files?: string[];
+  };
+  expect(pkg.files).toContain("skills");
+  for (
+    const name of [
+      "atry-brainstorm",
+      "atry-cross-review",
+      "atry-distill",
+      "atry-implement",
+      "atry-plan",
+      "atry-self-review",
+    ]
+  ) {
+    const skill = await readFile(join(repo, "skills", name, "SKILL.md"), "utf8");
+    expect(skill).toContain(`name: ${name}`);
+  }
+});
+
 function skillEnv(home: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home };
   delete env.HOMEDRIVE;
