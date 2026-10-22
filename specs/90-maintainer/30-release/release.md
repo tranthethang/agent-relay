@@ -23,7 +23,7 @@ Open the Actions tab. Run [`.github/workflows/release.yml`](../../../.github/wor
 
 The job installs dependencies first, because the version script imports `src/core/error.ts`, which imports `zod`. It sets `TZ=Asia/Ho_Chi_Minh` and computes the version with `scripts/maint/next-version.ts`. It checks `requires-atry` against that version. It checks, builds, and tests. It then runs `npm version <v> --no-git-tag-version`, pushes tag `v<v>`, and publishes. It creates a GitHub Release with generated notes. It does not commit to the repo.
 
-A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it. The workflow refuses when `requires-atry` is higher than the new version.
+A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it. The shared value lives in `scripts/maint/next-version.ts` as `skillMinimumVersion`; the tests refuse a skill whose `requires-atry` is a different range. The workflow refuses when `requires-atry` is higher than the new version.
 
 ## Trusted publishing
 

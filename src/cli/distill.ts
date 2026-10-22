@@ -9,9 +9,14 @@ export function registerDistill(program: Command): void {
     .command("distill")
     .description("Write a sha256 manifest of the run files")
     .argument("<run>", "run id, slug, name, or path")
-    .action(async (run: string, _opts: unknown, command: Command) => {
+    .option("--include-test-logs", "include *.test.log files in the manifest")
+    .action(async (run: string, opts: { includeTestLogs?: boolean }, command: Command) => {
       const runDir = await takeRun(command, run);
-      writeResult(await distillRun(runDir), commandJson(command), distillText);
+      writeResult(
+        await distillRun(runDir, { includeTestLogs: opts.includeTestLogs === true }),
+        commandJson(command),
+        distillText,
+      );
     });
 }
 

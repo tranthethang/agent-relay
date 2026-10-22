@@ -17,7 +17,7 @@ test("self-review uses review new and review done", () => {
   expect(selfReview).toContain("read `strict.reviewIntegrity` from the run base policy");
   expect(selfReview).toContain("show the listed integrity warnings and let the user decide");
   expect(selfReview).toContain(
-    "When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm`.",
+    "When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm --ack-warnings`.",
   );
   expect(selfReview).toContain("configured `testCommand`");
   expect(selfReview).not.toContain("Set `fixed`, `tests`, and `open`");
@@ -42,7 +42,7 @@ test("cross-review asks before close and gates the yes token", () => {
   expect(crossReview).toContain("read `strict.reviewIntegrity` from the run base policy");
   expect(crossReview).toContain("show the listed integrity warnings and let the user decide");
   expect(crossReview).toContain(
-    "When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm`.",
+    "When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm --ack-warnings`.",
   );
   expect(crossReview).not.toContain("--ack-open");
   expect(crossReview).not.toContain("Do not close yet");

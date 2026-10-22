@@ -78,7 +78,7 @@ test("a time near midnight uses Asia/Ho_Chi_Minh", () => {
 
 test("assertRequires checks requires-atry across skills", async () => {
   const root = fileURLToPath(new URL("..", import.meta.url));
-  expect(() => assertRequires(root, "0.10.0")).not.toThrow();
+  expect(() => assertRequires(root, "0.10.7")).not.toThrow();
   expect(requiresFits(">=0.1.0", "0.10.0")).toBe(true);
   expect(requiresFits(">=0.10.0", "0.1.0")).toBe(false);
 
@@ -201,7 +201,7 @@ test("the command prints the version and accepts CLI flags", async () => {
     expect(november.status).toBe(0);
     expect(november.stdout).toBe("0.11.0\n");
 
-    const checkResult = await runNext(["--check-requires", "0.10.0"], dir);
+    const checkResult = await runNext(["--check-requires", "0.10.7"], dir);
     expect(checkResult.status).toBe(0);
     expect(checkResult.stdout).toBe("");
   });

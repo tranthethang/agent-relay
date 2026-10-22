@@ -53,8 +53,9 @@ every run state.
 ```
 
 `path` is relative to the run directory and uses `/`. The manifest file itself,
-the `locks/` directory, and temporary `*.tmp` files are omitted. Files are
-sorted by path. Re-running overwrites the manifest.
+the `locks/` directory, and temporary `*.tmp` files are omitted. Every
+`*.test.log` file is also omitted unless `atry distill --include-test-logs` asks
+for it. Files are sorted by path. Re-running overwrites the manifest.
 
 ## Notes
 

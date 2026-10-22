@@ -27,6 +27,10 @@ question cards with `open`, but it cannot prove an agent understood either.
 
 The policy `testCommand` runs from the run's base commit through a platform
 shell at the repository root. Treat that committed command as executable code.
+`review done` prints the command and runs it only with `--run-tests`, so a
+policy change cannot run a new command without a person acknowledging it. Test
+output stays in the run's `.test.log`; `atry distill` leaves those files out
+unless `--include-test-logs` is passed.
 
 Skills can tell an agent to edit the target repo. The host tool's sandbox is
 the control for that. This repo does not add one.

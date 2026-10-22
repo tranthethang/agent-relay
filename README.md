@@ -78,19 +78,21 @@ atry task done <run> T1
 atry stage done <run> implement --tool <tool> [--allow-extra "<reason>"]
 atry review new <run> self --tool <tool> [--model <model>]
 atry review new <run> cross --tool <tool> --model <model>
-atry review done <run> self|cross
+atry review done <run> self|cross [--run-tests]
 atry review decide <run> Q<n> <answer>
-atry close <run> --via confirm|arg [--ack-open] [--ack-fixes]
-atry close <run> --waive-review "<reason>" [--ack-open]
+atry close <run> --via confirm|arg [--ack-open] [--ack-fixes] [--ack-warnings]
+atry close <run> --waive-review "<reason>" [--ack-open] [--ack-warnings]
 atry worktree cleanup [run]
 atry hook install --tool claude-code
 atry hook check
-atry distill <run>
+atry distill <run> [--include-test-logs]
 ```
 
 `atry approve` and `atry close` are for the person who coordinates the run.
 `atry preflight --requires ">=X.Y.Z"` exits 0 when the installed version meets that range.
 A lower version prints `npm i -g @tranthethang/agent-relay@latest` and exits 1.
+A dev build is refused the same way. Add `--allow-dev`, or set `ATRY_DEV=1`,
+only when you dogfood a build from this repo.
 `atry next <run>` prints the next command. `--json` adds `command`, `reason`, `needsHuman`, and `read`.
 `atry approve <run> --preview` prints Goal, Decisions, and the task count.
 `atry close <run> --preview` prints `recommend: y` or `recommend: n` and the reasons.
@@ -100,12 +102,15 @@ plan is not approved. Close checks the required reviews for its policy, the
 latest completed review tree against the current code tree, open questions,
 and changes made after the latest review started.
 With `strict.reviewIntegrity` false (the default) and `--via` set, `close`
-does not refuse on those checks. It records them as warnings in the `closed`
-event. The skills pass `--via`, so this is the default path.
-Without `--via`, or with `strict.reviewIntegrity` true, `close` refuses until
-each check passes. Pass `--ack-open` for open questions and `--ack-fixes` for
-changes after the latest review. `--waive-review <reason>` records a review waiver and skips
-review integrity checks; it does not skip the open-question check.
+treats those checks as warnings. It lists each warning and refuses until you
+add `--ack-warnings`. With the flag it closes and records the warnings in the
+`closed` event. The review skills pass `--via` and ask the user before they
+add `--ack-warnings`. Without `--via`, or with `strict.reviewIntegrity` true,
+`close` refuses until each check passes; `--ack-warnings` does not change
+that. Pass `--ack-open` for open questions and `--ack-fixes` for changes
+after the latest review. `--waive-review <reason>` records a review waiver
+and skips review integrity checks. It does not skip the open-question check
+or the warning gate.
 `atry close --abandon <reason>` stops a run from any open state.
 
 ### Review policy
@@ -124,12 +129,16 @@ requirements. A missing file uses these defaults:
 
 Changes below `smallChange` lines, counting additions and deletions from base
 to the current tree, require only a self-review. Policy can also include an
-optional `testCommand`. `review done` runs it at the repo root through the
-platform shell, records its exit code, duration, and tree, and writes the last
-200 stdout and stderr lines to `NN.test.log`. The recorded tree is the tree
+optional `testCommand`. `review done` prints `test command: <command>` and
+refuses with exit 4 until you add `--run-tests`. With the flag it runs the
+command at the repo root through the platform shell, records its exit code,
+duration, and tree, and writes the last 200 stdout and stderr lines to
+`NN.test.log`. It does not print that output. The recorded tree is the tree
 when the tests started. A non-zero exit records failure but does not refuse
 `review done`. The command runs without the run lock. `review done` refuses
 when the same review stage records another event while the tests run.
+`atry distill` leaves every `*.test.log` out of the manifest; pass
+`--include-test-logs` to export them.
 
 The optional `strict` policy groups control scope, plan, and review-integrity
 gates independently. Each group defaults to `false`, which reports a warning
@@ -138,6 +147,9 @@ to `true` to keep its blocking behavior. Existing policy files that omit
 `strict` remain valid.
 
 Review JSON contains `schema`, `kind`, `tool`, `model`, `fixed`, and `open`.
+An older review JSON may also carry `tests`. The CLI reads that key, ignores
+its value, and never writes it in a new review JSON. Any other unknown key
+still fails the parse.
 The `tool` and `model` values must match the review start event. Cross-review
 requires `--model`. Question cards at column zero must match `open.length`.
 After a user answers a completed review's open item, record the answer with

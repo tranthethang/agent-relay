@@ -5,12 +5,13 @@ The distill command (`src/core/distill.ts`) exports an integrity manifest of eli
 ## Command
 
 ```bash
-atry distill <run>
+atry distill <run> [--include-test-logs]
 ```
 
 ## Behavior
 
-- Traverses regular files within the run directory, excluding `locks/`, temporary `*.tmp` files, and the generated `90-distill/manifest.json`.
+- Traverses regular files within the run directory, excluding `locks/`, temporary `*.tmp` files, the generated `90-distill/manifest.json`, and every `*.test.log` file.
+- `--include-test-logs` adds the `*.test.log` files back. Use it for an explicit export of captured test output.
 - Computes the SHA-256 hash and byte size of each file.
 - Sorts records alphabetically by normalized relative path.
 - Emits formatted JSON:

@@ -115,8 +115,10 @@ export function registerCommands(program: Command): void {
     .command("preflight")
     .description("Check the installed version against a >=X.Y.Z range")
     .requiredOption("--requires <range>", "minimum version, >=X.Y.Z")
-    .action((opts: { requires: string }, command: Command) => {
-      const result = preflightResult(packageVersion(), opts.requires);
+    .option("--allow-dev", "accept a dev build version")
+    .action((opts: { requires: string; allowDev?: boolean }, command: Command) => {
+      const allowDev = opts.allowDev === true || process.env.ATRY_DEV === "1";
+      const result = preflightResult(packageVersion(), opts.requires, allowDev);
       writeResult(result, commandJson(command), (row) => (row.ok ? "" : `${installCommand}\n`));
       if (!result.ok) process.exitCode = exitCodes.usage;
     });

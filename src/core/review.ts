@@ -35,6 +35,8 @@ export const reviewJsonSchema = z.object({
   tool: toolSchema,
   model: z.string().min(1),
   fixed: z.number().int().nonnegative(),
+  // Removed from new review JSON. A legacy file may still carry it; ignore the value.
+  tests: z.unknown().optional(),
   open: z.array(z.union([openChoiceSchema, openNeedSchema])),
 }).strict();
 
@@ -165,12 +167,23 @@ export async function reviewDone(input: {
   runDir: string;
   kind: string;
   testTimeoutMs?: number;
+  runTests?: boolean;
 }): Promise<ReviewDoneResult & { warnings: string[] }> {
   const kind = parseKind(input.kind);
   // Tests can outlast the stale-lock age, so they run between two lock holds.
   const first = await withRunLock(input.runDir, async (loaded) => {
     const checked = await checkReviewDone(input.runDir, kind, loaded);
-    if (checked.testCommand !== undefined) return { checked };
+    if (checked.testCommand !== undefined) {
+      if (input.runTests !== true) {
+        throw new RelayError(
+          "gate",
+          `test command: ${checked.testCommand}; pass --run-tests to run it`,
+          "run-tests",
+        );
+      }
+      process.stderr.write(`test command: ${checked.testCommand}\n`);
+      return { checked };
+    }
     const execution = await runTestCommand(checked.root, undefined);
     return { done: await recordReviewDone(input.runDir, loaded, checked, execution) };
   });

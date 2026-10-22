@@ -1,7 +1,7 @@
 ---
 name: atry-distill
 description: Use when the user wants to export a run manifest, at any run state.
-requires-atry: ">=0.1.0"
+requires-atry: ">=0.10.7"
 ---
 
 # Distill

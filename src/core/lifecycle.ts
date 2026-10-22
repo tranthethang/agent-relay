@@ -325,6 +325,7 @@ export async function closeRun(input: {
   via?: string;
   ackOpen?: boolean;
   ackFixes?: boolean;
+  ackWarnings?: boolean;
   abandon?: string;
   waiveReview?: string;
 }): Promise<CloseResult> {
@@ -347,6 +348,13 @@ export async function closeRun(input: {
     const warnings = softClose
       ? await closeReasons(input.runDir, loaded.run.base, loaded.events)
       : [];
+    if (softClose && warnings.length > 0 && input.ackWarnings !== true) {
+      throw new RelayError(
+        "gate",
+        `soft close has warnings: ${warnings.join(", ")}; pass --ack-warnings to accept them`,
+        "ack-warnings",
+      );
+    }
     if (waiveReason !== undefined) {
       await appendEvent(loaded, input.runDir, {
         stage: "run",

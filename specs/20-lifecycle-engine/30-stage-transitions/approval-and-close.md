@@ -14,7 +14,7 @@
 `atry close` checks the integrity of the code delivered by the run:
 
 - With `strict.reviewIntegrity: true`, every integrity problem blocks close unless its existing acknowledgement or waiver option applies.
-- With `strict.reviewIntegrity: false`, integrity problems appear in the close preview. A close command with `--via` lets the developer choose whether to continue, and records the warnings in the close event.
+- With `strict.reviewIntegrity: false`, integrity problems appear in the close preview. A close command with `--via` also collects them as warnings. It refuses and lists them until `--ack-warnings` is present, then closes and records the warnings in the close event. `--ack-warnings` never bypasses `strict.reviewIntegrity: true`.
 
 1. **Review Completeness**:
    - Compares completed reviews against repository policy (`.agent-relay.json`).

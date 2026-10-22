@@ -16,6 +16,29 @@ npm test
 Install the skills into a tool with `npx skills add` when you want to dogfood
 them. See [`specs/90-maintainer/10-install/installer.md`](specs/90-maintainer/10-install/installer.md).
 
+## Local build
+
+```bash
+npm ci
+npm run build
+node dist/atry.js version
+```
+
+`package.json` in git stays at `0.0.0`, so `npm run build` writes the version
+used by the bundle into `dist/package.json`. `node dist/atry.js version` prints
+`0.10.7-dev` and a `dev build` line. The `atry` binary on `PATH` is the
+installed CLI, and it does not read this build.
+
+`node dist/atry.js preflight` refuses a dev build until you consent.
+While you dogfood the CLI you built, set `ATRY_DEV=1` or pass `--allow-dev`:
+
+```bash
+ATRY_DEV=1 node dist/atry.js preflight --requires ">=0.10.7"
+node dist/atry.js preflight --requires ">=0.10.7" --allow-dev
+```
+
+A release build sets a real version before the build and prints no marker.
+
 ## Tests
 
 Detail: [`specs/90-maintainer/20-testing/testing.md`](specs/90-maintainer/20-testing/testing.md).

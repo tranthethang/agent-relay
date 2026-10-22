@@ -1,7 +1,7 @@
 ---
 name: atry-brainstorm
 description: Use when the user invokes atry-brainstorm or asks only to investigate or discuss without file changes.
-requires-atry: ">=0.1.0"
+requires-atry: ">=0.10.7"
 ---
 
 # Brainstorm

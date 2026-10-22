@@ -71,6 +71,7 @@ test("atry close gates on open questions and abandon skips the gate", async () =
     const acked = await runCli([
       "close",
       "--ack-open",
+      "--ack-warnings",
       "--waive-review",
       "legacy review data",
       "--via",
@@ -222,7 +223,7 @@ test("close --preview names open items, delta, a tree mismatch, and failed tests
     await writeFile(join(dir, "note.txt"), "changed\n");
     await execFileAsync("git", ["add", "note.txt"], { cwd: dir });
     await gitCommit(dir, "note");
-    const done = await runCli(["review", "done", gated.path, "self"], dir);
+    const done = await runCli(["review", "done", gated.path, "self", "--run-tests"], dir);
     expect(done.code).toBe(0);
     await writeFile(join(dir, "later.txt"), "after\n");
     const preview = await runCli(["close", gated.path, "--preview", "--json"], dir);
@@ -289,7 +290,16 @@ test("non-strict close lets the developer continue and records integrity warning
     });
     const unconfirmed = await runCli(["close", run.path], dir);
     expect(unconfirmed.code).toBe(4);
-    const closed = await runCli(["close", run.path, "--via", "arg", "--json"], dir);
+    const unacked = await runCli(["close", run.path, "--via", "arg"], dir);
+    expect(unacked.code).toBe(4);
+    expect(unacked.stderr).toContain(
+      "ack-warnings: soft close has warnings: missing cross review, open items; "
+        + "pass --ack-warnings to accept them",
+    );
+    const closed = await runCli(
+      ["close", run.path, "--via", "arg", "--ack-warnings", "--json"],
+      dir,
+    );
     expect(closed.code).toBe(0);
     const events = (await readFile(join(run.path, "events.jsonl"), "utf8")).trim().split("\n")
       .map((line) => JSON.parse(line) as { action: string; reason?: string; via?: string });

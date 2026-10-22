@@ -34,3 +34,13 @@ test("parseReviewJson rejects a mixed open item", () => {
 test("parseReviewJson rejects a negative fixed count", () => {
   expect(() => parseReviewJson({ ...validReview, fixed: -1 })).toThrow();
 });
+
+test("parseReviewJson reads the removed tests key", () => {
+  const review = parseReviewJson({ ...validReview, tests: "pass" });
+  expect(review.kind).toBe("self");
+  expect(review.open).toEqual([]);
+});
+
+test("parseReviewJson rejects an unknown key other than tests", () => {
+  expect(() => parseReviewJson({ ...validReview, nope: true })).toThrow();
+});

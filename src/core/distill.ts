@@ -26,16 +26,24 @@ export type DistillResult = {
   files: number;
 };
 
+export type DistillOptions = {
+  includeTestLogs?: boolean;
+};
+
 export function distillText(result: DistillResult): string {
   return `${result.path}\nfiles: ${result.files}\n`;
 }
 
-export async function distillRun(runDir: string): Promise<DistillResult> {
+export async function distillRun(
+  runDir: string,
+  options: DistillOptions = {},
+): Promise<DistillResult> {
   const listed = await listFiles(runDir);
   const files: DistillManifest["files"] = [];
   for (const file of listed) {
     const path = relative(runDir, file).split(sep).join("/");
     if (path === manifestRel) continue;
+    if (options.includeTestLogs !== true && path.endsWith(".test.log")) continue;
     const data = await readFile(file);
     files.push({
       path,

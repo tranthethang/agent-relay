@@ -536,13 +536,16 @@ test("close passes integrity, waives with via, and soft-closes with warnings", a
 
     const waived = await newRun(dir, "close-waived");
     await toReviewing(waived);
-    expect((await closeRun({ runDir: waived, waiveReview: "skip", via: "arg" })).lifecycle).toBe(
-      "closed",
-    );
+    expect(
+      (await closeRun({ runDir: waived, waiveReview: "skip", via: "arg", ackWarnings: true }))
+        .lifecycle,
+    ).toBe("closed");
 
     const soft = await newRun(dir, "close-soft");
     await toReviewing(soft);
-    expect((await closeRun({ runDir: soft, via: "confirm" })).lifecycle).toBe("closed");
+    expect((await closeRun({ runDir: soft, via: "confirm", ackWarnings: true })).lifecycle).toBe(
+      "closed",
+    );
     const lines = (await readFile(join(soft, "events.jsonl"), "utf8")).trim().split("\n")
       .map((line) => JSON.parse(line) as EventLine);
     expect(lines.at(-1)).toMatchObject({

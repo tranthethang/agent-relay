@@ -1,3 +1,4 @@
+import { devMarker } from "../version.js";
 import { RelayError } from "./error.js";
 import { schemaVersion } from "./vocab.js";
 
@@ -12,7 +13,16 @@ export type PreflightResult = {
   ok: boolean;
   installed: string;
   required: string;
+  dev?: true;
 };
+
+// A dev build reports `<base>-dev`. The base is the release version it was
+// built from, so consent compares that base and the result still marks the dev
+// build. A release version passes through unchanged.
+function baseVersion(version: string): string {
+  const at = version.indexOf(devMarker);
+  return at === -1 ? version : version.slice(0, at);
+}
 
 function parts(value: string, pattern: RegExp): [number, number, number] | undefined {
   const match = pattern.exec(value);
@@ -42,11 +52,21 @@ export function versionMeets(installed: string, range: string): boolean {
   return true;
 }
 
-export function preflightResult(installed: string, range: string): PreflightResult {
-  return {
+export function preflightResult(
+  installed: string,
+  range: string,
+  allowDev = false,
+): PreflightResult {
+  const base = baseVersion(installed);
+  const dev = base !== installed;
+  const result: PreflightResult = {
     schema: schemaVersion,
-    ok: versionMeets(installed, range),
+    ok: false,
     installed,
     required: range,
   };
+  if (dev) result.dev = true;
+  const meets = versionMeets(base, range);
+  result.ok = dev && !allowDev ? false : meets;
+  return result;
 }

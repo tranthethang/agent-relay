@@ -1,7 +1,7 @@
 ---
 name: atry-implement
 description: Use when the user asks to implement, build, or code from an existing agent-relay plan.
-requires-atry: ">=0.1.0"
+requires-atry: ">=0.10.7"
 ---
 
 # Implement
@@ -41,7 +41,7 @@ When the skill call includes a `yes` token, use that token as `y`.
 When the user answers `n`, stop and do not record an event.
 When the user answers `y` for approve, run `atry approve <run> --via confirm`.
 When the `yes` token is that answer, run `atry approve <run> --via arg`.
-When the selected action contains `review` or `close`, stop.
+When the selected action contains `review` or `close`, stop. A review skill closes the run and asks the user before a soft close passes `--ack-warnings`.
 When the selected action is stage start, run `atry stage start <run> implement --tool <tool>`.
 When the selected action is stage done, run `atry stage done <run> implement --tool <tool>`.
 When `stage done` refuses, read the paths in the message.

@@ -40,3 +40,14 @@ npx skills add /path/to/agent-relay -g --copy -y --json \
 
 Set `HOME` (and `USERPROFILE` on Windows) when the check must not touch the
 real home directory.
+
+## Dev build
+
+`npm run build` writes `dist/atry.js` and `dist/package.json`. Because
+`package.json` in git stays at `0.0.0`, the build writes `0.10.7-dev` there.
+`node dist/atry.js version` prints that value and a `dev build` marker.
+`node dist/atry.js preflight` refuses a dev build and prints the install
+command, unless `ATRY_DEV=1` is set or `--allow-dev` is passed. The `atry`
+binary on `PATH` does not read this build. The release workflow sets a real
+version before the build, so a published package reports that version and no
+marker.

@@ -7,6 +7,17 @@ Front matter needs `name`, `description`, and `requires-atry`. All six skills sh
 block between `<!-- BEGIN PREFLIGHT -->` and `<!-- END PREFLIGHT -->` is copied
 from `specs/80-skills-integration/00-skill-bridge/preflight.md` by `npm run sync`.
 
+## When to bump the shared minimum
+
+The value lives in `scripts/maint/next-version.ts` as `skillMinimumVersion`, and
+`skillMinimumRange` is the `>=X.M.Z` range that follows from it. Tests read both,
+so the value is not repeated as a source of truth. Change it only when a skill
+starts naming a verb, flag, or file shape that the installed CLI does not have.
+Set it to the next release that ships that behavior, then update all six
+`SKILL.md` files to the same range. A release alone never bumps it. The verb
+test (`test/skills-verbs.test.ts`) fails when a skill names a command the built
+CLI does not know.
+
 Shared writing rules live in `specs/80-skills-integration/00-skill-bridge/writing.md`. The same command copies
 them to `references/writing.md` for brainstorm, plan, implement, self-review,
 and cross-review.
