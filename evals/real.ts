@@ -681,6 +681,7 @@ export async function runRealEvals(
           root,
         };
         await git(ctx, ["init"]);
+        await git(ctx, ["config", "core.autocrlf", "false"]);
         await git(ctx, ["commit", "--allow-empty", "-m", "init"]);
         await scenario.run(check, ctx);
       } catch (error) {
