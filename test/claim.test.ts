@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { lstat, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test, vi } from "vitest";
@@ -191,7 +191,10 @@ test("claim creates a task worktree and release removes a clean one", async () =
       expect((await lstat(taskPath)).isDirectory()).toBe(true);
 
       expect((await runCli(["claim", run, "T1", "--session", "alice"], repo)).code).not.toBe(0);
+      // Drop the relay link first: on Windows git leaves the directory behind when it holds a junction.
+      await unlink(join(taskPath, ".agent-relay"));
       await git(repo, ["worktree", "remove", "--force", taskPath]);
+      await rm(taskPath, { recursive: true, force: true });
       await git(repo, ["branch", "-D", branch]);
 
       const again = await runCli(["claim", run, "T1", "--session", "alice"], repo);
