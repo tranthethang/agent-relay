@@ -332,7 +332,7 @@ test("integrate keeps the worktree when the merge conflicts", async () => {
       await commitFile(checkout, "note.txt", "run\n");
       const merged = await runCli(["integrate", run, "T1"], repo);
       expect(merged.code, merged.stderr).toBe(4);
-      expect(merged.stdout).toContain("conflict: note.txt");
+      expect(merged.stdout, merged.stderr).toContain("conflict: note.txt");
       expect(merged.stdout).toContain("worktree: kept");
       expect((await lstat(taskPath)).isDirectory()).toBe(true);
       await expect(
