@@ -195,7 +195,7 @@ test("claim creates a task worktree and release removes a clean one", async () =
       await git(repo, ["branch", "-D", branch]);
 
       const again = await runCli(["claim", run, "T1", "--session", "alice"], repo);
-      expect(again.code).toBe(0);
+      expect(again.code, again.stderr).toBe(0);
       const clean = await runCli(["release", run, "T1", "--session", "alice"], repo);
       expect(clean.code).toBe(0);
       expect(clean.stdout).toContain("worktree: removed");

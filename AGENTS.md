@@ -81,6 +81,18 @@ npm run sync:check
 npm run evals
 ```
 
+Tests run on CI runners with no global git identity, so do not rely on the
+developer's `~/.gitconfig`. `git merge` needs a committer identity even when it
+ends in a conflict. Create temporary repos with `withTempGitRepo` in
+`test/helper.ts`, which sets a repo-local `user.email` and `user.name`. To
+reproduce a CI failure, run the test with `HOME` set to an empty directory,
+`GIT_CONFIG_NOSYSTEM=1`, and `GIT_CONFIG_GLOBAL=/dev/null`. When a test spawns
+`atry`, pass `result.stderr` as the assertion message on stdout checks, so a
+gate error is visible in the CI log.
+Windows runners default to `core.autocrlf`, which turns `"\n"` fixtures into
+`"\r\n"`; `withTempGitRepo` sets `core.autocrlf=false`, so keep byte-exact
+file assertions on repos made by that helper.
+
 `npm run evals` runs a fake layer and a real layer. The fake layer checks the
 command surface and the token budget. The real layer drives the built CLI in a
 temporary repository and is the behavioral check. Neither layer calls a model,

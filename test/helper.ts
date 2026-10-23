@@ -58,6 +58,8 @@ export async function withTempGitRepo<T>(fn: (dir: string) => Promise<T>): Promi
     // `git merge` needs a committer identity even when it ends in a conflict.
     await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
     await execFileAsync("git", ["config", "user.name", "test"], { cwd: dir });
+    // Git for Windows defaults to autocrlf, which turns "\n" fixtures into "\r\n".
+    await execFileAsync("git", ["config", "core.autocrlf", "false"], { cwd: dir });
     return await fn(dir);
   } finally {
     await rm(dir, { recursive: true, force: true });
