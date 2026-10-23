@@ -2,6 +2,17 @@
 
 `atry approve` and `atry close` serve as the boundary gates entering implementation and exiting a run.
 
+## Plan Gate
+
+- `atry plan done` and `atry plan amend` refuse a plan with zero tasks (exit 4).
+- `atry plan done` writes `10-plan/index.json`. `atry plan amend` keeps the
+  existing task ids, appends new tasks, and scaffolds each new task file.
+- After approval, `atry plan amend` appends a `plan` `completed` event. The
+  reducer sets `approved: false` and `lifecycle: "planned"`, so the run needs
+  `atry approve` again.
+- `atry approve` needs that index and a task file with text under both
+  `## Detail` and `## Acceptance`.
+
 ## Approval Gate (`atry approve`)
 
 - Requires option `--via <confirm|arg>`.
