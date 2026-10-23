@@ -2,7 +2,7 @@
 
 `30-self-review/01.md`:
 
-# self-review
+# self
 
 ## Findings
 

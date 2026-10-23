@@ -187,7 +187,7 @@ function checkJson(verb: string, value: Record<string, unknown>): string[] {
         failures.push("next action must be an object");
         continue;
       }
-      for (const key of ["command", "reason", "needsHuman", "read"]) {
+      for (const key of ["kind", "command", "args", "reason", "needsHuman", "read"]) {
         if (!(key in action)) failures.push(`next action is missing "${key}"`);
       }
     }

@@ -79,7 +79,13 @@
             "recommendation": "atry task start 1792660551 T1",
             "actions": [
               {
+                "kind": "task-start",
                 "command": "atry task start 1792660551 T1",
+                "args": {
+                  "run": "1792660551",
+                  "task": "T1"
+                },
+                "requiresSession": true,
                 "reason": "An implement task is still open.",
                 "needsHuman": false,
                 "read": ["10-plan/overview.md", "10-plan/T1.md"]

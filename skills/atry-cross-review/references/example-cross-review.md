@@ -2,7 +2,7 @@
 
 `40-cross-review/01.md`:
 
-# cross-review
+# cross
 
 ## Findings
 

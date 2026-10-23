@@ -75,7 +75,9 @@ jobs:
           set -euo pipefail
           npm pack --dry-run --json > pack.json
           node -e '
-          const files = require("./pack.json")[0].files.map((file) => file.path);
+          const pack = require("./pack.json");
+          const entry = Array.isArray(pack) ? pack[0] : Object.values(pack)[0];
+          const files = entry.files.map((file) => file.path);
           const need = [
             "atry-brainstorm",
             "atry-cross-review",
