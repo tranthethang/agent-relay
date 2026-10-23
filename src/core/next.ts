@@ -369,7 +369,9 @@ function reasonFor(command: string): string {
   if (command === "none") return "The run is closed or abandoned.";
   if (command.includes(" plan new ")) return "The plan has no overview or task input.";
   if (command.includes(" plan done ")) return "The plan has no task index.";
-  if (command.endsWith(" --preview")) return "The plan is incomplete.";
+  if (command.includes(" approve ") && command.endsWith(" --preview")) {
+    return "The plan is incomplete.";
+  }
   if (command.includes(" approve ")) return "The plan is waiting for approval.";
   if (command.includes(" stage start ")) return "Implement has not started.";
   if (command.includes(" task start ")) return "An implement task is still open.";

@@ -147,6 +147,10 @@ test("nextStep walks the plan state before approve", () => {
     kind: "approve",
     reason: "The plan is incomplete.",
   });
+  expect(explainNext(`atry close ${id} --preview`).actions[0]).toMatchObject({
+    kind: "close",
+    reason: "The run is ready for a developer close decision.",
+  });
   expect(explainNext(`atry plan done ${id}`).actions[0]).toMatchObject({
     kind: "plan-done",
     read: ["10-plan/", "10-plan/tasks.input.json"],
