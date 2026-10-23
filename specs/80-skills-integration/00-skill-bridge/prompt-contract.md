@@ -60,6 +60,7 @@ A skill does not match the text of `command`.
 | `approve`     | `atry approve <run>`                     | `run`            |                           |
 | `stage-start` | `atry stage start <run> implement`       | `run`, `stage`   |                           |
 | `task-start`  | `atry task start <run> <task>`           | `run`, `task`    | `requiresSession`         |
+| `integrate`   | `atry integrate <run> <task>`            | `run`, `task`    |                           |
 | `stage-done`  | `atry stage done <run> implement`        | `run`, `stage`   |                           |
 | `review-new`  | `atry review new <run> self`             | `run`, `review`  | `requiresModel` for cross |
 | `review-done` | `atry review done <run> cross`           | `run`, `review`  |                           |
@@ -85,7 +86,7 @@ tasks. A closed run carries no actions.
 | `kind`                              | `read`                                                       |
 | ----------------------------------- | ------------------------------------------------------------ |
 | `approve`                           | `10-plan/overview.md`                                        |
-| `task-start`                        | `10-plan/overview.md` and `10-plan/<task>.md`                |
+| `task-start`, `integrate`           | `10-plan/overview.md` and `10-plan/<task>.md`                |
 | `stage-start`, `stage-done`         | `10-plan/overview.md` and `10-plan/index.json`               |
 | `review-new`, `review-done` (self)  | `10-plan/overview.md` and `20-implement/`                    |
 | `review-new`, `review-done` (cross) | the self paths and `30-self-review/`                         |

@@ -8,6 +8,7 @@ export const actionKinds = [
   "approve",
   "stage-start",
   "task-start",
+  "integrate",
   "stage-done",
   "review-new",
   "review-done",
@@ -62,8 +63,9 @@ export function nextStep(
   events: readonly EventLine[],
   reviews?: { required: readonly string[]; done: readonly string[] },
   index?: PlanIndex | null,
+  integrateTasks: readonly string[] = [],
 ): string {
-  const early = nextBeforeReview(id, state, index);
+  const early = nextBeforeReview(id, state, index, integrateTasks);
   if (early !== undefined) return early;
   if (lastStageAction(events, "self-review") === "started") return `atry review done ${id} self`;
   if (lastStageAction(events, "cross-review") === "started") return `atry review done ${id} cross`;
@@ -75,14 +77,39 @@ export function nextStep(
 function nextBeforeReview(
   id: string,
   state: RunState,
-  index?: PlanIndex | null,
+  index: PlanIndex | null | undefined,
+  integrateTasks: readonly string[],
 ): string | undefined {
   if (state.lifecycle === "abandoned" || state.lifecycle === "closed") return "none";
   if (state.lifecycle === "planned") return `atry approve ${id}`;
   if (state.lifecycle === "approved") return `atry stage start ${id} implement`;
   if (state.lifecycle !== "implementing") return undefined;
+  const integrate = integrateCommands(id, state, index, integrateTasks);
+  const command = integrate[0];
+  if (command !== undefined) return command;
   if (openPlanTasks(index ?? null, state).length > 0) return `atry task start ${id}`;
   return `atry stage done ${id} implement`;
+}
+
+function integrateCommands(
+  id: string,
+  state: RunState,
+  index: PlanIndex | null | undefined,
+  tasks: readonly string[],
+): string[] {
+  if (tasks.length === 0) return [];
+  const status = new Map(state.tasks.map((task) => [task.id, task.status]));
+  const deps = new Map((index?.tasks ?? []).map((task) => [task.id, task.deps]));
+  const commands: string[] = [];
+  for (const task of tasks) {
+    if ((status.get(task) ?? "pending") !== "done") continue;
+    const ready = (deps.get(task) ?? []).every((dep) => {
+      const value = status.get(dep) ?? "pending";
+      return value === "done" || value === "skipped";
+    });
+    if (ready) commands.push(`atry integrate ${id} ${task}`);
+  }
+  return commands;
 }
 
 function nextFromReviews(
@@ -128,7 +155,10 @@ function nextImplementingActions(
   state: RunState,
   recommendation: string,
   index?: PlanIndex | null,
+  integrateTasks: readonly string[] = [],
 ): string[] {
+  const integrate = integrateCommands(id, state, index, integrateTasks);
+  if (integrate.length > 0) return integrate;
   if (index === undefined || index === null) {
     if (recommendation.includes("task start")) return [`atry list ${id}`];
     return [recommendation];
@@ -176,10 +206,11 @@ export function nextActions(
   recommendation: string,
   reviews?: { required: readonly string[]; done: readonly string[] },
   index?: PlanIndex | null,
+  integrateTasks: readonly string[] = [],
 ): string[] {
   if (state.lifecycle === "closed" || state.lifecycle === "abandoned") return [];
   if (state.lifecycle === "implementing") {
-    return nextImplementingActions(id, state, recommendation, index);
+    return nextImplementingActions(id, state, recommendation, index, integrateTasks);
   }
   if (state.lifecycle === "reviewing") {
     return nextReviewingActions(id, events, recommendation, reviews);
@@ -232,6 +263,7 @@ function actionReadPaths(kind: ActionKind, args: NextActionArgs): string[] {
     case "approve":
       return ["10-plan/overview.md"];
     case "task-start":
+    case "integrate":
       return args.task === undefined
         ? ["10-plan/overview.md"]
         : ["10-plan/overview.md", `10-plan/${args.task}.md`];
@@ -259,6 +291,7 @@ function actionKind(command: string): ActionKind {
   if (/\bstage start\b/.test(command)) return "stage-start";
   if (/\bstage done\b/.test(command)) return "stage-done";
   if (/\btask start\b/.test(command)) return "task-start";
+  if (/\bintegrate\b/.test(command)) return "integrate";
   if (/\breview new\b/.test(command)) return "review-new";
   if (/\breview done\b/.test(command)) return "review-done";
   if (/\breview decide\b/.test(command)) return "decide";
@@ -271,8 +304,11 @@ function actionArgs(kind: ActionKind, command: string): NextActionArgs {
   const args: NextActionArgs = {};
   const run = /\b(\d{10,11})\b/.exec(command)?.[1];
   if (run !== undefined) args.run = run;
-  if (kind === "task-start") {
-    const task = /\btask start \S+ (T[1-9]\d*)\b/.exec(command)?.[1];
+  if (kind === "task-start" || kind === "integrate") {
+    const pattern = kind === "integrate"
+      ? /\bintegrate \S+ (T[1-9]\d*)\b/
+      : /\btask start \S+ (T[1-9]\d*)\b/;
+    const task = pattern.exec(command)?.[1];
     if (task !== undefined) args.task = task;
   }
   if (kind === "stage-start" || kind === "stage-done") args.stage = "implement";
@@ -308,7 +344,17 @@ function reasonFor(command: string): string {
   if (command.includes(" approve ")) return "The plan is waiting for approval.";
   if (command.includes(" stage start ")) return "Implement has not started.";
   if (command.includes(" task start ")) return "An implement task is still open.";
+  if (command.includes(" integrate ")) return "A done task still has a worktree.";
   if (command.includes(" stage done ")) return "Every implement task is done or skipped.";
+  const reviewReason = reasonForReview(command);
+  if (reviewReason !== undefined) return reviewReason;
+  if (command.includes(" decide ")) return "A review question is still open.";
+  if (command.includes(" close ")) return "The run is ready for a developer close decision.";
+  if (/\blist\b/.test(command)) return "No pending task is ready to start.";
+  return "The next command comes from the run state.";
+}
+
+function reasonForReview(command: string): string | undefined {
   if (command.includes(" review new ") && command.endsWith(" self")) {
     return "No self-review covers the current tree.";
   }
@@ -321,10 +367,7 @@ function reasonFor(command: string): string {
   if (command.includes(" review done ") && command.endsWith(" cross")) {
     return "Cross-review has started.";
   }
-  if (command.includes(" decide ")) return "A review question is still open.";
-  if (command.includes(" close ")) return "The run is ready for a developer close decision.";
-  if (/\blist\b/.test(command)) return "No pending task is ready to start.";
-  return "The next command comes from the run state.";
+  return undefined;
 }
 
 function lastStageAction(

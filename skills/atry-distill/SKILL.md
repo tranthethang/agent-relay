@@ -1,6 +1,6 @@
 ---
 name: atry-distill
-description: Use when the user wants to export a run manifest, at any run state.
+description: "Export an agent-relay run manifest with atry. Use this when the user wants a distill of the run at any state, including an open plan or a closed run. Do not use it to implement tasks, to review findings, or to rewrite the run history."
 requires-atry: ">=0.10.7"
 ---
 

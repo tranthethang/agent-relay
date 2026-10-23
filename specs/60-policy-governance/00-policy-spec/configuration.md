@@ -87,8 +87,8 @@ Controls plan size.
 
 Controls the review checks at `close`: missing reviews, a tree that differs from the latest review, changes after the latest review, open items, and failed tests.
 
-| Command      | `false` (default)                                                                                             | `true`                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Command      | `false` (default)                                                                                                                                                                    | `true`                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
 | `atry close` | With `--via`, refuses and lists any warnings until `--ack-warnings` is present; then closes and stores the warnings in the `closed` event. Without `--via`, the checks still refuse. | Refuses until each check passes, or the person passes the matching flag |
 
 `--ack-open` accepts open items. `--ack-fixes` accepts changes after the latest review. `--ack-warnings` accepts the warnings of a non-strict soft close; it does not bypass `strict.reviewIntegrity: true`. `--waive-review <reason>` records a waiver and skips the review checks, but not the open item check or the warning gate.

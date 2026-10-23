@@ -265,6 +265,182 @@ export async function addWorktree(
   return { path, branch: settings.branch };
 }
 
+// One worktree and branch for a claimed task. The branch name is `<run>-<task>`.
+export async function addTaskWorktree(input: {
+  root: string;
+  relayDir: string;
+  dir: string | undefined;
+  runName: string;
+  task: string;
+  head: string;
+}): Promise<WorktreeRecord> {
+  const branch = `${input.runName}-${input.task}`;
+  const parent = input.dir === undefined
+    ? join(dirname(input.root), `${basename(input.root)}_work-tree`)
+    : resolve(input.root, input.dir);
+  const path = join(parent, input.runName, input.task);
+  if (await pathExists(path)) throw new RelayError("gate", "worktree path already exists", path);
+  if (await branchExists(input.root, branch)) {
+    throw new RelayError("gate", "worktree branch already exists", branch);
+  }
+  await validateWorktreeDir(input.root, input.dir);
+  await mkdir(join(parent, input.runName), { recursive: true });
+  try {
+    await gitOut(input.root, ["worktree", "add", "-b", branch, path, input.head]);
+  } catch (error) {
+    if (await branchExists(input.root, branch)) {
+      await gitOut(input.root, ["branch", "-D", branch]).catch(() => undefined);
+    }
+    if (await pathExists(path)) {
+      await rm(path, { recursive: true, force: true }).catch(() => undefined);
+    }
+    throw new RelayError("gate", `git worktree add failed: ${gitMessage(error)}`, path);
+  }
+  try {
+    await linkRelay(path, input.relayDir);
+    await excludeRelay(input.root);
+  } catch (error) {
+    await rollbackWorktree(input.root, path, branch);
+    throw error;
+  }
+  return { path, branch };
+}
+
+// Remove a clean task worktree and its branch. Keep a dirty worktree.
+export async function releaseTaskWorktree(
+  root: string,
+  record: WorktreeRecord,
+  checkout: string,
+): Promise<WorktreeRemoval> {
+  try {
+    await gitOut(checkout, ["merge-base", "--is-ancestor", record.branch, "HEAD"]);
+  } catch {
+    return { removed: false, reason: "branch has unmerged commits" };
+  }
+  if (!await pathExists(record.path)) {
+    await gitOut(root, ["branch", "-D", record.branch]).catch(() => undefined);
+    return { removed: true };
+  }
+  let status: string;
+  try {
+    status = await treeStatus(record.path);
+  } catch {
+    return { removed: false, reason: "worktree status failed" };
+  }
+  if (status.length > 0) return { removed: false, reason: "worktree has changes" };
+  const link = join(record.path, relayName);
+  try {
+    await unlink(link);
+  } catch (error) {
+    if (!isEnoent(error)) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { removed: false, reason: `unlink .agent-relay failed: ${message}` };
+    }
+  }
+  try {
+    await gitOut(root, ["worktree", "remove", record.path]);
+  } catch (error) {
+    return { removed: false, reason: `git worktree remove failed: ${gitMessage(error)}` };
+  }
+  await gitOut(root, ["branch", "-D", record.branch]).catch(() => undefined);
+  return { removed: true };
+}
+
+// Merge `branch` into the checkout. A conflict aborts the merge and returns the paths.
+export async function mergeTaskBranch(
+  checkout: string,
+  branch: string,
+): Promise<{ merged: true } | { merged: false; paths: string[] }> {
+  try {
+    await gitOut(checkout, ["merge", "--no-edit", branch]);
+    return { merged: true };
+  } catch (error) {
+    let names = "";
+    try {
+      names = await gitOut(checkout, ["diff", "--name-only", "--diff-filter=U"]);
+    } catch {
+      names = "";
+    }
+    const paths = names.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+    if (paths.length === 0) {
+      throw new RelayError("gate", `git merge failed: ${gitMessage(error)}`, branch);
+    }
+    await gitOut(checkout, ["merge", "--abort"]).catch(() => undefined);
+    return { merged: false, paths };
+  }
+}
+
+// The branch point tree, so `task done` can see edits in the task worktree.
+export async function taskWorktreeBase(
+  runDir: string,
+  run: RunJson,
+  task: string,
+): Promise<{ cwd: string; from: string } | undefined> {
+  const record = await taskWorktreeRecord(runDir, run, task);
+  if (record === undefined) return undefined;
+  const runCwd = await runGitCwd(runDir, run);
+  let base: string;
+  try {
+    const runHead = (await gitOut(runCwd, ["rev-parse", "HEAD"])).trim();
+    base = (await gitOut(record.path, ["merge-base", runHead, record.branch])).trim();
+  } catch (error) {
+    throw new RelayError("validation", `task worktree base not found: ${gitMessage(error)}`, task);
+  }
+  try {
+    const from = (await gitOut(record.path, ["rev-parse", `${base}^{tree}`])).trim();
+    return { cwd: record.path, from };
+  } catch (error) {
+    throw new RelayError("validation", `task worktree tree not found: ${gitMessage(error)}`, task);
+  }
+}
+
+export async function taskWorktreeRecord(
+  runDir: string,
+  run: RunJson,
+  task: string,
+): Promise<WorktreeRecord | undefined> {
+  const located = await taskWorktreeParent(runDir, run);
+  if (located === undefined) return undefined;
+  const path = join(located.parent, located.runName, task);
+  if (!await pathExists(path)) return undefined;
+  return { path, branch: `${located.runName}-${task}` };
+}
+
+export async function openTaskWorktrees(
+  runDir: string,
+  run: RunJson,
+  tasks: readonly string[],
+): Promise<string[]> {
+  const located = await taskWorktreeParent(runDir, run);
+  if (located === undefined) return [];
+  const ids: string[] = [];
+  for (const task of tasks) {
+    if (await pathExists(join(located.parent, located.runName, task))) ids.push(task);
+  }
+  return ids;
+}
+
+async function taskWorktreeParent(
+  runDir: string,
+  run: RunJson,
+): Promise<{ parent: string; runName: string } | undefined> {
+  const cwd = await runGitCwd(runDir, run);
+  let policy;
+  try {
+    policy = await readPolicy(cwd, run.base);
+  } catch (error) {
+    if (error instanceof RelayError) return undefined;
+    throw error;
+  }
+  if (policy.worktree?.enabled !== true) return undefined;
+  const relayDir = await realpath(dirname(runDir));
+  const root = dirname(relayDir);
+  const parent = policy.worktree.dir === undefined
+    ? join(dirname(root), `${basename(root)}_work-tree`)
+    : resolve(root, policy.worktree.dir);
+  return { parent, runName: basename(runDir) };
+}
+
 // The main repo root holds the real `.agent-relay/`. A run path through a worktree link resolves to it.
 export async function mainRoot(runDir: string): Promise<string> {
   return dirname(dirname(await realpath(runDir)));

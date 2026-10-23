@@ -1,6 +1,6 @@
 ---
 name: atry-self-review
-description: Use right after an agent-relay implement stage finishes, before any cross-review.
+description: "Check an agent-relay implement stage before a second review. Use this when implement is done and the run needs a self review of the change. Do not use it to write the plan, to make the implement edits, or to replace an independent review."
 requires-atry: ">=0.10.7"
 ---
 

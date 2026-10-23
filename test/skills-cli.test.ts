@@ -1,7 +1,19 @@
+import { Command } from "commander";
+import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import {
+  bundledSkillNames,
+  installSkills,
+  parseSkillTool,
+  registerSkills,
+  skillsInstallText,
+  skillsStatusText,
+  statusSkills,
+} from "../src/cli/skills.js";
 import { runCli } from "./helper.js";
 
 const names = [
@@ -130,5 +142,100 @@ test("skills rejects an unknown tool before it writes a file", async () => {
     const status = await runCli(["skills", "status", "--tool", "vim", "--dir", dir], dir);
     expect(status.code).not.toBe(0);
     expect(status.stderr).toContain("unknown tool: vim");
+  });
+});
+
+test("skill helpers cover an empty bundle, a missing floor, and each directory choice", async () => {
+  await withDir(async (dir) => {
+    const source = join(dir, "bundles");
+    await mkdir(join(source, "atry-plan"), { recursive: true });
+    await writeFile(
+      join(source, "atry-plan", "SKILL.md"),
+      "name: atry-plan\nrequires-atry: \">=0.1.0\"\n",
+    );
+    await mkdir(join(dir, "empty"), { recursive: true });
+    expect(() => bundledSkillNames(join(dir, "empty"))).toThrow("bundled skills are missing");
+    const out = join(dir, "out");
+    expect(installSkills({ tool: "claude-code", dir: out, root: source }).bundles[0]?.status).toBe(
+      "installed",
+    );
+    expect(installSkills({ tool: "claude-code", dir: out, root: source }).bundles[0]?.status).toBe(
+      "present",
+    );
+    const bare = join(dir, "bare");
+    await mkdir(join(bare, "atry-plan"), { recursive: true });
+    await writeFile(join(bare, "atry-plan", "SKILL.md"), "name: atry-plan\n");
+    const mismatch = statusSkills({ dir: bare, root: source, installed: "1.2.3-dev" });
+    expect(mismatch.ok).toBe(false);
+    expect(skillsStatusText(mismatch)).toContain("install:");
+    expect(statusSkills({ dir: bare, root: source, installed: "9.0.0" }).ok).toBe(false);
+    expect(statusSkills({ tool: "cursor", root: source, installed: "9.0.0" }).dirs).toHaveLength(1);
+    expect(statusSkills({ root: source, installed: "9.0.0" }).dirs.length).toBeGreaterThan(1);
+
+    const parseStatus = async (args: string[]): Promise<void> => {
+      const program = new Command();
+      program.exitOverride();
+      program.option("--json", "print JSON");
+      registerSkills(program);
+      await program.parseAsync(["skills", "status", ...args], { from: "user" });
+    };
+    await parseStatus(["--tool", "cursor", "--dir", bare]);
+    await parseStatus(["--tool", "cursor"]);
+  });
+});
+
+test("direct skill helpers handle valid, malformed, and pre-release version floors", async () => {
+  await withDir(async (dir) => {
+    const source = join(dir, "source");
+    const skill = join(source, "atry-plan", "SKILL.md");
+    await mkdir(join(source, "atry-plan"), { recursive: true });
+    await writeFile(skill, "name: atry-plan\nrequires-atry: \">=1.2.0\"\n");
+    expect(parseSkillTool(" cursor ")).toBe("cursor");
+    expect(() => parseSkillTool("unknown")).toThrow("unknown tool");
+    const installed = installSkills({ tool: "cursor", dir: join(dir, "installed"), root: source });
+    expect(skillsInstallText(installed)).toContain("installed: 1\npresent: 0");
+    expect(skillsInstallText(installSkills({ tool: "cursor", dir: installed.dir, root: source })))
+      .toContain("installed: 0\npresent: 1");
+    expect(statusSkills({ dir: installed.dir, root: source, installed: "1.2.1-dev" }).ok).toBe(
+      true,
+    );
+
+    const copied = join(installed.dir, "atry-plan", "SKILL.md");
+    await writeFile(copied, "name: atry-plan\nrequires-atry: \"not-a-range\"\n");
+    const malformed = statusSkills({ dir: installed.dir, root: source, installed: "1.2.1" });
+    expect(malformed.dirs[0]?.bundles[0]?.status).toBe("mismatch");
+    expect(skillsStatusText(malformed)).toContain("(not-a-range)");
+    await writeFile(copied, "name: atry-plan\nrequires-atry: \">=1.2.0\"\n");
+    expect(statusSkills({ dir: installed.dir, root: source, installed: "1.2.1" }).ok).toBe(true);
+  });
+});
+
+test("CLI uses isolated home defaults for install and status", async () => {
+  await withDir(async (home) => {
+    const cli = fileURLToPath(new URL("../dist/atry.js", import.meta.url));
+    const isolated = (args: string[]): Promise<{ code: number; stdout: string; stderr: string }> =>
+      new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [cli, ...args], {
+          cwd: home,
+          env: { ...process.env, HOME: home, USERPROFILE: home },
+        });
+        let stdout = "";
+        let stderr = "";
+        child.stdout.setEncoding("utf8");
+        child.stderr.setEncoding("utf8");
+        child.stdout.on("data", (chunk: string) => stdout += chunk);
+        child.stderr.on("data", (chunk: string) => stderr += chunk);
+        child.on("error", reject);
+        child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+      });
+    const installed = await isolated(["skills", "install", "--tool", "cursor", "--json"]);
+    expect(installed.code, installed.stderr).toBe(0);
+    expect(JSON.parse(installed.stdout).dir).toBe(join(home, ".agents", "skills"));
+    const missing = await isolated(["skills", "status", "--tool", "kiro", "--json"]);
+    expect(missing.code).toBe(1);
+    expect(JSON.parse(missing.stdout).ok).toBe(false);
+    const all = await isolated(["skills", "status", "--json"]);
+    expect(all.code).toBe(1);
+    expect(JSON.parse(all.stdout).dirs.length).toBeGreaterThan(1);
   });
 });

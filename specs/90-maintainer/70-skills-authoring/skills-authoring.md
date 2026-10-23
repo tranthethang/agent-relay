@@ -3,7 +3,10 @@
 Each skill is `skills/<name>/SKILL.md` plus `references/`. Bundles do not
 contain `scripts/`.
 
-Front matter needs `name`, `description`, and `requires-atry`. All six skills share one `requires-atry` value. That value is not higher than the version the release workflow computes. A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it. The preflight
+Front matter needs `name`, `description`, and `requires-atry`. Each
+`description` is 200 to 400 characters. Say what the skill does, when to use
+it, and when not to use it. Include a `Do not use` clause. Name `atry` or
+`agent-relay`. Do not use the skill name as the only trigger. All six skills share one `requires-atry` value. That value is not higher than the version the release workflow computes. A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it. The preflight
 block between `<!-- BEGIN PREFLIGHT -->` and `<!-- END PREFLIGHT -->` is copied
 from `specs/80-skills-integration/00-skill-bridge/preflight.md` by `npm run sync`.
 
@@ -42,12 +45,12 @@ from a global skill directory.
 Each stage skill that fills a file names one example under `references/`.
 The agent reads the example before it writes that file.
 
-| Skill | Example | Shows |
-| --- | --- | --- |
-| `atry-plan` | `references/example-overview.md` | The overview headings and one `tasks.input.json` object |
-| `atry-implement` | `references/example-implement.md` | The task report headings |
-| `atry-self-review` | `references/example-review.md` | One review pair with one card and one `open` item |
-| `atry-cross-review` | `references/example-cross-review.md` | One review pair with one card and one `open` item |
+| Skill               | Example                              | Shows                                                   |
+| ------------------- | ------------------------------------ | ------------------------------------------------------- |
+| `atry-plan`         | `references/example-overview.md`     | The overview headings and one `tasks.input.json` object |
+| `atry-implement`    | `references/example-implement.md`    | The task report headings                                |
+| `atry-self-review`  | `references/example-review.md`       | One review pair with one card and one `open` item       |
+| `atry-cross-review` | `references/example-cross-review.md` | One review pair with one card and one `open` item       |
 
 Keep one example under 500 tokens. Keep the example small: one task and one
 small change. Use the writing rules, and use no secret and no real user data.
@@ -62,33 +65,19 @@ that line, so check the count after you add one.
 the file exists, that the headings are present, and that a review example has
 one card and one `open` item.
 
-## Token baseline
+## Token snapshot
 
 `npm run tokens` counts characters in each `SKILL.md` plus every
 `references/*.md` path that file names. It divides by 4 and rounds to the
-nearest integer. The total row is the sum of the stage rows. This baseline
-is commit `ce19460998b550cb7ccca955bbb4cb1905bbef4d`.
+nearest integer. The total row is the sum of the stage rows. This table is a
+snapshot at commit `2dea9637d1689264e3bdc44e50f7de7b84c6017e`.
 
 | stage        | references                                            | chars | tokens |
 | ------------ | ----------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md                                 |  5473 |   1368 |
-| plan         | references/writing.md                                 |  5821 |   1455 |
-| implement    | references/writing.md                                 |  6257 |   1564 |
-| self-review  | references/writing.md, references/reviewer-conduct.md |  6710 |   1678 |
-| cross-review | references/writing.md, references/reviewer-conduct.md |  7912 |   1978 |
-| distill      | (none)                                                |  1393 |    348 |
-| total        |                                                       | 33566 |   8391 |
-
-## Token count after the skill rewrite
-
-The same `npm run tokens` command, after preflight moved into the CLI and the stage skills loop on `atry next`.
-
-| stage        | references                                            | chars | tokens |
-| ------------ | ----------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md                                 |  5011 |   1253 |
-| plan         | references/writing.md                                 |  5525 |   1381 |
-| implement    | references/writing.md                                 |  5951 |   1488 |
-| self-review  | references/writing.md, references/reviewer-conduct.md |  6840 |   1710 |
-| cross-review | references/writing.md, references/reviewer-conduct.md |  7018 |   1755 |
-| distill      | (none)                                                |   931 |    233 |
-| total        |                                                       | 31276 |   7820 |
+| brainstorm   | references/writing.md                                 |  5100 |   1275 |
+| plan         | references/writing.md                                 |  5874 |   1469 |
+| implement    | references/writing.md                                 |  6678 |   1670 |
+| self-review  | references/writing.md, references/reviewer-conduct.md |  7752 |   1938 |
+| cross-review | references/writing.md, references/reviewer-conduct.md |  7930 |   1983 |
+| distill      | (none)                                                |  1020 |    255 |
+| total        |                                                       | 34354 |   8590 |

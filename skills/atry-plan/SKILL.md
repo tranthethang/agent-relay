@@ -1,6 +1,6 @@
 ---
 name: atry-plan
-description: Use when the user asks to plan work in this repo before implementing.
+description: "Write an agent-relay plan for a run before any implement work. Use this when the user asks to plan a change, to split that work into tasks, or to record the plan. Do not use it to implement those tasks, to review the code, or to edit product files before approval."
 requires-atry: ">=0.10.7"
 ---
 

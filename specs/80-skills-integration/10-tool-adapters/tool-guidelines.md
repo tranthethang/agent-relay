@@ -24,7 +24,8 @@ When executing stages or reviews, tools declare their identifier via `--tool <na
 ### Antigravity
 
 - Antigravity executes commands natively via `run_command` and tracks progress through long-running workflow sessions.
-- Antigravity adheres to ASD-STE100 writing guidelines when drafting plan overviews and review findings.
+- Use the writing rules in `specs/80-skills-integration/00-skill-bridge/writing.md` for plan overviews and review findings.
+  Those rules recommend short sentences for skill text. They do not claim ASD-STE100 compliance.
 
 ### OpenAI Codex
 

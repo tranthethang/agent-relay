@@ -13,9 +13,11 @@ import { oneToken, selectRun } from "../core/select.js";
 import { statusDetail, statusDetailText, statusList, statusListText } from "../core/status.js";
 import { indexForImplement } from "../core/tasks.js";
 import { schemaVersion } from "../core/vocab.js";
+import { openTaskWorktrees } from "../core/worktree.js";
 import { packageVersion } from "../version.js";
 import { registerClaim } from "./claim.js";
 import { flagRun, registerDistill } from "./distill.js";
+import { registerDoctor } from "./doctor.js";
 import { registerHook } from "./hook.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
@@ -23,6 +25,7 @@ import { registerPlan } from "./plan.js";
 import { registerPolicy } from "./policy.js";
 import { registerReview } from "./review.js";
 import { registerSkills } from "./skills.js";
+import { registerStats } from "./stats.js";
 import { registerWorktree } from "./worktree.js";
 
 export function registerCommands(program: Command): void {
@@ -84,7 +87,17 @@ export function registerCommands(program: Command): void {
       const index = loaded.run.state.lifecycle === "implementing"
         ? await indexForImplement(runDir, loaded.run.state)
         : null;
-      const step = nextStep(loaded.run.id, loaded.run.state, loaded.events, reviews, index);
+      const integrate = index === null
+        ? []
+        : await openTaskWorktrees(runDir, loaded.run, index.tasks.map((task) => task.id));
+      const step = nextStep(
+        loaded.run.id,
+        loaded.run.state,
+        loaded.events,
+        reviews,
+        index,
+        integrate,
+      );
       const choices = nextActions(
         loaded.run.id,
         loaded.run.state,
@@ -92,6 +105,7 @@ export function registerCommands(program: Command): void {
         step,
         reviews,
         index,
+        integrate,
       );
       writeResult(
         explainNextWithChoices(step, loaded.run.state, choices),
@@ -133,6 +147,8 @@ export function registerCommands(program: Command): void {
   registerSkills(program);
   registerWorktree(program);
   registerHook(program);
+  registerStats(program);
+  registerDoctor(program);
 }
 
 function commandJson(command: Command): boolean {

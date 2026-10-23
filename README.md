@@ -47,11 +47,11 @@ the install command.
 The five tool names are `claude-code`, `cursor`, `codex`, `antigravity`, and
 `kiro`. Each tool writes one of three directories:
 
-| Tool | Directory |
-| --- | --- |
-| Claude Code | `~/.claude/skills/` |
+| Tool                       | Directory           |
+| -------------------------- | ------------------- |
+| Claude Code                | `~/.claude/skills/` |
 | Cursor, Codex, Antigravity | `~/.agents/skills/` |
-| Kiro | `~/.kiro/skills/` |
+| Kiro                       | `~/.kiro/skills/`   |
 
 A user who does not install npm can copy the bundles from the Git tree:
 
@@ -88,6 +88,8 @@ atry next <run>
 atry run new --slug <slug> --title <title>
 atry resolve [run]
 atry status [run]
+atry stats [run]
+atry doctor
 atry context <run> --json [--task T1]
 atry plan new <run>
 atry plan done <run>
@@ -109,6 +111,7 @@ atry worktree cleanup [run]
 atry hook install --tool claude-code
 atry hook check
 atry distill <run> [--include-test-logs]
+atry distill verify <run>
 ```
 
 `atry approve` and `atry close` are for the person who coordinates the run.
@@ -116,6 +119,12 @@ atry distill <run> [--include-test-logs]
 A lower version prints `npm i -g @tranthethang/agent-relay@latest` and exits 1.
 A dev build is refused the same way. Add `--allow-dev`, or set `ATRY_DEV=1`,
 only when you dogfood a build from this repo.
+`atry stats` reads `events.jsonl` across runs. `atry stats <run>` reads one run.
+A row reports stage time, review rounds, waivers, failed tests, and drift.
+Stage time is a number of milliseconds. The command does not write an event.
+`atry doctor` checks Node 22, git, the CLI version, the bundled skills, the policy file, and `atry` on `PATH`.
+It prints one line per check. It exits 1 when a check fails.
+A missing policy file passes and reports `default`.
 `atry next <run>` prints the next command. `--json` adds `command`, `reason`, `needsHuman`, and `read`.
 `atry approve <run> --preview` prints Goal, Decisions, and the task count.
 `atry close <run> --preview` prints `recommend: y` or `recommend: n` and the reasons.
@@ -164,6 +173,10 @@ when the tests started. A non-zero exit records failure but does not refuse
 when the same review stage records another event while the tests run.
 `atry distill` leaves every `*.test.log` out of the manifest; pass
 `--include-test-logs` to export them.
+`atry distill verify <run>` recomputes each hash.
+It exits 1 when a file is missing or different.
+It does not rewrite the manifest.
+A missing manifest exits 3.
 
 The optional `strict` policy groups control scope, plan, and review-integrity
 gates independently. Each group defaults to `false`, which reports a warning
@@ -245,12 +258,22 @@ With worktree off, `stage start implement` refuses a tree with changes outside
 ```bash
 atry claim <run> T1 --session <tag>
 atry release <run> T1 --session <tag>
+atry integrate <run> T1
 atry list <run>
 ```
 
 `claim` refuses a task whose `files` overlap a lock held by another session.
-`claim` does not create worktrees. The sessions on one run share one tree.
-With worktree isolation on, each run has its own tree. `task done` ignores
+With worktree off, `claim` does not create a worktree.
+With worktree on, `claim` creates one worktree and one branch for the task.
+The lock stores the path and the branch. A failed claim removes both.
+`release` removes a clean worktree and its branch when the run branch contains that branch.
+`release` keeps a worktree that has changes or unmerged commits. It prints the reason.
+`atry integrate` merges that branch into the run branch after each dependency is done or skipped.
+A conflict exits 4, keeps the worktree, and prints each path.
+A clean merge removes the worktree and records a `run` `cleaned` event with the task and the branch.
+A dirty worktree stays after that merge. The command prints the reason and skips the cleaned event.
+`atry next` recommends integrate after the task is done while that worktree remains.
+`task done` ignores
 a path that another in-progress task's `files` covers. `atry guard <run> <path>`
 exits 0 when that path is inside an in-progress task. `--session <tag>` limits
 the check to that session.
@@ -345,6 +368,7 @@ brew install sonar-scanner
 ```
 
 Contributor rules: [`AGENTS.md`](AGENTS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Security reports and trust limits: [`SECURITY.md`](SECURITY.md).
 Technical specifications and system diagrams: [`specs/`](specs/).
 Maintainer docs: [`specs/90-maintainer/00-index/index.md`](specs/90-maintainer/00-index/index.md). History and next work: [`ROADMAP.md`](ROADMAP.md).
 Release notes: [GitHub Releases](https://github.com/tranthethang/agent-relay/releases).

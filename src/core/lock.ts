@@ -1,4 +1,4 @@
-import { mkdir, open, rm } from "node:fs/promises";
+import { mkdir, open, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { z } from "zod";
 import { fromZod, RelayError } from "./error.js";
@@ -11,6 +11,8 @@ export const lockFileSchema = z.object({
   pid: z.number().int().positive(),
   host: z.string().min(1),
   ts: utcTimestampSchema,
+  path: z.string().min(1).optional(),
+  branch: z.string().min(1).optional(),
 }).strict();
 
 export type LockFile = z.infer<typeof lockFileSchema>;
@@ -97,6 +99,21 @@ export async function acquireLock(
   return body;
 }
 
+export async function recordLockWorktree(
+  runDir: string,
+  task: string,
+  session: string,
+  worktree: { path: string; branch: string },
+): Promise<void> {
+  const name = taskName(task);
+  const owner = await readOwner(runDir, name);
+  if (owner.session !== session) {
+    throw new RelayError("lock", `lock held by ${owner.session}`, `locks/${name}.lock`);
+  }
+  const next = lockFileSchema.parse({ ...owner, path: worktree.path, branch: worktree.branch });
+  await writeFile(lockFilePath(runDir, name), `${JSON.stringify(next)}\n`);
+}
+
 export async function releaseLock(runDir: string, task: string, session: string): Promise<void> {
   const name = taskName(task);
   const owner = await readOwner(runDir, name);
@@ -160,6 +177,13 @@ export async function stealLock(
   if (!isStale(owner, ttlMs)) {
     throw new RelayError("lock", `lock held by ${owner.session}`, `locks/${name}.lock`);
   }
+  const previous = owner;
   await rm(lockFilePath(runDir, name));
-  return acquireLock(runDir, name, session);
+  const next = await acquireLock(runDir, name, session);
+  if (previous.path === undefined || previous.branch === undefined) return next;
+  await recordLockWorktree(runDir, name, session, {
+    path: previous.path,
+    branch: previous.branch,
+  });
+  return { ...next, path: previous.path, branch: previous.branch };
 }

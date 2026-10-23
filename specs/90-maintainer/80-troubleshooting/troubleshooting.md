@@ -27,6 +27,8 @@
 | `guard` exits 4                                    | The path is outside an in-progress task        | Use a listed file, or the session that holds it        |
 | `plan has more than 8 tasks`                       | The plan gate                                  | Split the plan                                         |
 | `skills add` fails for one agent                   | That agent has no global skill directory       | Pass `-a` for the agents you use                       |
+| `atry stats` prints `runs: none`                   | The relay directory has no runs                | Create a run, then run `atry stats` again              |
+| `atry doctor` exits 1                              | One check failed                               | Read the failed line and fix that check                |
 
 `atry` errors name a field path, for example `tasks[0].deps[0]: unknown id T9`.
 Fix that field and run the verb again.

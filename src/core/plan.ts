@@ -22,7 +22,7 @@ import { type RunState } from "./reduce.js";
 import { outsidePaths } from "./scope.js";
 import { type PlanIndex, planIndexSchema, type TasksInput, tasksInputSchema } from "./tasks.js";
 import { schemaVersion, taskIdSchema } from "./vocab.js";
-import { runGitCwd } from "./worktree.js";
+import { runGitCwd, taskWorktreeBase } from "./worktree.js";
 
 const maxPlanTasks = 8;
 
@@ -252,8 +252,11 @@ export async function taskDone(
     }
     const cwd = await runGitCwd(runDir, loaded.run);
     const policy = await readPolicy(cwd, loaded.run.base);
+    const taskBase = await taskWorktreeBase(runDir, loaded.run, id);
+    const diffCwd = taskBase?.cwd ?? cwd;
+    const diffFrom = taskBase?.from ?? from;
     const outside = outsidePaths(
-      await changedPaths(cwd, from, await workTree(cwd)),
+      await changedPaths(diffCwd, diffFrom, await workTree(diffCwd)),
       item.files,
       otherFiles(index, loaded.run.state, loaded.events, id),
     );

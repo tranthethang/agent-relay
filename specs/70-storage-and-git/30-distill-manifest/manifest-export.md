@@ -35,3 +35,16 @@ atry distill <run> [--include-test-logs]
 ```
 
 - Can be executed at any lifecycle stage without modifying run state.
+
+## Verify
+
+```bash
+atry distill verify <run>
+```
+
+- Read `90-distill/manifest.json`. Do not write that file.
+- Recompute the byte size and the SHA-256 of each listed file.
+- Exit 0 when every file matches.
+- Exit 1 when a file is missing or the size or hash differs. Name each path.
+- Exit 3 when the manifest is missing.
+- `--json` keeps `schema` 1. The object includes `ok`, `files`, `missing`, and `mismatched`.

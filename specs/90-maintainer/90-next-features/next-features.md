@@ -194,6 +194,13 @@ by deleting `.agent-relay/`.
 Decision: no work now. The phase constraints accept deleting old runs. Revisit
 when the repo has other users or when run history feeds the memory feature.
 
+## Shipped commands
+
+`atry stats` reads events for each run.
+It reports stage time, review rounds, waivers, failed tests, and drift.
+`atry doctor` checks Node, git, the CLI version, skills, policy, and PATH.
+Skip rate, reviewer delta, and per-tool counts stay later.
+
 ## Future, not planned
 
 These depend on the work above. Do not start them yet.
@@ -215,8 +222,6 @@ These depend on the work above. Do not start them yet.
 - Event `seq`, a hash chain on events (`prev`, the SHA-256 of the previous
   line), and `atry verify` to report hand edits.
 - Layout version and `atry archive` (N7).
-- Stats across runs from events: stage time, skip rate, reviewer delta,
-  review rounds, per tool and model.
 
 ## Order
 

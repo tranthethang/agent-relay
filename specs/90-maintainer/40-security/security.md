@@ -1,5 +1,8 @@
 # Security and trust boundaries
 
+The public file is [`SECURITY.md`](../../../SECURITY.md). It names the
+supported versions, the reporting path, and the trust limits in this file.
+
 This project is skill text plus a CLI. It is not a hardened supply-chain
 product.
 

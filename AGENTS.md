@@ -78,7 +78,9 @@ npm run sync:check
 npm run evals
 ```
 
-`npm run coverage` exits non-zero when a bar misses. Overall coverage for
+`npm run coverage:report` exits non-zero when a bar misses. It does not call Sonar.
+`npm run coverage:sonar` runs that report, then checks duplication when `SONAR_HOST_URL` is set.
+Overall coverage for
 `src/**` and `scripts/maint/**` is at least 95%. That figure is covered lines
 plus covered branches, divided by the line total plus the branch total.
 Per-file coverage in those trees is above 90%. A file at 90.0% misses. A file

@@ -61,7 +61,8 @@ export function parseSkillTool(value: string): SkillTool {
 }
 
 export function bundledSkillNames(root: string): string[] {
-  const names = readdirSync(root).filter((name) => name.startsWith("atry-")).sort();
+  const names = readdirSync(root).filter((name) => name.startsWith("atry-"))
+    .sort((left, right) => left.localeCompare(right));
   const bundles = names.filter((name) => existsSync(join(root, name, "SKILL.md")));
   if (bundles.length === 0) {
     throw new RelayError("not_found", "bundled skills are missing", "skills");
@@ -132,11 +133,12 @@ export function statusSkills(input: {
   const source = input.root ?? bundledSkillsRoot();
   const installed = input.installed ?? packageVersion();
   const names = bundledSkillNames(source);
-  const dirs = input.dir !== undefined
-    ? [resolve(input.dir)]
-    : input.tool !== undefined
-    ? [resolve(join(homedir(), skillToolDirs[input.tool]))]
-    : [...new Set(Object.values(skillToolDirs))].map((dir) => resolve(join(homedir(), dir)));
+  let dirs: string[];
+  if (input.dir !== undefined) dirs = [resolve(input.dir)];
+  else if (input.tool !== undefined) dirs = [resolve(join(homedir(), skillToolDirs[input.tool]))];
+  else {
+    dirs = [...new Set(Object.values(skillToolDirs))].map((dir) => resolve(join(homedir(), dir)));
+  }
   const rows = dirs.map((dir) => ({
     dir,
     bundles: names.map((name) => checkBundle(dir, name, installed)),

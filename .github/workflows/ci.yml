@@ -62,5 +62,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Coverage report
+        if: runner.os == 'Linux'
+        run: npm run coverage:report
+
       - name: Run skill evals
         run: npm run evals

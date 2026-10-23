@@ -1,6 +1,6 @@
 ---
 name: atry-cross-review
-description: Use when the user asks for a second opinion or an independent review of an agent-relay change.
+description: "Give an independent review of an agent-relay change. Use this when a self review is done and the user wants a second review of the run. Do not use it to implement the change, to skip the self review, or to close the run without a decision."
 requires-atry: ">=0.10.7"
 ---
 

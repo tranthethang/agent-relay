@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { type EventLine } from "../src/core/event.js";
 import { explainNext, formatAge, nextActions, nextStep } from "../src/core/next.js";
 import { reduceEvents } from "../src/core/reduce.js";
+import { type PlanIndex } from "../src/core/tasks.js";
 import { runCli, withTempDir } from "./helper.js";
 import { plannedState, runCache, seedRelay, seedRun } from "./seed.js";
 
@@ -264,5 +265,36 @@ test("atry next covers each lifecycle", async () => {
       expect(text.stdout).toContain("state:");
       expect(text.stdout).toContain("actions:");
     }
+  });
+});
+
+test("next recommends integrate for a done task that still has a worktree", () => {
+  const events = [
+    ev("run", "created"),
+    ev("plan", "approved"),
+    ev("implement", "started"),
+    { ...ev("implement", "task-done"), task: "T1" },
+    { ...ev("implement", "task-started"), task: "T2" },
+  ];
+  const state = reduceEvents(events);
+  const index = {
+    schema: 1,
+    tasks: [
+      { id: "T1", title: "First", deps: [], files: ["a.ts"], path: "10-plan/T1.md" },
+      { id: "T2", title: "Second", deps: ["T1"], files: ["b.ts"], path: "10-plan/T2.md" },
+    ],
+  } satisfies PlanIndex;
+  const command = "atry integrate 1792208725 T1";
+  expect(nextStep("1792208725", state, events, undefined, index, ["T1", "T2"])).toBe(command);
+  expect(nextActions("1792208725", state, events, command, undefined, index, ["T1", "T2"])).toEqual(
+    [
+      command,
+    ],
+  );
+  expect(explainNext(command).actions[0]).toMatchObject({
+    kind: "integrate",
+    args: { run: "1792208725", task: "T1" },
+    read: ["10-plan/overview.md", "10-plan/T1.md"],
+    reason: "A done task still has a worktree.",
   });
 });

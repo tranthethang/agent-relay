@@ -1,6 +1,6 @@
 ---
 name: atry-implement
-description: Use when the user asks to implement, build, or code from an existing agent-relay plan.
+description: "Carry out an approved agent-relay plan with atry. Use this when the user asks to implement a run, to build the planned tasks, or to code from that plan. Do not use it to invent a new plan, to review the result, or to close the run."
 requires-atry: ">=0.10.7"
 ---
 
@@ -44,6 +44,8 @@ When the user answers `y` for approve, run `atry approve <run> --via confirm`.
 When the `yes` token is that answer, run `atry approve <run> --via arg`.
 When `kind` is `review-new`, `review-done`, `close`, or `decide`, stop. A review skill closes the run and asks the user before a soft close passes `--ack-warnings`.
 When `kind` is `stage-start`, run `atry stage start <run> implement --tool <tool>`.
+When `kind` is `integrate`, run `atry integrate <run> <task>`.
+When that command prints `worktree: kept`, stop and show the reason.
 When `kind` is `stage-done`, run `atry stage done <run> implement --tool <tool>`.
 When `stage done` refuses, read the paths in the message.
 When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.

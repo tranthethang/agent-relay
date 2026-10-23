@@ -1,6 +1,6 @@
 ---
 name: atry-brainstorm
-description: Use when the user invokes atry-brainstorm or asks only to investigate or discuss without file changes.
+description: "Investigate an agent-relay question before any file change. Use this when the user wants to discuss a run, a plan, or a design and does not want edits yet. Do not use it to implement code, to write the plan file, or to review a finished change."
 requires-atry: ">=0.10.7"
 ---
 

@@ -24,15 +24,16 @@ CI does the same. CI does not
 prove that an agent follows a skill.
 
 `.githooks/pre-commit` runs `npm run build`. When that exits zero, it runs
-`npm run coverage`. When coverage exits zero, it runs `dprint check`. The hook
+`npm run coverage:report`. When that exits zero, it runs `dprint check`. The hook
 exits non-zero when one command exits non-zero. Enable it with
-`git config core.hooksPath .githooks`. `npm run coverage` needs `sonar-scanner`
-on `PATH`, plus `SONAR_HOST_URL` and `SONAR_TOKEN`.
+`git config core.hooksPath .githooks`. The hook does not call Sonar.
 
-`npm run coverage` applies four bars to `src/**` and `scripts/maint/**`:
+`npm run coverage:report` applies three bars to `src/**` and `scripts/maint/**`:
 overall lines plus branches at least 95%, each file's lines plus branches above
-90%, each file's branches at least 90%, and duplicated lines density at most 1%.
-A file at exactly 90% branches passes. A file with no branches passes.
+90%, and each file's branches at least 90%. A file at exactly 90% branches passes.
+A file with no branches passes. `npm run coverage:sonar` then checks duplicated
+lines density. The density must be at most 1%. That command needs `sonar-scanner`
+on `PATH`, plus `SONAR_HOST_URL` and `SONAR_TOKEN`. Linux CI runs the report.
 
 ## Skill evals
 

@@ -2,6 +2,7 @@
 
 Constraints for editing this repo are in [`AGENTS.md`](AGENTS.md). Maintainer
 guides start at [`specs/90-maintainer/00-index/index.md`](specs/90-maintainer/00-index/index.md).
+Report a vulnerability through [`SECURITY.md`](SECURITY.md).
 
 ## Quick start
 
@@ -52,7 +53,7 @@ npm run evals
 
 CI runs `npm test` on macOS, Linux, and Windows. It also checks formatting
 and skill-reference sync. It also runs `npm run evals`, the deterministic skill
-layer under `evals/`.
+layer under `evals/`. Linux CI also runs `npm run coverage:report`.
 
 ## Formatting
 
@@ -63,7 +64,9 @@ make fmt
 make fmt-check
 ```
 
-`sonar-scanner` is required by `npm run coverage`. Set `SONAR_HOST_URL` and
+`npm run coverage:report` checks the coverage bars. It does not call Sonar.
+`npm run coverage:sonar` runs that report, then the duplication check.
+`sonar-scanner` is required by `npm run coverage:sonar`. Set `SONAR_HOST_URL` and
 `SONAR_TOKEN` in the environment. Do not commit the token.
 
 `dprint.json` formats TypeScript, markdown, and yaml. Edit convention parts
