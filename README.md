@@ -52,7 +52,7 @@ only the content differs, `mismatch` when the floor is too high, and `missing`
 when `SKILL.md` is absent. With no `--tool` or `--dir`, it checks the tool
 directories that exist. `--all` checks every known directory. It exits 1 on a
 failed bundle and prints the exact install command, such as
-`npm i -g @tranthethang/agent-relay@0.10.7`.
+`npm i -g @tranthethang/agent-relay@X.Y.Z`.
 
 `atry doctor` checks the installed bundle content and the `atry` version on
 `PATH`. It fails when a bundle is stale or missing, or when `PATH` runs a
@@ -61,8 +61,8 @@ different base version from the running CLI.
 Upgrade the CLI first, then run `atry skills install` again so the installed
 bundle text matches the new CLI. Do not install an older CLI to clear a skill
 floor: a bundle whose `requires-atry` is `>=0.10.7` needs `0.10.7` or newer.
-An `@latest` tag that still points at `0.10.6` cannot satisfy that floor, so
-install `@0.10.7` by name.
+When the `@latest` tag is older than that floor, install the exact version by
+name.
 
 A dev build is only for a local build from this repository. `atry preflight`
 refuses a `-dev` version unless you pass `--allow-dev` or set `ATRY_DEV=1`.
@@ -160,7 +160,7 @@ atry distill verify <run>
 `atry approve` and `atry close` are for the person who coordinates the run.
 `atry preflight --requires ">=X.Y.Z"` exits 0 when the installed version meets that range.
 A lower version prints the exact install command for that range, such as
-`npm i -g @tranthethang/agent-relay@0.10.7`, and exits 1.
+`npm i -g @tranthethang/agent-relay@X.Y.Z`, and exits 1.
 A dev build is refused the same way. Add `--allow-dev`, or set `ATRY_DEV=1`,
 only when you dogfood a build from this repo.
 `atry stats` reads `events.jsonl` across runs. `atry stats <run>` reads one run.
