@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import { requiredVersion, requiresFits, sharedRequires } from "./skill-text.js";
+import {
+  requiredVersion,
+  requiresFits,
+  sharedRequires,
+  skillMinimumVersion,
+} from "./skill-text.js";
 
 const partial = readFileSync(
   new URL("../specs/80-skills-integration/00-skill-bridge/preflight.md", import.meta.url),
@@ -18,7 +23,16 @@ test("preflight asks for atry preflight and context", () => {
   expect(partial).not.toMatch(/\b(mktemp|trap|heredoc|grep|sed)\b/);
   expect(partial).not.toContain("```");
   expect(partial).not.toContain("verify.sh");
-  expect(partial).not.toContain("file-conventions");
+});
+
+test("preflight points at file conventions and explains dev builds", () => {
+  expect(partial).toContain("Read `references/file-conventions.md` before you edit a run file.");
+  expect(partial).toContain("--allow-dev");
+  expect(partial).toContain("ATRY_DEV=1");
+  expect(partial).toContain("do not use a dev build for a real run");
+  expect(partial).toContain(
+    "A claim result with `worktree.path` takes precedence over `run.worktree.path`.",
+  );
 });
 
 test("requires-atry values must match", () => {
@@ -31,8 +45,8 @@ test("requires-atry values must match", () => {
 });
 
 test("requires-atry uses X.M.Z and is not higher than the release", () => {
-  expect(requiredVersion()).toBe("0.1.0");
-  expect(requiresFits(">=0.1.0", "0.1.0")).toBe(true);
-  expect(requiresFits(">=0.1.0", "0.10.0")).toBe(true);
-  expect(requiresFits(">=0.11.0", "0.10.0")).toBe(false);
+  expect(requiredVersion()).toBe(skillMinimumVersion);
+  expect(requiresFits(">=0.10.7", "0.10.7")).toBe(true);
+  expect(requiresFits(">=0.10.7", "0.10.6")).toBe(false);
+  expect(requiresFits(">=0.11.0", "0.10.7")).toBe(false);
 });

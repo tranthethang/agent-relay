@@ -14,7 +14,7 @@ test("atry next --json snapshots each lifecycle", async () => {
     {
       lifecycle: "planned",
       events: [ev("run", "created")],
-      command: "atry approve",
+      command: "atry plan new",
     },
     {
       lifecycle: "approved",
@@ -75,21 +75,25 @@ test("atry next --json snapshots each lifecycle", async () => {
         {
           "actions": [
             {
-              "command": "atry approve 1792208700",
-              "needsHuman": true,
+              "args": {
+                "run": "1792208700",
+              },
+              "command": "atry plan new 1792208700",
+              "kind": "plan-new",
+              "needsHuman": false,
               "read": [
-                "10-plan/overview.md",
+                "10-plan/",
               ],
-              "reason": "The plan is waiting for approval.",
+              "reason": "The plan has no overview or task input.",
             },
           ],
-          "command": "atry approve 1792208700",
-          "needsHuman": true,
+          "command": "atry plan new 1792208700",
+          "needsHuman": false,
           "read": [
-            "10-plan/overview.md",
+            "10-plan/",
           ],
-          "reason": "The plan is waiting for approval.",
-          "recommendation": "atry approve 1792208700",
+          "reason": "The plan has no overview or task input.",
+          "recommendation": "atry plan new 1792208700",
           "schema": 1,
           "state": {
             "approved": false,
@@ -100,15 +104,26 @@ test("atry next --json snapshots each lifecycle", async () => {
         {
           "actions": [
             {
+              "args": {
+                "run": "1792208701",
+                "stage": "implement",
+              },
               "command": "atry stage start 1792208701 implement",
+              "kind": "stage-start",
               "needsHuman": false,
-              "read": [],
+              "read": [
+                "10-plan/overview.md",
+                "10-plan/index.json",
+              ],
               "reason": "Implement has not started.",
             },
           ],
           "command": "atry stage start 1792208701 implement",
           "needsHuman": false,
-          "read": [],
+          "read": [
+            "10-plan/overview.md",
+            "10-plan/index.json",
+          ],
           "reason": "Implement has not started.",
           "recommendation": "atry stage start 1792208701 implement",
           "schema": 1,
@@ -121,16 +136,24 @@ test("atry next --json snapshots each lifecycle", async () => {
         {
           "actions": [
             {
+              "args": {
+                "run": "1792208702",
+              },
               "command": "atry list 1792208702",
+              "kind": "none",
               "needsHuman": false,
-              "read": [],
-              "reason": "The next command comes from the run state.",
+              "read": [
+                "10-plan/index.json",
+              ],
+              "reason": "No pending task is ready to start.",
             },
           ],
           "command": "atry list 1792208702",
           "needsHuman": false,
-          "read": [],
-          "reason": "The next command comes from the run state.",
+          "read": [
+            "10-plan/index.json",
+          ],
+          "reason": "No pending task is ready to start.",
           "recommendation": "atry list 1792208702",
           "schema": 1,
           "state": {
@@ -142,16 +165,27 @@ test("atry next --json snapshots each lifecycle", async () => {
         {
           "actions": [
             {
+              "args": {
+                "review": "self",
+                "run": "1792208703",
+              },
               "command": "atry review new 1792208703 self",
+              "kind": "review-new",
               "needsHuman": false,
-              "read": [],
-              "reason": "Self-review has not started.",
+              "read": [
+                "10-plan/overview.md",
+                "20-implement/",
+              ],
+              "reason": "No self-review covers the current tree.",
             },
           ],
           "command": "atry review new 1792208703 self",
           "needsHuman": false,
-          "read": [],
-          "reason": "Self-review has not started.",
+          "read": [
+            "10-plan/overview.md",
+            "20-implement/",
+          ],
+          "reason": "No self-review covers the current tree.",
           "recommendation": "atry review new 1792208703 self",
           "schema": 1,
           "state": {
@@ -219,23 +253,50 @@ test("approve and close previews snapshot their prompt text", async () => {
         })
       }\n`,
     );
+    await writeFile(
+      join(run.path, "10-plan/T1.md"),
+      "# T1: One\n\n## Detail\n\nDo the task.\n\n## Acceptance\n\n- It works.\n",
+    );
     const approveText = await runCli(["approve", run.path, "--preview"], dir);
     const approveJson = await runCli(["approve", run.path, "--preview", "--json"], dir);
     expect(approveText.stdout).toMatchInlineSnapshot(`
       "Goal:
       Ship the preview.
 
+      Non-goals:
+
+
+      Constraints:
+
+
       Decisions:
       - Keep the headings exact.
 
       tasks: 1
+      - T1: One
+      ready: yes
       "
     `);
     expect(JSON.parse(approveJson.stdout)).toMatchInlineSnapshot(`
       {
+        "constraints": "",
         "decisions": "- Keep the headings exact.",
         "goal": "Ship the preview.",
+        "missing": [],
+        "nonGoals": "",
+        "ready": true,
         "schema": 1,
+        "taskFiles": [
+          {
+            "acceptance": "- It works.",
+            "acceptanceOk": true,
+            "detail": "Do the task.",
+            "detailOk": true,
+            "files": [],
+            "id": "T1",
+            "title": "One",
+          },
+        ],
         "tasks": 1,
       }
     `);

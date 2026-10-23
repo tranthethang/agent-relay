@@ -12,6 +12,7 @@ import { reviewJsonSchema } from "./review.js";
 import { type RunJson } from "./run.js";
 import { indexForImplement, type PlanIndex } from "./tasks.js";
 import { schemaVersion } from "./vocab.js";
+import { openTaskWorktrees } from "./worktree.js";
 
 export type StatusRow = {
   name: string;
@@ -83,11 +84,23 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
       const loaded = await rebuildRun(runDir);
       if (loaded.warning !== null) warnings.push(`${name}: ${loaded.warning}`);
       const integrity = await safeReviewIntegrity(runDir, loaded.run.base, loaded.events);
-      const reviews = await statusReviews(runDir, loaded.events, integrity);
+      const evidence = await statusReviews(runDir, loaded.events, integrity);
+      appendReviewWarnings(warnings, name, evidence.warnings);
+      const reviews = evidence.reviews;
       const index = loaded.run.state.lifecycle === "implementing"
         ? await indexForImplement(runDir, loaded.run.state)
         : null;
-      const next = nextStep(loaded.run.id, loaded.run.state, loaded.events, reviews, index);
+      const integrate = index === null
+        ? []
+        : await openTaskWorktrees(runDir, loaded.run, index.tasks.map((task) => task.id));
+      const next = nextStep(
+        loaded.run.id,
+        loaded.run.state,
+        loaded.events,
+        reviews,
+        index,
+        integrate,
+      );
       const actions = nextActions(
         loaded.run.id,
         loaded.run.state,
@@ -95,6 +108,7 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
         next,
         reviews,
         index,
+        integrate,
       );
       runs.push(rowFrom({
         name,
@@ -120,15 +134,32 @@ export async function statusList(relayDir: string, nowMs: number): Promise<Statu
   return result;
 }
 
+function appendReviewWarnings(warnings: string[], name: string, found: readonly string[]): void {
+  for (const warning of found) {
+    warnings.push(`${name}: ${warning}`);
+    process.stderr.write(`warning: ${name}: ${warning}\n`);
+  }
+}
+
 export async function statusDetail(runDir: string, nowMs: number): Promise<StatusDetail> {
   const loaded = await rebuildRun(runDir);
   const run = loaded.run;
   const integrity = await safeReviewIntegrity(runDir, run.base, loaded.events);
-  const reviews = await statusReviews(runDir, loaded.events, integrity);
+  const evidence = await statusReviews(runDir, loaded.events, integrity);
+  const reviews = evidence.reviews;
+  const warnings: string[] = [];
+  if (loaded.warning !== null) warnings.push(loaded.warning);
+  for (const warning of evidence.warnings) {
+    warnings.push(warning);
+    process.stderr.write(`warning: ${warning}\n`);
+  }
   const index = run.state.lifecycle === "implementing"
     ? await indexForImplement(runDir, run.state)
     : null;
-  const next = nextStep(run.id, run.state, loaded.events, reviews, index);
+  const integrate = index === null
+    ? []
+    : await openTaskWorktrees(runDir, run, index.tasks.map((task) => task.id));
+  const next = nextStep(run.id, run.state, loaded.events, reviews, index, integrate);
   const detail: StatusDetail = {
     schema: schemaVersion,
     name: basename(runDir),
@@ -150,13 +181,14 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
       next,
       reviews,
       index,
+      integrate,
     ),
     reviews,
     actors: runActors(loaded.events),
     drift: driftCount(loaded.events),
   };
   if (run.from !== undefined) detail.from = run.from;
-  if (loaded.warning !== null) detail.warnings = [loaded.warning];
+  if (warnings.length > 0) detail.warnings = warnings;
   return detail;
 }
 
@@ -190,12 +222,32 @@ async function statusReviews(
   runDir: string,
   events: readonly EventLine[],
   integrity: ReviewIntegrity,
-): Promise<StatusReviews> {
-  return {
+): Promise<{ reviews: StatusReviews; warnings: string[] }> {
+  const warnings: string[] = [];
+  const reviews: StatusReviews = {
     ...integrity,
-    self: await reviewEvidenceFor(runDir, events, "self"),
-    cross: await reviewEvidenceFor(runDir, events, "cross"),
+    self: await safeReviewEvidence(runDir, events, "self", warnings),
+    cross: await safeReviewEvidence(runDir, events, "cross", warnings),
   };
+  return { reviews, warnings };
+}
+
+// A review file the CLI cannot read is reported, not fatal: the rest of the run still renders.
+async function safeReviewEvidence(
+  runDir: string,
+  events: readonly EventLine[],
+  kind: "self" | "cross",
+  warnings: string[],
+): Promise<ReviewEvidence | null> {
+  try {
+    return await reviewEvidenceFor(runDir, events, kind);
+  } catch (error) {
+    if (!(error instanceof RelayError)) throw error;
+    warnings.push(
+      error.fieldPath.length === 0 ? error.message : `${error.fieldPath}: ${error.message}`,
+    );
+    return null;
+  }
 }
 
 export function statusListText(result: StatusList): string {
@@ -296,7 +348,10 @@ export async function reviewEvidenceFor(
   const parsed = reviewJsonSchema.safeParse(value);
   if (!parsed.success) {
     const issue = fromZod(parsed.error);
-    throw new RelayError("validation", issue.message, path);
+    const message = issue.fieldPath.length === 0
+      ? issue.message
+      : `${issue.fieldPath}: ${issue.message}`;
+    throw new RelayError("validation", message, path);
   }
   const stage = kind === "self" ? "self-review" : "cross-review";
   const start = [...events].reverse().find((event) =>

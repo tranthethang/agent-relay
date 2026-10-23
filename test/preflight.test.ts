@@ -1,12 +1,32 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { RelayError } from "../src/core/error.js";
-import { installCommand, preflightResult, versionMeets } from "../src/core/preflight.js";
+import {
+  installCommandFor,
+  preflightResult,
+  preflightText,
+  versionMeets,
+} from "../src/core/preflight.js";
 import { runCli, withTempGitRepo } from "./helper.js";
 
-const installed = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+// `npm test` builds first, so the CLI reports the dev build version.
+const built = JSON.parse(
+  readFileSync(new URL("../dist/package.json", import.meta.url), "utf8"),
+) as {
   version: string;
 };
+const base = built.version.replace(/-dev$/, "");
+
+async function withDevEnv<T>(fn: () => Promise<T>): Promise<T> {
+  const previous = process.env.ATRY_DEV;
+  process.env.ATRY_DEV = "1";
+  try {
+    return await fn();
+  } finally {
+    if (previous === undefined) delete process.env.ATRY_DEV;
+    else process.env.ATRY_DEV = previous;
+  }
+}
 
 test("an equal version meets the range", () => {
   expect(versionMeets("0.10.2", ">=0.10.2")).toBe(true);
@@ -33,39 +53,101 @@ test("a bad range is a usage error", () => {
   }
 });
 
-test("preflight exits 0 when the installed version is equal", async () => {
+test("preflightResult refuses a dev build without consent", () => {
+  expect(preflightResult("0.10.7-dev", `>=${base}`)).toEqual({
+    schema: 1,
+    ok: false,
+    installed: "0.10.7-dev",
+    required: `>=${base}`,
+    dev: true,
+  });
+  expect(preflightResult("0.10.7-dev", ">=0.1.0", true).ok).toBe(true);
+  expect(preflightResult("0.10.7-dev", ">=99.0.0", true).ok).toBe(false);
+});
+
+test("preflightResult reads a release version without a marker", () => {
+  expect(preflightResult(base, `>=${base}`)).toEqual({
+    schema: 1,
+    ok: true,
+    installed: base,
+    required: `>=${base}`,
+  });
+});
+
+test("installCommandFor names the required release", () => {
+  expect(installCommandFor(">=0.10.7")).toBe("npm i -g @tranthethang/agent-relay@0.10.7");
+  expect(() => installCommandFor("0.10.7")).toThrow(RelayError);
+  expect(preflightText(preflightResult("0.10.6", ">=0.10.7"))).toBe(
+    "requires: >=0.10.7\ninstall: npm i -g @tranthethang/agent-relay@0.10.7\n",
+  );
+  expect(preflightText(preflightResult("0.10.7", ">=0.10.7"))).toBe("");
+});
+
+test("preflight refuses the dev build without consent", async () => {
   await withTempGitRepo(async (dir) => {
-    const result = await runCli(["preflight", "--requires", `>=${installed.version}`], dir);
-    expect(result.code).toBe(0);
-    expect(result.stdout).toBe("");
+    const result = await runCli(["preflight", "--requires", `>=${base}`], dir);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe(
+      `requires: >=${base}\ninstall: ${installCommandFor(`>=${base}`)}\n`,
+    );
     expect(result.stderr).toBe("");
+  });
+});
+
+test("preflight accepts the dev build with ATRY_DEV or --allow-dev", async () => {
+  await withTempGitRepo(async (dir) => {
+    const viaEnv = await withDevEnv(() => runCli(["preflight", "--requires", `>=${base}`], dir));
+    expect(viaEnv.code).toBe(0);
+    expect(viaEnv.stdout).toBe("");
+    const viaFlag = await runCli(["preflight", "--requires", `>=${base}`, "--allow-dev"], dir);
+    expect(viaFlag.code).toBe(0);
+    expect(viaFlag.stdout).toBe("");
   });
 });
 
 test("preflight exits usage and prints the install command when the version is lower", async () => {
   await withTempGitRepo(async (dir) => {
-    const result = await runCli(["preflight", "--requires", ">=99.1.0"], dir);
+    const result = await runCli(["preflight", "--requires", ">=99.1.0", "--allow-dev"], dir);
     expect(result.code).toBe(1);
-    expect(result.stdout).toBe(`${installCommand}\n`);
+    expect(result.stdout).toBe(
+      "requires: >=99.1.0\ninstall: npm i -g @tranthethang/agent-relay@99.1.0\n",
+    );
     expect(result.stderr).toBe("");
   });
 });
 
-test("preflight --json reports ok, installed, and required", async () => {
+test("preflight --json reports ok, installed, required, and dev", async () => {
   await withTempGitRepo(async (dir) => {
-    const met = await runCli(["preflight", "--requires", `>=${installed.version}`, "--json"], dir);
+    const met = await runCli(
+      ["preflight", "--requires", `>=${base}`, "--allow-dev", "--json"],
+      dir,
+    );
     expect(met.code).toBe(0);
     expect(JSON.parse(met.stdout)).toEqual(
-      preflightResult(installed.version, `>=${installed.version}`),
+      preflightResult(built.version, `>=${base}`, true),
     );
 
-    const missed = await runCli(["preflight", "--requires", ">=99.1.0", "--json"], dir);
+    const refused = await runCli(["preflight", "--requires", `>=${base}`, "--json"], dir);
+    expect(refused.code).toBe(1);
+    expect(JSON.parse(refused.stdout)).toEqual({
+      schema: 1,
+      ok: false,
+      installed: built.version,
+      required: `>=${base}`,
+      dev: true,
+    });
+
+    const missed = await runCli(
+      ["preflight", "--requires", ">=99.1.0", "--allow-dev", "--json"],
+      dir,
+    );
     expect(missed.code).toBe(1);
     expect(JSON.parse(missed.stdout)).toEqual({
       schema: 1,
       ok: false,
-      installed: installed.version,
+      installed: built.version,
       required: ">=99.1.0",
+      dev: true,
     });
   });
 });

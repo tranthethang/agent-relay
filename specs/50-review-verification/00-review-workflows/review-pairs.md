@@ -41,7 +41,7 @@ Specific observations, defects fixed, and open questions:
   "kind": "self",
   "tool": "antigravity",
   "model": "gemini-3.8-flash",
-  "fixed": ["Fixed edge case handling in token parsing"],
+  "fixed": 1,
   "open": [
     {
       "q": "Should cache eviction use LRU or FIFO?",
@@ -51,3 +51,18 @@ Specific observations, defects fixed, and open questions:
   ]
 }
 ```
+
+`fixed` is a count of defects fixed in that round, not a list.
+
+## Close Rules for Pairs
+
+- An open question in the latest review fails `atry close` with field `open` and exit 4. `--ack-open` accepts the question.
+- A reviewer delta in the latest review appears as `changes made during the latest review`. A strict close needs `--ack-fixes`. A soft close needs `--ack-warnings`.
+- A cross-review delta needs a self-review completed after it. `atry close` fails with field `review.self` until that self-review exists.
+
+## Deprecated Keys
+
+`tests` was removed from the JSON metadata. An older run may still carry it.
+The CLI reads the key, ignores its value, and never writes it in a new pair.
+Every other unknown key makes the parse fail, and `atry status` reports the
+file with a warning instead of hiding the run.

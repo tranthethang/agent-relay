@@ -1,0 +1,316 @@
+{
+  "schema": 1,
+  "maxTokens": 4500,
+  "maxSteps": 12,
+  "scenarios": [
+    {
+      "name": "normal-plan",
+      "skill": "atry-plan",
+      "summary": "A plan creates a run, records the stage start, and fills the plan folder.",
+      "steps": [
+        {
+          "argv": ["preflight", "--requires", ">=0.10.7"],
+          "exit": 0,
+          "stdout": {
+            "schema": 1,
+            "ok": true,
+            "installed": "0.10.7",
+            "required": ">=0.10.7"
+          }
+        },
+        {
+          "argv": [
+            "run",
+            "new",
+            "--slug",
+            "docs-tidy",
+            "--title",
+            "Tidy the install docs"
+          ],
+          "exit": 0,
+          "stdout": {
+            "schema": 1,
+            "path": ".agent-relay/20261022-1792661001-docs-tidy",
+            "name": "20261022-1792661001-docs-tidy",
+            "id": "1792661001",
+            "ymd": "20261022",
+            "slug": "docs-tidy",
+            "title": "Tidy the install docs",
+            "base": "2dea9637d1689264e3bdc44e50f7de7b84c6017e"
+          }
+        },
+        {
+          "argv": [
+            "stage",
+            "start",
+            "1792661001",
+            "plan",
+            "--tool",
+            "unknown",
+            "--model",
+            "deepseek-v4.1-flash-free"
+          ],
+          "exit": 0,
+          "stdout": "stage: plan\naction: started\nlifecycle: planned\n"
+        },
+        {
+          "argv": ["plan", "new", "1792661001"],
+          "exit": 0,
+          "stdout": ".agent-relay/20261022-1792661001-docs-tidy/10-plan/overview.md\n.agent-relay/20261022-1792661001-docs-tidy/10-plan/tasks.input.json\n"
+        },
+        {
+          "argv": ["plan", "done", "1792661001"],
+          "exit": 0,
+          "stdout": "tasks: T1\nindex: .agent-relay/20261022-1792661001-docs-tidy/10-plan/index.json\n"
+        }
+      ]
+    },
+    {
+      "name": "out-of-scope-edit",
+      "skill": "atry-implement",
+      "summary": "An edit outside the task files refuses the task, then passes with a reason.",
+      "steps": [
+        {
+          "argv": ["next", "1792660551", "--json"],
+          "exit": 0,
+          "stdout": {
+            "schema": 1,
+            "command": "atry task start 1792660551 T1",
+            "recommendation": "atry task start 1792660551 T1",
+            "actions": [
+              {
+                "kind": "task-start",
+                "command": "atry task start 1792660551 T1",
+                "args": {
+                  "run": "1792660551",
+                  "task": "T1"
+                },
+                "requiresSession": true,
+                "reason": "An implement task is still open.",
+                "needsHuman": false,
+                "read": ["10-plan/overview.md", "10-plan/T1.md"]
+              }
+            ],
+            "reason": "An implement task is still open.",
+            "needsHuman": false,
+            "read": ["10-plan/overview.md", "10-plan/T1.md"],
+            "state": {
+              "stage": "implement",
+              "lifecycle": "implementing",
+              "approved": true
+            }
+          }
+        },
+        {
+          "argv": ["task", "start", "1792660551", "T1"],
+          "exit": 0,
+          "stdout": "task: T1\nstatus: in-progress\nimplement: .agent-relay/20261022-1792660551-skill-verification/20-implement/T1.md\n"
+        },
+        {
+          "argv": ["task", "done", "1792660551", "T1"],
+          "exit": 4,
+          "stderr": "files: implement done refused: edits outside task files: evals/run.ts\n"
+        },
+        {
+          "argv": [
+            "task",
+            "done",
+            "1792660551",
+            "T1",
+            "--allow-extra",
+            "the harness holds the runner"
+          ],
+          "exit": 0,
+          "stdout": "task: T1\nstatus: done\nimplement: .agent-relay/20261022-1792660551-skill-verification/20-implement/T1.md\n"
+        }
+      ]
+    },
+    {
+      "name": "lock-timeout",
+      "skill": "atry-implement",
+      "summary": "A held claim refuses a second session, then a steal moves the lock.",
+      "steps": [
+        {
+          "argv": ["claim", "1792660551", "T1", "--session", "alpha"],
+          "exit": 0,
+          "stdout": "task: T1\nstatus: in-progress\nsession: alpha\naction: claimed\nimplement: .agent-relay/20261022-1792660551-skill-verification/20-implement/T1.md\n"
+        },
+        {
+          "argv": ["claim", "1792660551", "T1", "--session", "beta"],
+          "exit": 5,
+          "stderr": "locks/T1.lock: lock held by alpha\n"
+        },
+        {
+          "argv": ["steal", "1792660551", "T1", "--session", "beta", "--ttl", "30"],
+          "exit": 0,
+          "stdout": "task: T1\nstatus: in-progress\nsession: beta\naction: stolen\nimplement: .agent-relay/20261022-1792660551-skill-verification/20-implement/T1.md\n"
+        },
+        {
+          "argv": ["task", "done", "1792660551", "T1", "--session", "beta"],
+          "exit": 0,
+          "stdout": "task: T1\nstatus: done\nimplement: .agent-relay/20261022-1792660551-skill-verification/20-implement/T1.md\n"
+        }
+      ]
+    },
+    {
+      "name": "missing-cli",
+      "skill": "atry-implement",
+      "summary": "A missing atry stops the skill before it changes any file.",
+      "steps": [
+        {
+          "argv": ["preflight", "--requires", ">=0.10.7"],
+          "exit": 127,
+          "stderr": "zsh: command not found: atry\n"
+        }
+      ]
+    },
+    {
+      "name": "open-question",
+      "skill": "atry-self-review",
+      "summary": "A review records the user answer, then completes with the configured tests.",
+      "steps": [
+        {
+          "argv": ["review", "new", "1792660551", "self", "--tool", "unknown", "--model", "deepseek-v4.1-flash-free"],
+          "exit": 0,
+          "stdout": {
+            "schema": 1,
+            "path": ".agent-relay/20261022-1792660551-skill-verification",
+            "markdown": ".agent-relay/20261022-1792660551-skill-verification/30-self-review/01.md",
+            "json": ".agent-relay/20261022-1792660551-skill-verification/30-self-review/01.json",
+            "stage": "self-review",
+            "action": "started",
+            "lifecycle": "reviewing"
+          }
+        },
+        {
+          "argv": ["review", "decide", "1792660551", "Q1", "a"],
+          "exit": 0,
+          "stdout": "review: 30-self-review/01.md\nquestion: Q1\nanswer: a\naction: decided\n"
+        },
+        {
+          "argv": ["review", "done", "1792660551", "self", "--run-tests"],
+          "exit": 0,
+          "stdout": "review: 30-self-review/01.md\nstage: self-review\naction: completed\nlifecycle: reviewing\nhead: 4f96549\nsize: 3 120 4\n"
+        }
+      ]
+    },
+    {
+      "name": "missing-cross-model",
+      "skill": "atry-cross-review",
+      "summary": "A cross-review without a model refuses, then passes with one.",
+      "steps": [
+        {
+          "argv": ["review", "new", "1792660551", "cross", "--tool", "cursor"],
+          "exit": 1,
+          "stderr": "model: cross review requires --model\n"
+        },
+        {
+          "argv": ["review", "new", "1792660551", "cross", "--tool", "cursor", "--model", "opus"],
+          "exit": 0,
+          "stdout": {
+            "schema": 1,
+            "path": ".agent-relay/20261022-1792660551-skill-verification",
+            "markdown": ".agent-relay/20261022-1792660551-skill-verification/40-cross-review/01.md",
+            "json": ".agent-relay/20261022-1792660551-skill-verification/40-cross-review/01.json",
+            "stage": "cross-review",
+            "action": "started",
+            "lifecycle": "reviewing"
+          }
+        }
+      ]
+    },
+    {
+      "name": "close-warning",
+      "skill": "atry-cross-review",
+      "summary": "A soft close shows the warning, then records the acknowledged close.",
+      "steps": [
+        {
+          "argv": ["close", "1792660551", "--preview"],
+          "exit": 0,
+          "stdout": "recommend: n\nopen items\n"
+        },
+        {
+          "argv": ["close", "1792660551", "--via", "confirm", "--ack-warnings"],
+          "exit": 0,
+          "stdout": "lifecycle: closed\n"
+        }
+      ]
+    },
+    {
+      "name": "distill-manifest",
+      "skill": "atry-distill",
+      "summary": "Distill reads the context, then writes the manifest.",
+      "steps": [
+        {
+          "argv": ["context", "1792660551", "--json"],
+          "exit": 0,
+          "stdout": {
+            "schema": 1,
+            "run": {
+              "name": "20261022-1792660551-skill-verification",
+              "path": ".agent-relay/20261022-1792660551-skill-verification",
+              "id": "1792660551",
+              "ymd": "20261022",
+              "slug": "skill-verification",
+              "title": "P1: skill verification and install coherence",
+              "base": "2dea9637d1689264e3bdc44e50f7de7b84c6017e"
+            },
+            "stage": "implement",
+            "lifecycle": "implementing",
+            "approved": true,
+            "tasks": [
+              {
+                "id": "T1",
+                "status": "done",
+                "path": "10-plan/T1.md",
+                "implement": "20-implement/T1.md",
+                "files": ["evals/README.md"]
+              }
+            ],
+            "reviews": { "self": null, "cross": null },
+            "brainstorm": null,
+            "paths": {
+              "plan": ["10-plan/overview.md", "10-plan/T1.md"],
+              "implement": ["20-implement/T1.md"],
+              "self-review": [],
+              "cross-review": [],
+              "distill": ["90-distill/manifest.json"],
+              "run": ["run.json", "events.jsonl"]
+            }
+          }
+        },
+        {
+          "argv": ["distill", "1792660551"],
+          "exit": 0,
+          "stdout": {
+            "schema": 1,
+            "path": ".agent-relay/20261022-1792660551-skill-verification/90-distill/manifest.json",
+            "files": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "brainstorm-question",
+      "skill": "atry-brainstorm",
+      "summary": "A notes write creates the brainstorm, fills it, then validates it.",
+      "steps": [
+        {
+          "argv": ["brainstorm", "new", "--slug", "docs-tidy"],
+          "exit": 0,
+          "stdout": {
+            "schema": 1,
+            "path": ".agent-relay/brainstorms/20261022-docs-tidy",
+            "notes": ".agent-relay/brainstorms/20261022-docs-tidy/notes.md",
+            "open": ".agent-relay/brainstorms/20261022-docs-tidy/open.json"
+          }
+        },
+        {
+          "argv": ["brainstorm", "done", ".agent-relay/brainstorms/20261022-docs-tidy"],
+          "exit": 0,
+          "stdout": "open: 1\n"
+        }
+      ]
+    }
+  ]
+}

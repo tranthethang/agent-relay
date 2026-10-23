@@ -16,7 +16,7 @@ import { writeResult } from "./output.js";
 export function registerClaim(program: Command): void {
   program
     .command("claim")
-    .description("Claim a task for one session")
+    .description("Claim a task. With worktree.enabled, add one worktree and branch")
     .argument("<run>", "run id, slug, name, or path")
     .argument("<task>", "task id")
     .requiredOption("--session <tag>", "session tag")
@@ -27,7 +27,7 @@ export function registerClaim(program: Command): void {
 
   program
     .command("release")
-    .description("Release a claimed task")
+    .description("Release a claimed task and remove a clean task worktree")
     .argument("<run>", "run id, slug, name, or path")
     .argument("<task>", "task id")
     .requiredOption("--session <tag>", "session tag")

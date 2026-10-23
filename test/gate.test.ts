@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
+import { gitCommit, reachReview, runCli, withTempGitRepo, writeReadyPlan } from "./helper.js";
 
 test("implement start without approval exits 4", async () => {
   await withTempGitRepo(async (dir) => {
@@ -75,7 +75,12 @@ test("close requires policy reviews and matching review trees", async () => {
     expect((await runCli(["review", "done", run, "cross"], dir)).code).toBe(0);
     const delta = await runCli(["close", run], dir);
     expect(delta.code).toBe(4);
-    expect(delta.stderr).toContain("unacknowledged fixes");
+    expect(delta.stderr).toContain("no later self-review");
+    const unreviewed = await runCli(["close", run, "--ack-fixes"], dir);
+    expect(unreviewed.code).toBe(4);
+    expect(unreviewed.stderr).toContain("no later self-review");
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    expect((await runCli(["review", "done", run, "self"], dir)).code).toBe(0);
     const closed = await runCli(["close", run, "--ack-fixes"], dir);
     expect(closed.code).toBe(0);
   });
@@ -104,6 +109,7 @@ test("stage and approve verbs follow the plan state diagram", async () => {
       expect(result.code).toBe(4);
       expect(result.stderr).toContain(message);
     }
+    await writeReadyPlan(run.path);
     await runCli(["approve", run.path, "--via", "arg"], dir);
     const twice = await runCli(["approve", run.path, "--via", "arg"], dir);
     expect(twice.code).toBe(4);

@@ -83,7 +83,7 @@ export function registerLifecycle(program: Command): void {
     .description("Record plan approval")
     .argument("[run]", "run id, slug, name, or path")
     .option("--via <via>", "confirm or arg")
-    .option("--preview", "print Goal, Decisions, and the task count")
+    .option("--preview", "print Goal, Non-goals, Constraints, Decisions, and the tasks")
     .action(async (
       run: string | undefined,
       opts: { via?: string; preview?: boolean },
@@ -100,10 +100,11 @@ export function registerLifecycle(program: Command): void {
 
   program
     .command("close")
-    .description("Close or abandon a run; --via confirms closure with non-strict review warnings")
+    .description("Close or abandon a run; a soft close needs --ack-warnings")
     .argument("[run]", "run id, slug, name, or path")
     .option("--ack-open", "close while the latest review has open questions")
-    .option("--ack-fixes", "accept fixes made after the latest review started")
+    .option("--ack-fixes", "accept changes made during the latest review")
+    .option("--ack-warnings", "accept the warnings of a non-strict soft close")
     .option("--waive-review <reason>", "close without required reviews")
     .option("--via <via>", "confirm or arg")
     .option("--abandon <reason>", "abandon the run")
@@ -113,6 +114,7 @@ export function registerLifecycle(program: Command): void {
       opts: {
         ackOpen?: boolean;
         ackFixes?: boolean;
+        ackWarnings?: boolean;
         via?: string;
         abandon?: string;
         waiveReview?: string;
@@ -131,6 +133,7 @@ export function registerLifecycle(program: Command): void {
           via: opts.via,
           ackOpen: opts.ackOpen === true,
           ackFixes: opts.ackFixes === true,
+          ackWarnings: opts.ackWarnings === true,
           abandon: opts.abandon,
           waiveReview: opts.waiveReview,
         }),

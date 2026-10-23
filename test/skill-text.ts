@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
-import { requiresFits as schemeFits } from "../scripts/maint/next-version.ts";
+import {
+  requiresFits as schemeFits,
+  skillMinimumRange,
+  skillMinimumVersion,
+} from "../scripts/maint/next-version.ts";
 
 const forbidden = /\b(mktemp|trap|heredoc|grep|sed)\b/;
 const scheme = /^>=(0|[1-9][0-9]*)\.([1-9]|1[0-2])\.([0-9]|[1-9][0-9])$/;
@@ -52,5 +56,10 @@ export function requiresFits(required: string, version: string): boolean {
 export function requiredVersion(): string {
   const required = sharedRequires(skillNames.map((name) => skillText(name)));
   if (!scheme.test(required)) throw new Error("requires-atry is not >=X.M.Z");
-  return required.replace(/^>=/, "");
+  if (required !== skillMinimumRange) {
+    throw new Error(`requires-atry must be ${skillMinimumRange}`);
+  }
+  return skillMinimumVersion;
 }
+
+export { skillMinimumRange, skillMinimumVersion, skillNames };

@@ -12,7 +12,7 @@ edit against the in-progress task files.
 
 Does:
 
-- Install six skill bundles with `npx skills add`.
+- Install six skill bundles with `atry skills install` or `npx skills add`.
 - Install the `atry` CLI from npm. The binary name is `atry`.
 - Store run state in `events.jsonl` and a `run.json` cache.
 - Scaffold the files an agent fills, then validate them.
@@ -27,18 +27,70 @@ Does not:
 
 ## Install
 
-Node.js 22 or newer.
+Node.js 22 or newer. This release is `0.10.7`. The npm tarball holds the CLI
+and the six skill bundles, so the `atry` binary and the six bundles are one
+version: `0.10.7`.
 
 ```bash
-npx skills add tranthethang/agent-relay -g --copy
-npm i -g @tranthethang/agent-relay
+npm i -g @tranthethang/agent-relay@0.10.7
+atry skills install --tool claude-code
+atry skills status --tool claude-code
 atry version
 ```
 
+`atry skills install --tool <tool>` copies the six bundled skills from the
+running CLI into one tool directory. `--dir <path>` writes to another
+directory. It runs on every install: a missing bundle is `installed`, a bundle
+whose canonical files changed is `updated`, and an identical bundle is
+`unchanged`. The copy overwrites `SKILL.md` and `references/`, and it keeps
+files that are not in the bundle. A second install after an upgrade therefore
+updates the canonical files and leaves extra local files alone.
+
+`atry skills status` compares each installed bundle with the bundled one. A
+bundle is `ok` when its floor fits and its content matches. It is `stale` when
+only the content differs, `mismatch` when the floor is too high, and `missing`
+when `SKILL.md` is absent. With no `--tool` or `--dir`, it checks the tool
+directories that exist. `--all` checks every known directory. It exits 1 on a
+failed bundle and prints the exact install command, such as
+`npm i -g @tranthethang/agent-relay@X.Y.Z`.
+
+`atry doctor` checks the installed bundle content and the `atry` version on
+`PATH`. It fails when a bundle is stale or missing, or when `PATH` runs a
+different base version from the running CLI.
+
+Upgrade the CLI first, then run `atry skills install` again so the installed
+bundle text matches the new CLI. Do not install an older CLI to clear a skill
+floor: a bundle whose `requires-atry` is `>=0.10.7` needs `0.10.7` or newer.
+When the `@latest` tag is older than that floor, install the exact version by
+name.
+
+A dev build is only for a local build from this repository. `atry preflight`
+refuses a `-dev` version unless you pass `--allow-dev` or set `ATRY_DEV=1`.
+Use either one only while you dogfood that build. Do not use a dev build for a
+real run.
+
+The six tool names are `claude-code`, `cowork`, `cursor`, `codex`,
+`antigravity`, and `kiro`. Each tool writes one of three directories:
+
+| Tool                               | Directory           |
+| ---------------------------------- | ------------------- |
+| Claude Code                        | `~/.claude/skills/` |
+| Cowork, Cursor, Codex, Antigravity | `~/.agents/skills/` |
+| Kiro                               | `~/.kiro/skills/`   |
+
+`cowork` uses `.agents/skills`, the same directory as Cursor, Codex, and
+Antigravity, because the Cowork client reads `.agents/skills`. An install for
+one of those tools is visible to the other three.
+
+A user who does not install npm can copy the bundles from the Git tree:
+
+```bash
+npx skills add tranthethang/agent-relay -g --copy
+```
+
 `--copy` writes real files. Some tools refuse a symlink that points outside
-their skill directory. Skill paths depend on the `skills` CLI. Cursor, Codex,
-and Antigravity share `~/.agents/skills/`. Claude Code uses `~/.claude/skills/`.
-Kiro uses `~/.kiro/skills/`.
+their skill directory. Skill paths depend on the `skills` CLI, and they match
+the table above.
 
 ## Stages
 
@@ -60,52 +112,103 @@ Text is the default. `--json` adds `"schema": 1`.
 
 ```bash
 atry version
-atry preflight --requires ">=X.Y.Z"
-atry next <run>
-atry run new --slug <slug> --title <title>
+atry preflight --requires ">=X.Y.Z" [--allow-dev]
+atry doctor
 atry resolve [run]
 atry status [run]
+atry next <run>
+atry stats [run] [--since <ISO date>] [--failed]
 atry context <run> --json [--task T1]
+atry brainstorm new --slug <slug>
+atry brainstorm done <dir>
+atry run new --slug <slug> --title <title> [--from <brainstorm>]
 atry plan new <run>
 atry plan done <run>
+atry plan amend <run>
 atry approve <run> --via confirm|arg
 atry approve <run> --preview
-atry close <run> --preview
-atry policy init [--preset lenient|standard|strict]
-atry stage start <run> implement --tool <tool>
+atry stage start <run> implement --tool <tool> [--model <model>]
+atry stage done <run> implement --tool <tool> [--model <model>] [--allow-extra "<reason>"]
 atry task start <run> T1
-atry task done <run> T1
-atry stage done <run> implement --tool <tool> [--allow-extra "<reason>"]
+atry task done <run> T1 [--session <tag>] [--allow-extra "<reason>"]
+atry task skip <run> T1 --reason "<text>" [--session <tag>]
+atry claim <run> T1 --session <tag>
+atry release <run> T1 --session <tag> [--force --reason "<text>"]
+atry steal <run> T1 --session <tag> --ttl <minutes>
+atry integrate <run> T1
+atry guard <run> <path> [--session <tag>]
+atry list <run>
 atry review new <run> self --tool <tool> [--model <model>]
 atry review new <run> cross --tool <tool> --model <model>
-atry review done <run> self|cross
+atry review done <run> self|cross [--run-tests]
 atry review decide <run> Q<n> <answer>
-atry close <run> --via confirm|arg [--ack-open] [--ack-fixes]
-atry close <run> --waive-review "<reason>" [--ack-open]
+atry close <run> --preview
+atry close <run> --via confirm|arg [--ack-open] [--ack-fixes] [--ack-warnings]
+atry close <run> --waive-review "<reason>" [--ack-open] [--ack-warnings]
+atry close <run> --abandon "<reason>"
+atry policy init [--preset lenient|standard|strict]
+atry policy check
+atry skills install --tool <tool> [--dir <path>]
+atry skills status [--tool <tool>] [--dir <path>] [--all]
 atry worktree cleanup [run]
 atry hook install --tool claude-code
 atry hook check
-atry distill <run>
+atry distill <run> [--include-test-logs]
+atry distill verify <run>
 ```
 
 `atry approve` and `atry close` are for the person who coordinates the run.
 `atry preflight --requires ">=X.Y.Z"` exits 0 when the installed version meets that range.
-A lower version prints `npm i -g @tranthethang/agent-relay@latest` and exits 1.
+A lower version prints the exact install command for that range, such as
+`npm i -g @tranthethang/agent-relay@X.Y.Z`, and exits 1.
+A dev build is refused the same way. Add `--allow-dev`, or set `ATRY_DEV=1`,
+only when you dogfood a build from this repo.
+`atry stats` reads `events.jsonl` across runs. `atry stats <run>` reads one run.
+A row reports stage time, review rounds, waivers, failed tests, and drift.
+Stage time is a number of milliseconds. The command does not write an event.
+`--since <ISO date>` keeps a run with at least one event at or after the date.
+`--failed` keeps a run with at least one failed test. Both filters combine, and
+they apply to a single run too. An invalid date exits 2. The JSON keeps
+`schema: 1` and adds no filter field.
+`atry doctor` checks Node 22, git, the CLI version, the bundled skills, the
+installed bundles, the policy file, `atry` on `PATH`, and the version that
+`PATH` reports. It prints one line per check. It exits 1 when a check fails,
+when an installed bundle is stale, or when `PATH` runs a different base version
+from the running CLI.
+A missing policy file passes and reports `default`.
 `atry next <run>` prints the next command. `--json` adds `command`, `reason`, `needsHuman`, and `read`.
-`atry approve <run> --preview` prints Goal, Decisions, and the task count.
+Before approval, `next` follows the plan files: `plan new` when the overview or
+task input is missing, `plan done` when `10-plan/index.json` is missing,
+`approve --preview` when a task file lacks Detail or Acceptance, and `approve`
+when the plan is complete.
+`atry approve <run> --preview` prints Goal, Non-goals, Constraints, Decisions,
+each task file, and `ready: yes` or `ready: no` with the missing items.
 `atry close <run> --preview` prints `recommend: y` or `recommend: n` and the reasons.
 Neither preview records an event.
+`atry approve` refuses a plan with no `10-plan/index.json`, zero tasks, or an
+empty Detail or Acceptance section. `atry plan done` and `atry plan amend`
+refuse zero tasks. A `plan amend` after approval returns the run to `planned`,
+so it needs approval again.
 The skills ask before they run those verbs. Implement start refuses when the
-plan is not approved. Close checks the required reviews for its policy, the
-latest completed review tree against the current code tree, open questions,
-and changes made after the latest review started.
+plan is not approved or is no longer complete. Close checks the required
+reviews for its policy, the latest completed review tree against the current
+code tree, open questions, and changes made during the latest review.
 With `strict.reviewIntegrity` false (the default) and `--via` set, `close`
-does not refuse on those checks. It records them as warnings in the `closed`
-event. The skills pass `--via`, so this is the default path.
-Without `--via`, or with `strict.reviewIntegrity` true, `close` refuses until
-each check passes. Pass `--ack-open` for open questions and `--ack-fixes` for
-changes after the latest review. `--waive-review <reason>` records a review waiver and skips
-review integrity checks; it does not skip the open-question check.
+treats the review checks as warnings. It lists each warning and refuses until
+you add `--ack-warnings`. `--ack-warnings` accepts warnings only: it closes
+and records them in the `closed` event, and it changes nothing else. The review
+skills pass `--via` and ask the user before they add `--ack-warnings`. Without
+`--via`, or with `strict.reviewIntegrity` true, `close` refuses until each
+check passes; `--ack-warnings` does not change that. `--ack-open` accepts an
+open question. Open questions are a gate in every close, so `--ack-warnings`
+does not accept them. `--ack-fixes` applies to a strict close with changes made
+during the latest review. In a soft close, `--ack-warnings` accepts that delta,
+and `--ack-fixes` does not replace `--ack-warnings`. When a cross-review
+records a delta, close needs a self-review completed after it. `--ack-warnings`
+does not skip that self-review.
+`--waive-review <reason>` records a review waiver
+and skips the required-review and tree checks. It does not skip the
+open-question check, the cross-delta rule, or the warning gate.
 `atry close --abandon <reason>` stops a run from any open state.
 
 ### Review policy
@@ -124,12 +227,21 @@ requirements. A missing file uses these defaults:
 
 Changes below `smallChange` lines, counting additions and deletions from base
 to the current tree, require only a self-review. Policy can also include an
-optional `testCommand`. `review done` runs it at the repo root through the
-platform shell, records its exit code, duration, and tree, and writes the last
-200 stdout and stderr lines to `NN.test.log`. The recorded tree is the tree
+optional `testCommand`. `review done` prints `test command: <command>` and
+refuses with exit 4 until you add `--run-tests`. With the flag it runs the
+command at the repo root through the platform shell, records its exit code,
+duration, and tree, and writes the last 200 stdout and stderr lines to
+`NN.test.log`. It does not print that output. The recorded tree is the tree
 when the tests started. A non-zero exit records failure but does not refuse
 `review done`. The command runs without the run lock. `review done` refuses
 when the same review stage records another event while the tests run.
+`atry distill` leaves every `*.test.log` out of the manifest; pass
+`--include-test-logs` to export them.
+`atry distill verify <run>` recomputes each hash and reports a file that the
+manifest does not name. It prints `extra: <path>` for each extra file. It
+skips the manifest and a `*.test.log` that the manifest does not name. It
+exits 1 when a file is missing, different, or extra. It does not rewrite the
+manifest. A missing manifest exits 3.
 
 The optional `strict` policy groups control scope, plan, and review-integrity
 gates independently. Each group defaults to `false`, which reports a warning
@@ -138,6 +250,9 @@ to `true` to keep its blocking behavior. Existing policy files that omit
 `strict` remain valid.
 
 Review JSON contains `schema`, `kind`, `tool`, `model`, `fixed`, and `open`.
+An older review JSON may also carry `tests`. The CLI reads that key, ignores
+its value, and never writes it in a new review JSON. Any other unknown key
+still fails the parse.
 The `tool` and `model` values must match the review start event. Cross-review
 requires `--model`. Question cards at column zero must match `open.length`.
 After a user answers a completed review's open item, record the answer with
@@ -208,12 +323,26 @@ With worktree off, `stage start implement` refuses a tree with changes outside
 ```bash
 atry claim <run> T1 --session <tag>
 atry release <run> T1 --session <tag>
+atry integrate <run> T1
 atry list <run>
 ```
 
 `claim` refuses a task whose `files` overlap a lock held by another session.
-`claim` does not create worktrees. The sessions on one run share one tree.
-With worktree isolation on, each run has its own tree. `task done` ignores
+With worktree off, `claim` does not create a worktree.
+With worktree on, `claim` creates one worktree and one branch for the task.
+The lock stores the path and the branch. A failed claim removes both.
+`release` removes a clean worktree and its branch when the run branch contains that branch.
+`release` keeps a worktree that has changes or unmerged commits. It prints the reason.
+A task worktree must be committed before `atry task done` and before `atry integrate`.
+`task done` exits 4 and names `worktree` when the task worktree has uncommitted changes.
+The tool does not commit for the agent. Commit in the task worktree first.
+`atry integrate` merges that branch into the run branch after each dependency is done or skipped.
+A conflict exits 4, keeps the worktree, and prints each path.
+A clean merge removes the worktree and records a `run` `cleaned` event with the task and the branch.
+A dirty task worktree refuses the merge with exit 4, prints `merged: no` and
+`worktree: kept`, and skips the cleaned event. Nothing merges until the agent commits.
+`atry next` recommends integrate after the task is done while that worktree remains.
+`task done` ignores
 a path that another in-progress task's `files` covers. `atry guard <run> <path>`
 exits 0 when that path is inside an in-progress task. `--session <tag>` limits
 the check to that session.
@@ -302,12 +431,33 @@ scaffold that already has every key. Task status lives in events.
 npm test
 npm run check
 npm run sync:check
+npm run evals
+npm run coverage:report
 git config core.hooksPath .githooks
 brew install dprint
 brew install sonar-scanner
 ```
 
+### Tests and evals
+
+`npm run evals` runs two layers. The fake layer replays recorded scenarios
+through `evals/fake-atry.ts`. It checks the command surface, the JSON shape,
+the step count, and each skill's token budget. It does not call a model, and a
+fake pass is not behavioral evidence.
+
+The real layer drives the built CLI through `evals/real.ts` in a temporary git
+repository and a temporary `HOME`. It checks exit codes, JSON fields, file
+contents, and git state. That layer is the behavioral check and the release
+evidence. It also does not call a model or the network.
+
+A model-backed review stays manual: install the skills, run one scenario in a
+tool, and compare the commands the agent issues with the recorded steps. CI
+cannot run that layer. `npm test`, `npm run check`, `npm run sync:check`, and
+`npm run evals` show what the code does. They do not prove that an agent
+followed a skill.
+
 Contributor rules: [`AGENTS.md`](AGENTS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Security reports and trust limits: [`SECURITY.md`](SECURITY.md).
 Technical specifications and system diagrams: [`specs/`](specs/).
 Maintainer docs: [`specs/90-maintainer/00-index/index.md`](specs/90-maintainer/00-index/index.md). History and next work: [`ROADMAP.md`](ROADMAP.md).
 Release notes: [GitHub Releases](https://github.com/tranthethang/agent-relay/releases).

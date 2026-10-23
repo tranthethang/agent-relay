@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { gitCommit, runCli, withTempGitRepo } from "./helper.js";
+import { ensurePlanReady, gitCommit, runCli, withTempGitRepo } from "./helper.js";
 import { createRun, writeTasks } from "./plan-helper.js";
 
 test("atry plan amend keeps ids and refuses to drop a started task", async () => {
@@ -10,6 +10,7 @@ test("atry plan amend keeps ids and refuses to drop a started task", async () =>
     const run = await createRun(dir, "plan-amend");
     await writeTasks(run, [{ title: "First" }, { title: "Second" }, { title: "Third" }]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
@@ -75,6 +76,7 @@ test("atry plan amend refuses a new deps list on a started task", async () => {
       { title: "Third", deps: ["T1", "T2"] },
     ]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
@@ -141,6 +143,41 @@ test("atry plan amend does not reuse the id of a dropped task", async () => {
     expect((JSON.parse(amended.stdout) as { tasks: string[] }).tasks).toEqual(["T1", "T3"]);
     expect(await readFile(join(run, "10-plan", "T3.md"), "utf8")).toContain("# T3: New");
     expect(await readFile(join(run, "10-plan", "T2.md"), "utf8")).toContain("# T2: Second");
+  });
+});
+
+test("plan amend after approval returns the run to planned", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "plan-amend-approval");
+    await writeTasks(run, [{ title: "First" }]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
+    expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
+
+    await writeTasks(run, [{ title: "First" }, { title: "Second" }]);
+    expect((await runCli(["plan", "amend", run], dir)).code).toBe(0);
+    const approved = JSON.parse(await readFile(join(run, "run.json"), "utf8")) as {
+      state: { lifecycle: string; stage: string; approved: boolean };
+    };
+    expect(approved.state).toMatchObject({
+      lifecycle: "planned",
+      stage: "plan",
+      approved: false,
+    });
+
+    const incomplete = await runCli(["next", run, "--json"], dir);
+    expect(incomplete.code, incomplete.stderr).toBe(0);
+    const preview = JSON.parse(incomplete.stdout) as { command: string; reason: string };
+    expect(preview.command.endsWith(" --preview")).toBe(true);
+    expect(preview.reason).toBe("The plan is incomplete.");
+
+    await ensurePlanReady(run);
+    const ready = JSON.parse((await runCli(["next", run, "--json"], dir)).stdout) as {
+      command: string;
+    };
+    expect(ready.command.endsWith(" --preview")).toBe(false);
+    expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
   });
 });
 

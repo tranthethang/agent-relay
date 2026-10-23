@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { runCli } from "./helper.js";
+import { ensurePlanReady, runCli } from "./helper.js";
 
 export async function createRun(dir: string, slug: string): Promise<string> {
   const created = await runCli(
@@ -27,6 +27,7 @@ export function taskInput(
 }
 
 export async function startImplement(dir: string, run: string): Promise<void> {
+  await ensurePlanReady(run);
   for (
     const args of [
       ["approve", run, "--via", "arg"],

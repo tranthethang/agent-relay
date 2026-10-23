@@ -82,8 +82,9 @@ test("atry review done runs the base policy command and writes its output tail",
     const run = await createRun(dir, "review-test-command");
     await reachReview(run, dir);
     await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
-    const done = await runCli(["review", "done", run, "self"], dir);
+    const done = await runCli(["review", "done", run, "self", "--run-tests"], dir);
     expect(done.code).toBe(0);
+    expect(done.stderr).toContain("test command: node -e");
     const events = (await readFile(join(run, "events.jsonl"), "utf8"))
       .trim().split("\n").map((line) =>
         JSON.parse(line) as {
@@ -107,6 +108,38 @@ test("atry review done runs the base policy command and writes its output tail",
   });
 });
 
+test("atry review done refuses a policy test command without --run-tests", async () => {
+  await withTempGitRepo(async (dir) => {
+    await writeFile(
+      join(dir, ".agent-relay.json"),
+      JSON.stringify({
+        schema: 1,
+        requireReviews: ["self"],
+        smallChange: 100,
+        testCommand: `node -e "process.exit(1)"`,
+      }),
+    );
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-test-consent");
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    const refused = await runCli(["review", "done", run, "self"], dir);
+    expect(refused.code).toBe(4);
+    expect(refused.stderr).toBe(
+      "run-tests: test command: node -e \"process.exit(1)\"; pass --run-tests to run it\n",
+    );
+    const completed = (await readFile(join(run, "events.jsonl"), "utf8")).trim().split("\n")
+      .map((line) => JSON.parse(line) as { stage?: string; action?: string })
+      .some((event) => event.stage === "self-review" && event.action === "completed");
+    expect(completed).toBe(false);
+
+    const passed = await runCli(["review", "done", run, "self", "--run-tests"], dir);
+    expect(passed.code).toBe(0);
+    expect(passed.stderr).toBe("test command: node -e \"process.exit(1)\"\n");
+  });
+});
+
 test("atry review done runs the policy command at the repo root", async () => {
   await withTempGitRepo(async (dir) => {
     await writeFile(
@@ -123,7 +156,7 @@ test("atry review done runs the policy command at the repo root", async () => {
     const run = await createRun(dir, "review-test-cwd");
     await reachReview(run, dir);
     await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
-    expect((await runCli(["review", "done", run, "self"], dir)).code).toBe(0);
+    expect((await runCli(["review", "done", run, "self", "--run-tests"], dir)).code).toBe(0);
     const log = await readFile(join(run, "30-self-review", "01.test.log"), "utf8");
     expect(log).toContain(`stdout (last 200 lines):\n${dir}\n`);
   });
@@ -280,7 +313,7 @@ test("atry close reads the completed review, not a later unfinished scaffold", a
     await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
     const refused = await runCli(["close", run], dir);
     expect(refused.code).toBe(4);
-    expect(refused.stderr).toContain("30-self-review/01.json");
+    expect(refused.stderr).toBe("open: latest review has open questions\n");
   });
 });
 
@@ -339,10 +372,14 @@ test.skipIf(process.platform === "win32")(
       const run = await createRun(dir, "review-test-signal");
       await reachReview(run, dir);
       await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
-      const atry = spawn(process.execPath, [cliPath, "review", "done", run, "self"], {
-        cwd: dir,
-        stdio: "ignore",
-      });
+      const atry = spawn(
+        process.execPath,
+        [cliPath, "review", "done", run, "self", "--run-tests"],
+        {
+          cwd: dir,
+          stdio: "ignore",
+        },
+      );
       const exited = new Promise<NodeJS.Signals | null>((resolve) => {
         atry.on("exit", (_code, signal) => resolve(signal));
       });
@@ -383,7 +420,7 @@ async function reviewWithTestCommand(
   const run = await createRun(dir, slug);
   await reachReview(run, dir);
   await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
-  return { run, done: await runCli(["review", "done", run, "self"], dir) };
+  return { run, done: await runCli(["review", "done", run, "self", "--run-tests"], dir) };
 }
 
 async function selfReviewEvents(

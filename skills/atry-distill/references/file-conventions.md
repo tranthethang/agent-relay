@@ -27,6 +27,10 @@ or the copies under `skills/*/references/`.
 Markdown is prose. `atry` does not parse it. JSON that an agent fills starts
 as a scaffold with every key present.
 
+A run with `worktree.enabled` has its own worktree. Commit in that worktree, not
+in the main tree, before `atry stage done`. A claimed task has a task worktree
+under it. Commit there before `atry task done`.
+
 Brainstorms live at `.agent-relay/brainstorms/{YMD}-{slug}/` with `notes.md`
 and `open.json`. A brainstorm is not a run.
 
@@ -53,8 +57,9 @@ every run state.
 ```
 
 `path` is relative to the run directory and uses `/`. The manifest file itself,
-the `locks/` directory, and temporary `*.tmp` files are omitted. Files are
-sorted by path. Re-running overwrites the manifest.
+the `locks/` directory, and temporary `*.tmp` files are omitted. Every
+`*.test.log` file is also omitted unless `atry distill --include-test-logs` asks
+for it. Files are sorted by path. Re-running overwrites the manifest.
 
 ## Notes
 

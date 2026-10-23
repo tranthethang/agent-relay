@@ -24,12 +24,49 @@ CI does the same. CI does not
 prove that an agent follows a skill.
 
 `.githooks/pre-commit` runs `npm run build`. When that exits zero, it runs
-`npm run coverage`. When coverage exits zero, it runs `dprint check`. The hook
+`npm run coverage:report`. When that exits zero, it runs `dprint check`. The hook
 exits non-zero when one command exits non-zero. Enable it with
-`git config core.hooksPath .githooks`. `npm run coverage` needs `sonar-scanner`
-on `PATH`, plus `SONAR_HOST_URL` and `SONAR_TOKEN`.
+`git config core.hooksPath .githooks`. The hook does not call Sonar.
 
-`npm run coverage` applies four bars to `src/**` and `scripts/maint/**`:
+`npm run coverage:report` applies three bars to `src/**` and `scripts/maint/**`:
 overall lines plus branches at least 95%, each file's lines plus branches above
-90%, each file's branches at least 90%, and duplicated lines density at most 1%.
-A file at exactly 90% branches passes. A file with no branches passes.
+90%, and each file's branches at least 90%. A file at exactly 90% branches passes.
+A file with no branches passes. `npm run coverage:sonar` then checks duplicated
+lines density. The density must be at most 1%. That command needs `sonar-scanner`
+on `PATH`, plus `SONAR_HOST_URL` and `SONAR_TOKEN`. Linux CI runs the report.
+
+## Skill evals
+
+`npm run evals` runs two layers and prints one combined summary.
+
+The fake layer replays `evals/scenarios.json` through `evals/fake-atry.ts`. It
+checks the command surface, the JSON shape, the step count, and each skill's
+token budget. It does not use a model and does not use the network. A fake pass
+is not behavioral evidence.
+
+The real layer is the behavioral check and the release evidence. It drives
+`node dist/atry.js` through `evals/real.ts`. It creates a temporary git
+repository and a temporary `HOME`, then asserts exit codes, JSON fields, file
+contents, and git state. It covers the plan gate, the worktree commit rule,
+stale installed skills, and close acknowledgement. It also does not use a
+model or the network. Build first with `npm run build`, because the layer runs
+the built CLI. The release evidence checklist is in
+[`../30-release/release.md`](../30-release/release.md).
+
+CI runs both layers on macOS, Linux, and Windows after `npm test`. A real
+failure is not hidden behind a fake pass: the command exits 1 and the summary
+counts both layers. `--drift` flips one recorded real expectation so the layer
+must fail; the test suite uses it to show that behavior drift is caught. See
+[`evals/README.md`](../../../evals/README.md) for the files, the options, and
+the steps to add a scenario.
+
+The model-backed layer runs by hand. A person installs the skills, asks the
+tool to run one scenario, and compares the commands the agent issues with the
+recorded steps. That layer shows a judgement failure. CI cannot run it and does
+not claim to.
+
+The eval layers do not replace `test/skills-*.test.ts`. A skill test checks
+text, such as a heading or a shared reference. The fake eval checks a recorded
+command sequence and the token budget. The real eval checks what the built CLI
+does to a temporary repository. None of them proves that an agent followed a
+skill.

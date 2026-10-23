@@ -16,3 +16,9 @@ When new requirements or unforeseen work emerge after `atry plan done`, the plan
 
 3. **Scaffold Generation**:
    - `atry plan amend` scaffolds `10-plan/T<n>.md` files for the newly added tasks without overwriting existing task files.
+   - Every scaffold carries an empty `## Detail` and `## Acceptance` heading. The task file is not ready until both hold text.
+   - `atry plan amend` refuses a task list with zero tasks.
+
+4. **Approval Reset**:
+   - In `approved`, `atry plan amend` appends a `plan` `completed` event. The reducer sets `approved: false` and `lifecycle: "planned"`, so the run needs `atry approve` again.
+   - In `implementing`, `atry plan amend` keeps the lifecycle and stage. The new task starts pending.

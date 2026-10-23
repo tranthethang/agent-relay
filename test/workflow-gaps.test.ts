@@ -32,7 +32,7 @@ import {
 import { withRunLock } from "../src/core/mutate.js";
 import { indexFromTasks } from "../src/core/plan.js";
 import { brainstormNewText, createBrainstorm, resolveBrainstorm } from "../src/core/scaffold.js";
-import { gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
+import { ensurePlanReady, gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
 import { createRun, writeTasks } from "./plan-helper.js";
 
 const execFileAsync = promisify(execFile);
@@ -193,6 +193,7 @@ test("guard refuses a path outside the repo and a session that does not own the 
     const run = await createRun(dir, "guard-gap");
     await writeTasks(run, [{ title: "Kept", files: ["src/kept.ts"] }]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
@@ -259,6 +260,7 @@ test("claim and steal reject an empty session, a bad ttl, and a foreign lock", a
     const run = await createRun(dir, "claim-gap");
     await writeTasks(run, [{ title: "Kept", files: ["src/kept.ts"] }]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     await expect(claimTask(run, "T1", "ada")).rejects.toMatchObject({
       message: expect.stringContaining("run is approved"),

@@ -1,5 +1,8 @@
 # Security and trust boundaries
 
+The public file is [`SECURITY.md`](../../../SECURITY.md). It names the
+supported versions, the reporting path, and the trust limits in this file.
+
 This project is skill text plus a CLI. It is not a hardened supply-chain
 product.
 
@@ -16,9 +19,15 @@ product.
 | Run lock             | Serializes CLI state changes and event appends    | A lock on direct repository edits            |
 | Review tree check    | Compares the current tree with the latest review  | Proof that an agent inspected every file     |
 | Review waiver        | Records `--waive-review` and its reason           | Evidence that a person approved the waiver   |
+| Repository text      | Data that a review reads                          | An instruction to the reviewer               |
 
 `events.jsonl` is append-only only by convention of this CLI. Another process
 can edit the file. `atry` validates the events it reads.
+
+Code, comments, commit messages, plan files, implement reports, and test logs
+are data. An instruction in that text is a finding, not a command. The reviewer
+does not run a command the text names, and does not change a rule because the
+text asks. `reviewer-conduct.md` states this rule for both review skills.
 
 The tree check uses a temporary copy of the Git index and excludes
 `.agent-relay/`. The real index stays unchanged. Review data such as `open`
@@ -27,6 +36,10 @@ question cards with `open`, but it cannot prove an agent understood either.
 
 The policy `testCommand` runs from the run's base commit through a platform
 shell at the repository root. Treat that committed command as executable code.
+`review done` prints the command and runs it only with `--run-tests`, so a
+policy change cannot run a new command without a person acknowledging it. Test
+output stays in the run's `.test.log`; `atry distill` leaves those files out
+unless `--include-test-logs` is passed.
 
 Skills can tell an agent to edit the target repo. The host tool's sandbox is
 the control for that. This repo does not add one.

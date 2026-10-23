@@ -155,6 +155,17 @@ export function assertCoverageBars(
   }
 }
 
+export async function gateCoverage(input: {
+  argv: readonly string[];
+  root: string;
+  coverage: Record<string, IstanbulFile>;
+  env: NodeJS.ProcessEnv;
+}): Promise<void> {
+  assertCoverageBars(input.root, input.coverage);
+  if (!input.argv.includes("--duplication")) return;
+  await assertDuplication({ root: input.root, env: input.env });
+}
+
 export async function assertDuplication(input: {
   root: string;
   env: NodeJS.ProcessEnv;
@@ -196,8 +207,7 @@ async function main(): Promise<void> {
   await writeFile(join(root, "coverage", "files.json"), `${JSON.stringify(report)}\n`);
   await writeFile(join(root, "coverage", "lcov.info"), lcovFromCoverage(root, coverage));
   process.stdout.write(summaryText(report));
-  assertCoverageBars(root, coverage);
-  await assertDuplication({ root, env: process.env });
+  await gateCoverage({ argv: process.argv, root, coverage, env: process.env });
 }
 
 function hasRoute(

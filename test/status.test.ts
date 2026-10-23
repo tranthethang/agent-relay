@@ -215,6 +215,67 @@ test("status shows claimed and measured data for self and cross reviews", async 
   });
 });
 
+test("status renders a run whose review JSON keeps the removed tests key", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const reviewing = { ...plannedState, lifecycle: "reviewing", stage: "self-review" };
+    const runDir = await seedRun(relay, runName, runCache(reviewing), [createdEvent]);
+    await mkdir(join(runDir, "30-self-review"), { recursive: true });
+    await writeFile(
+      join(runDir, "30-self-review", "01.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          kind: "self",
+          tool: "cursor",
+          model: "unknown",
+          fixed: 2,
+          tests: "pass",
+          open: [],
+        })
+      }\n`,
+    );
+    const cli = await runCli(["status", runName], root);
+    expect(cli.code).toBe(0);
+    expect(cli.stdout).toContain(`run: ${runName}`);
+    expect(cli.stdout).toContain("review self tool=cursor (claimed)");
+    expect(cli.stderr).not.toContain("30-self-review");
+    const detail = await statusDetail(runDir, now);
+    expect(detail.reviews.self?.claimed).toMatchObject({ tool: "cursor", open: 0 });
+  });
+});
+
+test("status warns and keeps the run when a review JSON cannot be read", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const reviewing = { ...plannedState, lifecycle: "reviewing", stage: "self-review" };
+    const runDir = await seedRun(relay, runName, runCache(reviewing), [createdEvent]);
+    await mkdir(join(runDir, "30-self-review"), { recursive: true });
+    await writeFile(
+      join(runDir, "30-self-review", "01.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          kind: "self",
+          tool: "cursor",
+          model: "unknown",
+          fixed: 0,
+          open: [],
+          nope: true,
+        })
+      }\n`,
+    );
+    const cli = await runCli(["status", runName], root);
+    expect(cli.code).toBe(0);
+    expect(cli.stdout).toContain(`run: ${runName}`);
+    expect(cli.stderr).toContain("warning: 30-self-review/01.json");
+    expect(cli.stderr).toContain("nope");
+    const detail = await statusDetail(runDir, now);
+    expect(detail.reviews.self).toBeNull();
+    expect(detail.warnings?.[0]).toContain("30-self-review/01.json");
+  });
+});
+
 test("status does not recommend implement completion without a valid index", async () => {
   await withTempDir(async (root) => {
     const relay = await seedRelay(root);

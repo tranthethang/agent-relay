@@ -20,11 +20,19 @@ When executing stages or reviews, tools declare their identifier via `--tool <na
 
 - Installed skill bundles live at `~/.claude/skills/atry-*`.
 - Claude Code reads installed bundles rather than editing files directly inside `skills/` during runs.
+- Re-run `atry skills install --tool claude-code` after a CLI upgrade. The copy overwrites `SKILL.md` and `references/`, keeps extra local files, and reports each bundle as `installed`, `updated`, or `unchanged`.
 
 ### Antigravity
 
 - Antigravity executes commands natively via `run_command` and tracks progress through long-running workflow sessions.
-- Antigravity adheres to ASD-STE100 writing guidelines when drafting plan overviews and review findings.
+- Use the writing rules in `specs/80-skills-integration/00-skill-bridge/writing.md` for plan overviews and review findings.
+  Those rules recommend short sentences for skill text. They do not claim ASD-STE100 compliance.
+
+### Cowork
+
+- Cowork reads skill bundles from `~/.agents/skills/atry-*`, the same directory as Cursor, Codex, and Antigravity.
+- Run `atry skills install --tool cowork` to write that directory. Run `atry skills status --tool cowork` to check it.
+- One install for Cursor, Codex, Antigravity, or Cowork serves the other three, because the four tools share the directory.
 
 ### OpenAI Codex
 

@@ -143,9 +143,11 @@ Implemented in this repo:
 - `atry guard <run> <path> [--session <tag>]` exits 0 when the path is inside
   an in-progress task, and exits 4 otherwise. It does not hash the tree.
 
-Later (tool integration, not this repo yet): a hook that calls `atry guard`.
-In parallel mode on one working tree, a diff cannot say which session made a
-change. Worktree per claim fixes that. It is later work.
+After `atry hook install`, the Claude Code hook runs the same guard check on
+each edit. With `worktree.enabled`, `atry claim` creates one worktree and
+branch for the task, and `atry integrate` merges it into the run branch after
+the task is done. Other tools and shell commands that write files are not
+checked.
 
 ## N5. Event writes have no run lock — done in P13
 
@@ -194,6 +196,19 @@ by deleting `.agent-relay/`.
 Decision: no work now. The phase constraints accept deleting old runs. Revisit
 when the repo has other users or when run history feeds the memory feature.
 
+## Shipped commands
+
+`atry stats` reads events for each run.
+It reports stage time, review rounds, waivers, failed tests, and drift.
+`--since` and `--failed` filter runs.
+`atry doctor` checks Node, git, the CLI version, skills, policy, and PATH.
+`atry distill verify` reports a missing, different, or extra file.
+`atry skills install` and `atry skills status` copy and compare the bundles,
+including `cowork` in `.agents/skills`.
+`atry plan amend` keeps existing task ids and appends new ones.
+`atry worktree cleanup` retries removal on a closed run.
+Skip rate, reviewer delta, and per-tool counts stay later.
+
 ## Future, not planned
 
 These depend on the work above. Do not start them yet.
@@ -209,18 +224,15 @@ These depend on the work above. Do not start them yet.
   - Staleness follows code drift (blob hash of scoped paths), not time.
   - Keep the MCP surface near six tools.
   - Start with SQLite FTS5 and scope filters. Add vectors only with evidence.
-- Tool integration: ship rules and hooks per tool (approval for approve and
-  close, `atry guard` on edits).
-- Worktree per claim, with an integrate step in dependency order.
-- Event `seq`, a hash chain on events (`prev`, the SHA-256 of the previous
-  line), and `atry verify` to report hand edits.
+- Tool integration beyond Claude Code: ship rules and hooks per tool
+  (approval for approve and close, `atry guard` on edits).
+- Event `seq` and `atry verify` to report hand edits. The hash chain (`prev`,
+  the SHA-256 of the previous line) shipped.
 - Layout version and `atry archive` (N7).
-- Stats across runs from events: stage time, skip rate, reviewer delta,
-  review rounds, per tool and model.
 
 ## Order
 
 1. N5 and N1, the base for the other gates.
 2. N2 and the in-repo part of N3.
-3. N4 in-repo part is done. A hook and a worktree per claim remain later.
+3. N4 is done, including the Claude Code hook and a worktree per claim.
 4. N6, last, so skill text is rewritten once.

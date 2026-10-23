@@ -124,6 +124,35 @@ test("statusDetailText prints tree-match no", () => {
   expect(text).toContain("reviews required=none done=none tree-match=no delta=none waived=no");
 });
 
+test("status text prints a string test result and defaults for missing fields", () => {
+  const detail = detailWith({
+    reviews: {
+      ...baseReviews,
+      self: {
+        path: "30-self-review/1.json",
+        kind: "self",
+        claimed: { tool: "codex", model: "m", open: 0 },
+        measured: { detected: null, tests: "not-configured", delta: null, decided: 0 },
+      },
+    },
+  });
+  const text = statusDetailText(detail);
+  expect(text).toContain("approved: no");
+  expect(text).toContain("tasks: none");
+  expect(text).toContain("actions: none");
+  expect(text).toContain("tests=not-configured (measured)");
+  expect(text).toContain("actors approve=unknown close=unknown");
+});
+
+test("reviewEvidenceFor ignores a review folder without numbered JSON files", async () => {
+  await withTempDir(async (root) => {
+    const folder = join(root, "30-self-review");
+    await mkdir(folder);
+    await writeFile(join(folder, "README.md"), "not a review\n");
+    expect(await reviewEvidenceFor(root, [], "self")).toBeNull();
+  });
+});
+
 test("statusList rethrows an error that is not a RelayError", async () => {
   await withTempDir(async (root) => {
     const relay = await seedRelay(root);

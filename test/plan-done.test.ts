@@ -127,6 +127,30 @@ test("atry plan done reports dep errors and the 8-task gate", async () => {
   });
 });
 
+test("plan done and plan amend refuse zero tasks", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "plan-empty");
+    await writeTasks(run, []);
+    const done = await runCli(["plan", "done", run], dir);
+    expect(done.code).toBe(4);
+    expect(done.stderr).toContain("plan done refused: plan has no tasks");
+    const events = await readFile(join(run, "events.jsonl"), "utf8");
+    expect(events).not.toContain("\"action\":\"completed\"");
+
+    await writeTasks(run, [{ title: "First" }]);
+    expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await writeTasks(run, []);
+    const amend = await runCli(["plan", "amend", run], dir);
+    expect(amend.code).toBe(4);
+    expect(amend.stderr).toContain("plan amend refused: plan has no tasks");
+    const index = JSON.parse(await readFile(join(run, "10-plan/index.json"), "utf8")) as {
+      tasks: { id: string }[];
+    };
+    expect(index.tasks.map((task) => task.id)).toEqual(["T1"]);
+  });
+});
+
 test("plan done allows more than eight tasks with a warning in non-strict mode", async () => {
   await withTempGitRepo(async (dir) => {
     await gitCommit(dir);

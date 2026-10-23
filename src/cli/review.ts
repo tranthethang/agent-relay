@@ -47,9 +47,15 @@ export function registerReview(program: Command): void {
     .description("Validate the latest review and record completion")
     .argument("<run>", "run id, slug, name, or path")
     .argument("<kind>", "self or cross")
-    .action(async (run: string, kind: string, _opts: unknown, command: Command) => {
+    .option("--run-tests", "run the base policy test command")
+    .action(async (
+      run: string,
+      kind: string,
+      opts: { runTests?: boolean },
+      command: Command,
+    ) => {
       const runDir = await takeRun(command, run);
-      const result = await reviewDone({ runDir, kind });
+      const result = await reviewDone({ runDir, kind, runTests: opts.runTests === true });
       for (const warning of result.warnings) process.stderr.write(`warning: ${warning}\n`);
       const { warnings, ...body } = result;
       writeResult(withWarnings(body, warnings), commandJson(command), reviewDoneText);

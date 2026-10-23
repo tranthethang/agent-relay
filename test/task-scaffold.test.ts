@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { gitCommit, runCli, withTempGitRepo } from "./helper.js";
+import { ensurePlanReady, gitCommit, runCli, withTempGitRepo } from "./helper.js";
 import { createRun, writeTasks } from "./plan-helper.js";
 
 test("atry task start scaffolds the implement file once", async () => {
@@ -10,6 +10,7 @@ test("atry task start scaffolds the implement file once", async () => {
     const run = await createRun(dir, "task-file");
     await writeTasks(run, [{ title: "First" }, { title: "Kept" }]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);

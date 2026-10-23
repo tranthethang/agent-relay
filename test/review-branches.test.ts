@@ -349,13 +349,13 @@ test("reviewDone runs the policy test command between two lock holds", async () 
     fake.testCommand = "npm test";
     fake.execution = { tests: { exit: 1, ms: 5 }, stdout: "a\r\nb", stderr: "e\n" };
     await writeReview(runDir, "30-self-review/01.json", reviewBody("self", "unknown"));
-    const result = await reviewDone({ runDir, kind: "self", testTimeoutMs: 1000 });
+    const result = await reviewDone({ runDir, kind: "self", testTimeoutMs: 1000, runTests: true });
     expect(result.action).toBe("completed");
     expect(fake.appended[0]).toMatchObject({ tests: { exit: 1, ms: 5, tree: treeB } });
     fake.onTest = () => {
       events.push(event({ stage: "self-review", action: "started" }));
     };
-    await expect(reviewDone({ runDir, kind: "self" })).rejects.toThrow(
+    await expect(reviewDone({ runDir, kind: "self", runTests: true })).rejects.toThrow(
       "the review stage changed while tests ran",
     );
   });

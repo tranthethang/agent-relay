@@ -30,7 +30,7 @@ test("atry plan done writes index.json and task scaffolds", async () => {
     });
     expect(index.tasks[1]?.path).toBe("10-plan/T2.md");
     const scaffold = await readFile(join(run, "10-plan", "T1.md"), "utf8");
-    expect(scaffold).toBe("# T1: Add the schema\n\n## Detail\n");
+    expect(scaffold).toBe("# T1: Add the schema\n\n## Detail\n\n## Acceptance\n");
     await writeFile(join(run, "10-plan", "T1.md"), "# kept\n");
     await writeTasks(run, [
       { title: "Add the schema", files: ["src/core/plan.ts"] },

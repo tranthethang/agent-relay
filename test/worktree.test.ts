@@ -1,17 +1,22 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { RelayError } from "../src/core/error.js";
 import { parseRunJson } from "../src/core/run.js";
 import {
+  addTaskWorktree,
   addWorktree,
   cleanupWorktree,
   excludeRelay,
   gitCwd,
   linkRelay,
+  mergeTaskBranch,
+  openTaskWorktrees,
+  releaseTaskWorktree,
   rollbackWorktree,
+  taskWorktreeRecord,
   validateRunWorktree,
   worktreeCleanupText,
   worktreeSettings,
@@ -311,5 +316,153 @@ test("worktreeCleanupText and stale lock handling", async () => {
 
     const result = await cleanupWorktree(runDir);
     expect(result.worktree.removed).toBe(true);
+  });
+});
+
+test("task worktree helpers cover a missing path and a failed merge", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: dir })).stdout.trim();
+    const relayDir = join(dir, ".agent-relay");
+    await mkdir(relayDir, { recursive: true });
+    const created = await addTaskWorktree({
+      root: dir,
+      relayDir,
+      dir: undefined,
+      runName: "run",
+      task: "T1",
+      head,
+    });
+    expect(created.branch).toBe("run-T1");
+    await writeFile(join(created.path, "committed.txt"), "task work\n");
+    await execFileAsync("git", ["add", "committed.txt"], { cwd: created.path });
+    await gitCommit(created.path, "task work");
+    expect(await releaseTaskWorktree(dir, created, dir)).toEqual({
+      removed: false,
+      reason: "branch has unmerged commits",
+    });
+    expect(await execFileAsync("git", ["rev-parse", created.branch], { cwd: dir })).toBeDefined();
+    await rollbackWorktree(dir, created.path, created.branch);
+    await rm(join(dirname(dir), `${basename(dir)}_work-tree`), { recursive: true, force: true });
+
+    const blocked = join(dir, "blocked-wt");
+    await mkdir(join(blocked, "run", "T1"), { recursive: true });
+    await expect(addTaskWorktree({
+      root: dir,
+      relayDir,
+      dir: blocked,
+      runName: "run",
+      task: "T1",
+      head,
+    })).rejects.toThrow("worktree path already exists");
+
+    await execFileAsync("git", ["branch", "run-T2", head], { cwd: dir });
+    await expect(addTaskWorktree({
+      root: dir,
+      relayDir,
+      dir: blocked,
+      runName: "run",
+      task: "T2",
+      head,
+    })).rejects.toThrow("worktree branch already exists");
+    await execFileAsync("git", ["branch", "-D", "run-T2"], { cwd: dir });
+
+    await execFileAsync("git", ["branch", "gone-T1", head], { cwd: dir });
+    const removed = await releaseTaskWorktree(dir, {
+      path: join(dir, "missing-wt"),
+      branch: "gone-T1",
+    }, dir);
+    expect(removed.removed).toBe(true);
+    await expect(mergeTaskBranch(dir, "no-such-branch")).rejects.toThrow("git merge failed");
+  });
+});
+
+test("releaseTaskWorktree keeps local edits and removes the clean worktree", async () => {
+  await withTempGitRepo(async (repo) => {
+    await withTempDir(async (dir) => {
+      await gitCommit(repo);
+      const head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repo })).stdout.trim();
+      const relayDir = join(repo, ".agent-relay");
+      await mkdir(relayDir, { recursive: true });
+      const record = await addTaskWorktree({
+        root: repo,
+        relayDir,
+        dir,
+        runName: "release",
+        task: "T1",
+        head,
+      });
+      const dirtyFile = join(record.path, "local.txt");
+      await writeFile(dirtyFile, "not committed\n");
+      expect(await releaseTaskWorktree(repo, record, repo)).toEqual({
+        removed: false,
+        reason: "worktree has changes",
+      });
+      await rm(dirtyFile);
+      expect(await releaseTaskWorktree(repo, record, repo)).toEqual({ removed: true });
+      await expect(execFileAsync("git", ["rev-parse", record.branch], { cwd: repo }))
+        .rejects.toThrow();
+    });
+  });
+});
+
+test("openTaskWorktrees follows the policy and the task directory", async () => {
+  await withTempGitRepo(async (repo) => {
+    await withTempDir(async (dir) => {
+      const relay = join(repo, ".agent-relay");
+      const runDir = join(relay, "20261017-1792208725-open-wt");
+      await mkdir(runDir, { recursive: true });
+      const commitPolicy = async (policy: unknown): Promise<string> => {
+        await writeFile(join(repo, ".agent-relay.json"), `${JSON.stringify(policy)}\n`);
+        await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: repo });
+        await gitCommit(repo, "policy");
+        return (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repo })).stdout.trim();
+      };
+      const runFor = (base: string) => ({
+        schema: 1 as const,
+        id: "1792208725",
+        ymd: "20261017",
+        slug: "open-wt",
+        title: "Open",
+        base,
+        state: {
+          lifecycle: "implementing" as const,
+          stage: "implement" as const,
+          approved: true,
+          tasks: [],
+        },
+      });
+      const off = await commitPolicy({
+        schema: 1,
+        requireReviews: ["self"],
+        smallChange: 20,
+        worktree: { enabled: false },
+      });
+      expect(await openTaskWorktrees(runDir, runFor(off), ["T1"])).toEqual([]);
+      expect(await taskWorktreeRecord(runDir, runFor(off), "T1")).toBeUndefined();
+
+      const on = await commitPolicy({
+        schema: 1,
+        requireReviews: ["self"],
+        smallChange: 20,
+        worktree: { enabled: true, dir },
+      });
+      expect(await openTaskWorktrees(runDir, runFor(on), ["T1"])).toEqual([]);
+      expect(await taskWorktreeRecord(runDir, runFor(on), "T1")).toBeUndefined();
+      await mkdir(join(dir, "20261017-1792208725-open-wt", "T1"), { recursive: true });
+      expect(await openTaskWorktrees(runDir, runFor(on), ["T1"])).toEqual(["T1"]);
+      const found = await taskWorktreeRecord(runDir, runFor(on), "T1");
+      expect(found?.branch).toBe(
+        "20261017-1792208725-open-wt-T1",
+      );
+
+      const bare = await commitPolicy({
+        schema: 1,
+        requireReviews: ["self"],
+        smallChange: 20,
+        worktree: { enabled: true },
+      });
+      expect(await openTaskWorktrees(runDir, runFor(bare), ["T9"])).toEqual([]);
+    });
   });
 });

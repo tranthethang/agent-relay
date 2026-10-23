@@ -7,21 +7,26 @@ import { exitCodes, RelayError } from "../core/error.js";
 import { type EventLine } from "../core/event.js";
 import { reviewIntegrity } from "../core/lifecycle.js";
 import { explainNextWithChoices, nextActions, nextStep, nextText } from "../core/next.js";
-import { installCommand, preflightResult } from "../core/preflight.js";
+import { planFilesState } from "../core/plan.js";
+import { preflightResult, preflightText } from "../core/preflight.js";
 import { type RunState } from "../core/reduce.js";
 import { oneToken, selectRun } from "../core/select.js";
 import { statusDetail, statusDetailText, statusList, statusListText } from "../core/status.js";
 import { indexForImplement } from "../core/tasks.js";
 import { schemaVersion } from "../core/vocab.js";
+import { openTaskWorktrees } from "../core/worktree.js";
 import { packageVersion } from "../version.js";
 import { registerClaim } from "./claim.js";
 import { flagRun, registerDistill } from "./distill.js";
+import { registerDoctor } from "./doctor.js";
 import { registerHook } from "./hook.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { writeResult } from "./output.js";
 import { registerPlan } from "./plan.js";
 import { registerPolicy } from "./policy.js";
 import { registerReview } from "./review.js";
+import { registerSkills } from "./skills.js";
+import { registerStats } from "./stats.js";
 import { registerWorktree } from "./worktree.js";
 
 export function registerCommands(program: Command): void {
@@ -83,7 +88,21 @@ export function registerCommands(program: Command): void {
       const index = loaded.run.state.lifecycle === "implementing"
         ? await indexForImplement(runDir, loaded.run.state)
         : null;
-      const step = nextStep(loaded.run.id, loaded.run.state, loaded.events, reviews, index);
+      const integrate = index === null
+        ? []
+        : await openTaskWorktrees(runDir, loaded.run, index.tasks.map((task) => task.id));
+      const plan = loaded.run.state.lifecycle === "planned"
+        ? await planFilesState(runDir)
+        : undefined;
+      const step = nextStep(
+        loaded.run.id,
+        loaded.run.state,
+        loaded.events,
+        reviews,
+        index,
+        integrate,
+        plan,
+      );
       const choices = nextActions(
         loaded.run.id,
         loaded.run.state,
@@ -91,6 +110,7 @@ export function registerCommands(program: Command): void {
         step,
         reviews,
         index,
+        integrate,
       );
       writeResult(
         explainNextWithChoices(step, loaded.run.state, choices),
@@ -115,9 +135,11 @@ export function registerCommands(program: Command): void {
     .command("preflight")
     .description("Check the installed version against a >=X.Y.Z range")
     .requiredOption("--requires <range>", "minimum version, >=X.Y.Z")
-    .action((opts: { requires: string }, command: Command) => {
-      const result = preflightResult(packageVersion(), opts.requires);
-      writeResult(result, commandJson(command), (row) => (row.ok ? "" : `${installCommand}\n`));
+    .option("--allow-dev", "accept a dev build version")
+    .action((opts: { requires: string; allowDev?: boolean }, command: Command) => {
+      const allowDev = opts.allowDev === true || process.env.ATRY_DEV === "1";
+      const result = preflightResult(packageVersion(), opts.requires, allowDev);
+      writeResult(result, commandJson(command), preflightText);
       if (!result.ok) process.exitCode = exitCodes.usage;
     });
 
@@ -127,8 +149,11 @@ export function registerCommands(program: Command): void {
   registerReview(program);
   registerDistill(program);
   registerPolicy(program);
+  registerSkills(program);
   registerWorktree(program);
   registerHook(program);
+  registerStats(program);
+  registerDoctor(program);
 }
 
 function commandJson(command: Command): boolean {

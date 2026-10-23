@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { z } from "zod";
 import { type RebuildResult, rebuildRun } from "./cache.js";
@@ -8,9 +8,10 @@ import { type EventLine } from "./event.js";
 import { isEnoent, readJson } from "./files.js";
 import { changedPaths, gitHead, treeDiffSize, treeStatus, workTree } from "./git.js";
 import { appendEvent, withRunLock } from "./mutate.js";
+import { planReadiness, type PlanTaskPreview } from "./plan.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
-import { parseReviewJson, readReviewDocument } from "./review.js";
+import { crossDeltaNeedsSelfReview, parseReviewJson, readReviewDocument } from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
 import { outsidePaths } from "./scope.js";
 import { openPlanTasks, planIndexSchema, readPlanIndex } from "./tasks.js";
@@ -117,8 +118,13 @@ export function closeText(result: CloseResult): string {
 export type ApprovePreview = {
   schema: 1;
   goal: string;
+  nonGoals: string;
+  constraints: string;
   decisions: string;
   tasks: number;
+  taskFiles: PlanTaskPreview[];
+  ready: boolean;
+  missing: string[];
 };
 
 export type ClosePreview = {
@@ -129,7 +135,22 @@ export type ClosePreview = {
 };
 
 export function approvePreviewText(result: ApprovePreview): string {
-  return `Goal:\n${result.goal}\n\nDecisions:\n${result.decisions}\n\ntasks: ${result.tasks}\n`;
+  const taskLines = result.taskFiles
+    .map((task) => `- ${task.id}: ${task.title}\n`)
+    .join("");
+  const missingLines = result.missing.map((item) => `- ${item}\n`).join("");
+  const ready = result.ready ? "yes" : "no";
+  const sections = [
+    `Goal:\n${result.goal}\n`,
+    `\nNon-goals:\n${result.nonGoals}\n`,
+    `\nConstraints:\n${result.constraints}\n`,
+    `\nDecisions:\n${result.decisions}\n`,
+    `\ntasks: ${result.tasks}\n`,
+    taskLines,
+    `ready: ${ready}\n`,
+  ];
+  if (result.missing.length > 0) sections.push(`missing:\n${missingLines}`);
+  return sections.join("");
 }
 
 export function closePreviewText(result: ClosePreview): string {
@@ -142,36 +163,26 @@ export function closePreviewText(result: ClosePreview): string {
   return `recommend: ${result.recommend}\n${reasons}${worktree}`;
 }
 
-export function sectionText(markdown: string, heading: string): string {
-  const lines = markdown.split("\n");
-  const start = lines.indexOf(`## ${heading}`);
-  if (start === -1) return "";
-  const body: string[] = [];
-  for (const line of lines.slice(start + 1)) {
-    if (line.startsWith("## ")) break;
-    body.push(line);
-  }
-  return body.join("\n").trim();
-}
+export { sectionText } from "./plan.js";
 
 export async function approvePreview(runDir: string): Promise<ApprovePreview> {
-  let overview = "";
-  try {
-    overview = await readFile(join(runDir, "10-plan/overview.md"), "utf8");
-  } catch (error) {
-    if (!isEnoent(error)) throw error;
-  }
+  const readiness = await planReadiness(runDir);
   return {
     schema: schemaVersion,
-    goal: sectionText(overview, "Goal"),
-    decisions: sectionText(overview, "Decisions"),
-    tasks: await taskCount(runDir),
+    goal: readiness.goal,
+    nonGoals: readiness.nonGoals,
+    constraints: readiness.constraints,
+    decisions: readiness.decisions,
+    tasks: readiness.tasks,
+    taskFiles: readiness.taskFiles,
+    ready: readiness.ready,
+    missing: readiness.missing,
   };
 }
 
 export async function closePreview(runDir: string): Promise<ClosePreview> {
   const loaded = await rebuildRun(runDir);
-  const reasons = await closeReasons(runDir, loaded.run.base, loaded.events);
+  const reasons = await closeReasons(runDir, loaded.run.base, loaded.events, "preview");
   const preview: ClosePreview = {
     schema: schemaVersion,
     recommend: reasons.length === 0 ? "y" : "n",
@@ -192,6 +203,7 @@ async function closeReasons(
   runDir: string,
   base: string,
   events: readonly EventLine[],
+  mode: "preview" | "warnings",
 ): Promise<string[]> {
   const reasons: string[] = [];
   const integrity = await reviewIntegrity(runDir, base, events);
@@ -199,9 +211,14 @@ async function closeReasons(
     if (!integrity.done.includes(kind)) reasons.push(`missing ${kind} review`);
   }
   if (integrity.treeMatch === false) reasons.push("tree mismatch");
-  if (integrity.delta !== undefined) reasons.push("reviewer changes after latest review");
-  const latest = await latestReview(runDir, events);
-  if (latest !== null && latest.open > 0) reasons.push("open items");
+  if (integrity.delta !== undefined) reasons.push("changes made during the latest review");
+  if (mode === "preview") {
+    if (crossDeltaNeedsSelfReview(events)) {
+      reasons.push("cross-review changes have no later self-review");
+    }
+    const latest = await latestReview(runDir, events);
+    if (latest !== null && latest.open > 0) reasons.push("open items");
+  }
   const completed = [...events].reverse().find((event) =>
     event.action === "completed"
     && (event.stage === "self-review" || event.stage === "cross-review")
@@ -248,6 +265,14 @@ export async function approveRun(input: {
   const actor = detectTool(process.env) === undefined ? "unknown" : "agent-env";
   return withRunLock(input.runDir, async (loaded) => {
     assertMove(loaded.run.state, "approve");
+    const preview = await approvePreview(input.runDir);
+    if (!preview.ready) {
+      throw new RelayError(
+        "gate",
+        `approve refused: plan is not ready: ${preview.missing.join(", ")}`,
+        "plan",
+      );
+    }
     const saved = await appendEvent(loaded, input.runDir, {
       stage: "plan",
       action: "approved",
@@ -325,6 +350,7 @@ export async function closeRun(input: {
   via?: string;
   ackOpen?: boolean;
   ackFixes?: boolean;
+  ackWarnings?: boolean;
   abandon?: string;
   waiveReview?: string;
 }): Promise<CloseResult> {
@@ -341,12 +367,20 @@ export async function closeRun(input: {
     assertMove(loaded.run.state, "close");
     const policy = await readPolicy(await gitCwd(input.runDir), loaded.run.base);
     const softClose = !policy.strict.reviewIntegrity && via !== undefined;
-    if (input.ackOpen !== true && !softClose) {
+    assertCrossDeltaSelfReview(loaded.events);
+    if (input.ackOpen !== true) {
       await assertNoOpenQuestions(input.runDir, loaded.events);
     }
     const warnings = softClose
-      ? await closeReasons(input.runDir, loaded.run.base, loaded.events)
+      ? await closeReasons(input.runDir, loaded.run.base, loaded.events, "warnings")
       : [];
+    if (softClose && warnings.length > 0 && input.ackWarnings !== true) {
+      throw new RelayError(
+        "gate",
+        `soft close has warnings: ${warnings.join(", ")}; pass --ack-warnings to accept them`,
+        "ack-warnings",
+      );
+    }
     if (waiveReason !== undefined) {
       await appendEvent(loaded, input.runDir, {
         stage: "run",
@@ -577,6 +611,16 @@ async function recordStage(
   }
   return withRunLock(input.runDir, async (locked) => {
     assertMove(locked.run.state, stageMove(stage, action));
+    if (action === "started" && stage === "implement") {
+      const preview = await approvePreview(input.runDir);
+      if (!preview.ready) {
+        throw new RelayError(
+          "gate",
+          `implement start refused: plan is not ready: ${preview.missing.join(", ")}`,
+          "plan",
+        );
+      }
+    }
     const loaded = action === "started" && stage === "implement"
       ? await prepareImplementStart(input.runDir, locked)
       : locked;
@@ -690,19 +734,6 @@ async function implementScope(
   return { extra: outside, reason };
 }
 
-async function taskCount(runDir: string): Promise<number> {
-  let value: unknown;
-  try {
-    value = await readJson(join(runDir, "10-plan/index.json"));
-  } catch (error) {
-    if (isEnoent(error)) return 0;
-    throw error;
-  }
-  const parsed = planIndexSchema.safeParse(value);
-  if (!parsed.success) return 0;
-  return parsed.data.tasks.length;
-}
-
 async function plannedFiles(runDir: string): Promise<string[]> {
   const rel = "10-plan/index.json";
   let value: unknown;
@@ -736,7 +767,18 @@ async function measure(
 async function assertNoOpenQuestions(runDir: string, events: readonly EventLine[]): Promise<void> {
   const latest = await latestReview(runDir, events);
   if (latest === null || latest.open === 0) return;
-  throw new RelayError("gate", "latest review has open questions", latest.path);
+  throw new RelayError("gate", "latest review has open questions", "open");
+}
+
+// A cross-review can edit code after the earlier self-review passed. No later
+// self-review means the run is not ready to close, with or without a waiver.
+function assertCrossDeltaSelfReview(events: readonly EventLine[]): void {
+  if (!crossDeltaNeedsSelfReview(events)) return;
+  throw new RelayError(
+    "gate",
+    "cross-review changed code and no later self-review covers it",
+    "review.self",
+  );
 }
 
 // The folder whose review `completed` event is newest wins. Without events, cross beats self.

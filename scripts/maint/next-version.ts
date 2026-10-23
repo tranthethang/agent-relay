@@ -22,6 +22,11 @@ export type VersionParts = {
   z: number;
 };
 
+// The lowest CLI the six skills may require. Bump it with a skill change that
+// needs a newer CLI; the release check refuses a value the release cannot meet.
+export const skillMinimumVersion = "0.10.7";
+export const skillMinimumRange = `>=${skillMinimumVersion}`;
+
 export function parseTag(tag: string): VersionParts {
   const match = tagPattern.exec(tag);
   if (match === null) {
@@ -100,7 +105,11 @@ export function assertRequires(root: string, version: string): void {
       throw new RelayError("validation", "requires-atry missing", name);
     }
     if (!requiresFits(match[1], version)) {
-      throw new RelayError("validation", `requires-atry is higher than ${version}`, name);
+      throw new RelayError(
+        "validation",
+        `requires-atry is higher than ${version}; the shared minimum is ${skillMinimumRange}`,
+        name,
+      );
     }
   }
 }

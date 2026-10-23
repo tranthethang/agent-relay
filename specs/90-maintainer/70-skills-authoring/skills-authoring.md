@@ -3,9 +3,23 @@
 Each skill is `skills/<name>/SKILL.md` plus `references/`. Bundles do not
 contain `scripts/`.
 
-Front matter needs `name`, `description`, and `requires-atry`. All six skills share one `requires-atry` value. That value is not higher than the version the release workflow computes. A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it. The preflight
+Front matter needs `name`, `description`, and `requires-atry`. Each
+`description` is 200 to 400 characters. Say what the skill does, when to use
+it, and when not to use it. Include a `Do not use` clause. Name `atry` or
+`agent-relay`. Do not use the skill name as the only trigger. All six skills share one `requires-atry` value. That value is not higher than the version the release workflow computes. A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it. The preflight
 block between `<!-- BEGIN PREFLIGHT -->` and `<!-- END PREFLIGHT -->` is copied
 from `specs/80-skills-integration/00-skill-bridge/preflight.md` by `npm run sync`.
+
+## When to bump the shared minimum
+
+The value lives in `scripts/maint/next-version.ts` as `skillMinimumVersion`, and
+`skillMinimumRange` is the `>=X.M.Z` range that follows from it. Tests read both,
+so the value is not repeated as a source of truth. Change it only when a skill
+starts naming a verb, flag, or file shape that the installed CLI does not have.
+Set it to the next release that ships that behavior, then update all six
+`SKILL.md` files to the same range. A release alone never bumps it. The verb
+test (`test/skills-verbs.test.ts`) fails when a skill names a command the built
+CLI does not know.
 
 Shared writing rules live in `specs/80-skills-integration/00-skill-bridge/writing.md`. The same command copies
 them to `references/writing.md` for brainstorm, plan, implement, self-review,
@@ -26,33 +40,51 @@ The skill text calls `atry` verbs. It does not tell the agent to run files under
 After you edit a skill, install it again with `npx skills add` if you dogfood
 from a global skill directory.
 
-## Token baseline
+## Examples
+
+Each stage skill that fills a file names one example under `references/`.
+The agent reads the example before it writes that file.
+
+| Skill               | Example                              | Shows                                                   |
+| ------------------- | ------------------------------------ | ------------------------------------------------------- |
+| `atry-plan`         | `references/example-overview.md`     | The overview headings and one `tasks.input.json` object |
+| `atry-implement`    | `references/example-implement.md`    | The task report headings                                |
+| `atry-self-review`  | `references/example-review.md`       | One review pair with one card and one `open` item       |
+| `atry-cross-review` | `references/example-cross-review.md` | One review pair with one card and one `open` item       |
+
+Keep one example under 500 tokens. Keep the example small: one task and one
+small change. Use the writing rules, and use no secret and no real user data.
+The example shows the headings that the skill asks for, so the agent sees the
+quality bar and not only prose.
+
+An example counts toward the stage token budget. `npm run tokens` must stay
+under 4,500 tokens for each stage. `evals/scenarios.json` sets `maxTokens` to
+4500, and the eval fails at that number. A new example can push a review stage
+over that line, so check the count after you add one.
+
+`test/skills-examples.test.ts` checks that each skill names its example, that
+the file exists, that the headings are present, and that a review example has
+one card and one `open` item.
+
+## Token snapshot
 
 `npm run tokens` counts characters in each `SKILL.md` plus every
 `references/*.md` path that file names. It divides by 4 and rounds to the
-nearest integer. The total row is the sum of the stage rows. This baseline
-is commit `ce19460998b550cb7ccca955bbb4cb1905bbef4d`.
+nearest integer. The total row is the sum of the stage rows.
 
-| stage        | references                                            | chars | tokens |
-| ------------ | ----------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md                                 |  5473 |   1368 |
-| plan         | references/writing.md                                 |  5821 |   1455 |
-| implement    | references/writing.md                                 |  6257 |   1564 |
-| self-review  | references/writing.md, references/reviewer-conduct.md |  6710 |   1678 |
-| cross-review | references/writing.md, references/reviewer-conduct.md |  7912 |   1978 |
-| distill      | (none)                                                |  1393 |    348 |
-| total        |                                                       | 33566 |   8391 |
+The table below is a snapshot. The command is the source. Run the command
+after you edit a skill, and replace the rows with its output.
 
-## Token count after the skill rewrite
+| stage        | references                                                                                                                | chars | tokens |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------- | ----: | -----: |
+| brainstorm   | references/writing.md, references/file-conventions.md                                                                     |  8181 |   2045 |
+| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                     | 10301 |   2575 |
+| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                    | 13995 |   3499 |
+| self-review  | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-review.md       | 16255 |   4064 |
+| cross-review | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-cross-review.md | 16356 |   4089 |
+| distill      | references/file-conventions.md                                                                                            |  4729 |   1182 |
+| total        |                                                                                                                           | 69817 |  17454 |
 
-The same `npm run tokens` command, after preflight moved into the CLI and the stage skills loop on `atry next`.
-
-| stage        | references                                            | chars | tokens |
-| ------------ | ----------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md                                 |  5011 |   1253 |
-| plan         | references/writing.md                                 |  5525 |   1381 |
-| implement    | references/writing.md                                 |  5951 |   1488 |
-| self-review  | references/writing.md, references/reviewer-conduct.md |  6840 |   1710 |
-| cross-review | references/writing.md, references/reviewer-conduct.md |  7018 |   1755 |
-| distill      | (none)                                                |   931 |    233 |
-| total        |                                                       | 31276 |   7820 |
+`test/skill-tokens.test.ts` reads `maxTokens` from `evals/scenarios.json`. It
+fails when a stage reaches `maxTokens` minus 50. It also fails when the total
+row does not equal the sum of the stage rows.

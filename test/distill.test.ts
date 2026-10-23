@@ -64,6 +64,28 @@ test("atry distill skips locks and temp files", async () => {
   });
 });
 
+test("atry distill leaves test logs out unless --include-test-logs is set", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "distill-logs");
+    await mkdir(join(run, "30-self-review"), { recursive: true });
+    await writeFile(join(run, "30-self-review", "01.test.log"), "output\n");
+    const skipped = await runCli(["distill", run, "--json"], dir);
+    expect(skipped.code).toBe(0);
+    const withoutLogs = JSON.parse(
+      await readFile(join(run, "90-distill", "manifest.json"), "utf8"),
+    ) as { files: { path: string }[] };
+    expect(withoutLogs.files.some((file) => file.path.endsWith(".test.log"))).toBe(false);
+
+    const included = await runCli(["distill", run, "--include-test-logs", "--json"], dir);
+    expect(included.code).toBe(0);
+    const withLogs = JSON.parse(
+      await readFile(join(run, "90-distill", "manifest.json"), "utf8"),
+    ) as { files: { path: string }[] };
+    expect(withLogs.files.some((file) => file.path === "30-self-review/01.test.log")).toBe(true);
+  });
+});
+
 test("atry distill works after the run is abandoned", async () => {
   await withTempGitRepo(async (dir) => {
     await gitCommit(dir);

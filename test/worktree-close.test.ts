@@ -111,7 +111,10 @@ test("close keeps a merged worktree that has changes", async () => {
     await writeFile(join(run.worktree.path, "left.txt"), "left\n");
     const preview = await runCli(["close", run.path, "--preview"], repo);
     expect(preview.stdout).toContain("worktree: close will keep it (worktree has changes)");
-    const closed = await runCli(["close", run.path, "--via", "arg", "--waive-review", "x"], repo);
+    const closed = await runCli(
+      ["close", run.path, "--via", "arg", "--ack-warnings", "--waive-review", "x"],
+      repo,
+    );
     expect(closed.code).toBe(0);
     expect(closed.stdout).toContain("lifecycle: closed");
     expect(closed.stdout).toContain("worktree: kept (worktree has changes)");

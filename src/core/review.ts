@@ -35,6 +35,8 @@ export const reviewJsonSchema = z.object({
   tool: toolSchema,
   model: z.string().min(1),
   fixed: z.number().int().nonnegative(),
+  // Removed from new review JSON. A legacy file may still carry it; ignore the value.
+  tests: z.unknown().optional(),
   open: z.array(z.union([openChoiceSchema, openNeedSchema])),
 }).strict();
 
@@ -48,6 +50,21 @@ export const reviewPlaces = {
   self: { dir: "30-self-review", stage: "self-review" },
   cross: { dir: "40-cross-review", stage: "cross-review" },
 } as const;
+
+// A cross-review can edit code after the earlier self-review passed. The new code
+// needs a self-review recorded after that delta before `close` accepts the run.
+export function crossDeltaNeedsSelfReview(events: readonly EventLine[]): boolean {
+  let deltaAt = -1;
+  events.forEach((event, index) => {
+    if (event.stage === reviewPlaces.cross.stage && event.action === "completed") {
+      if (event.delta !== undefined) deltaAt = index;
+    }
+  });
+  if (deltaAt === -1) return false;
+  return !events.slice(deltaAt + 1).some((event) =>
+    event.stage === reviewPlaces.self.stage && event.action === "completed"
+  );
+}
 
 type ReviewKind = (typeof reviewKinds)[number];
 type ReviewStage = (typeof reviewPlaces)[ReviewKind]["stage"];
@@ -165,12 +182,23 @@ export async function reviewDone(input: {
   runDir: string;
   kind: string;
   testTimeoutMs?: number;
+  runTests?: boolean;
 }): Promise<ReviewDoneResult & { warnings: string[] }> {
   const kind = parseKind(input.kind);
   // Tests can outlast the stale-lock age, so they run between two lock holds.
   const first = await withRunLock(input.runDir, async (loaded) => {
     const checked = await checkReviewDone(input.runDir, kind, loaded);
-    if (checked.testCommand !== undefined) return { checked };
+    if (checked.testCommand !== undefined) {
+      if (input.runTests !== true) {
+        throw new RelayError(
+          "gate",
+          `test command: ${checked.testCommand}; pass --run-tests to run it`,
+          "run-tests",
+        );
+      }
+      process.stderr.write(`test command: ${checked.testCommand}\n`);
+      return { checked };
+    }
     const execution = await runTestCommand(checked.root, undefined);
     return { done: await recordReviewDone(input.runDir, loaded, checked, execution) };
   });

@@ -22,10 +22,11 @@ import {
   startStage,
 } from "../src/core/lifecycle.js";
 import * as mutate from "../src/core/mutate.js";
+import { taskSkip } from "../src/core/plan.js";
 import { createRun } from "../src/core/scaffold.js";
 import * as tasks from "../src/core/tasks.js";
 import * as worktree from "../src/core/worktree.js";
-import { gitCommit, withTempDir, withTempGitRepo } from "./helper.js";
+import { gitCommit, withTempDir, withTempGitRepo, writeReadyPlan } from "./helper.js";
 
 vi.mock("../src/core/mutate.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/core/mutate.js")>();
@@ -81,16 +82,14 @@ afterEach(() => {
 async function newRun(dir: string, slug: string): Promise<string> {
   await gitCommit(dir);
   const created = await createRun({ cwd: dir, slug, title: slug });
-  await writeFile(
-    join(created.path, "10-plan", "index.json"),
-    `${JSON.stringify({ schema: 1, tasks: [] })}\n`,
-  );
+  await writeReadyPlan(created.path);
   return created.path;
 }
 
 async function toReviewing(runDir: string): Promise<void> {
   await approveRun({ runDir, via: "arg" });
   await startStage({ runDir, stage: "implement", tool: "cursor" });
+  await taskSkip(runDir, "T1", "review fixture");
   await doneStage({ runDir, stage: "implement", tool: "cursor" });
 }
 
@@ -150,6 +149,7 @@ test("a detected tool sets the agent-env actor and warns on a differing tool", a
       .map((line) => JSON.parse(line) as EventLine);
     expect(events.find((line) => line.action === "approved")?.actor).toBe("agent-env");
     expect(events.find((line) => line.action === "started")?.detected).toBe("codex");
+    await taskSkip(runDir, "T1", "fixture");
     await doneStage({ runDir, stage: "implement", tool: "cursor" });
     const abandoned = await closeRun({ runDir, abandon: "stop", via: "arg" });
     expect(abandoned.lifecycle).toBe("abandoned");
@@ -161,6 +161,7 @@ test("implement done refuses an empty allow-extra reason", async () => {
     const runDir = await newRun(dir, "extra");
     await approveRun({ runDir, via: "arg" });
     await startStage({ runDir, stage: "implement", tool: "cursor" });
+    await taskSkip(runDir, "T1", "fixture");
     await writeFile(join(dir, "stray.txt"), "x\n");
     await expect(
       doneStage({ runDir, stage: "implement", tool: "cursor", allowExtra: " " }),
@@ -387,7 +388,17 @@ test("text helpers print optional lines only when present", () => {
 
 test("approvePreview counts tasks from a missing, unreadable, invalid, and valid index", async () => {
   await withTempDir(async (runDir) => {
-    expect(await approvePreview(runDir)).toEqual({ schema: 1, goal: "", decisions: "", tasks: 0 });
+    expect(await approvePreview(runDir)).toEqual({
+      schema: 1,
+      goal: "",
+      nonGoals: "",
+      constraints: "",
+      decisions: "",
+      tasks: 0,
+      taskFiles: [],
+      ready: false,
+      missing: ["10-plan/overview.md", "10-plan/index.json"],
+    });
     const index = join(runDir, "10-plan", "index.json");
     await mkdir(index, { recursive: true });
     await expect(approvePreview(runDir)).rejects.toMatchObject({ code: "EISDIR" });
@@ -476,6 +487,7 @@ test("strict scope refuses extra edits without allow-extra", async () => {
     const runDir = await newRun(dir, "strict-scope");
     await approveRun({ runDir, via: "arg" });
     await startStage({ runDir, stage: "implement", tool: "cursor" });
+    await taskSkip(runDir, "T1", "fixture");
     await writeFile(join(dir, "stray.txt"), "x\n");
     await expect(doneStage({ runDir, stage: "implement", tool: "cursor" })).rejects.toThrow(
       /edits outside task files: stray.txt/,
@@ -510,7 +522,11 @@ test("close checks empty reasons, open questions, missing reviews, and fixes", a
       join(selfDir, "01.json"),
       `${JSON.stringify({ ...review, open: [{ q: "Which?", a: "A", b: "B" }] })}\n`,
     );
-    await expect(closeRun({ runDir })).rejects.toThrow(/open questions/);
+    await expect(closeRun({ runDir })).rejects.toMatchObject({ code: "gate", fieldPath: "open" });
+    await expect(closeRun({ runDir, via: "arg", ackWarnings: true })).rejects.toMatchObject({
+      code: "gate",
+      fieldPath: "open",
+    });
     await rm(join(selfDir, "01.json"));
     await addEvents(runDir, [{
       stage: "self-review",
@@ -518,10 +534,33 @@ test("close checks empty reasons, open questions, missing reviews, and fixes", a
       tree: self.tree,
       delta: { files: 1, added: 1, deleted: 0 },
     }]);
-    expect((await closePreview(runDir)).reasons).toEqual(["reviewer changes after latest review"]);
+    expect((await closePreview(runDir)).reasons).toEqual(["changes made during the latest review"]);
     await expect(closeRun({ runDir })).rejects.toThrow(/unacknowledged fixes/);
     const closed = await closeRun({ runDir, ackFixes: true });
     expect(closed).toEqual({ schema: 1, path: runDir, lifecycle: "closed" });
+  });
+});
+
+test("a soft close accepts an open question with ackOpen and adds no warning", async () => {
+  await withTempGitRepo(async (dir) => {
+    const runDir = await newRun(dir, "soft-open");
+    await toReviewing(runDir);
+    await startStage({ runDir, stage: "self-review", tool: "cursor" });
+    await doneStage({ runDir, stage: "self-review", tool: "cursor" });
+    await writeFile(
+      join(runDir, "30-self-review", "01.json"),
+      `${JSON.stringify({ ...review, open: [{ q: "Which?", a: "A", b: "B" }] })}\n`,
+    );
+    await expect(closeRun({ runDir, via: "confirm", ackWarnings: true })).rejects.toMatchObject({
+      code: "gate",
+      fieldPath: "open",
+    });
+    const closed = await closeRun({ runDir, via: "confirm", ackOpen: true });
+    expect(closed.lifecycle).toBe("closed");
+    const lines = (await readFile(join(runDir, "events.jsonl"), "utf8")).trim().split("\n")
+      .map((line) => JSON.parse(line) as EventLine);
+    expect(lines.at(-1)).toMatchObject({ action: "closed", via: "confirm" });
+    expect(lines.at(-1)?.reason).toBeUndefined();
   });
 });
 
@@ -536,13 +575,16 @@ test("close passes integrity, waives with via, and soft-closes with warnings", a
 
     const waived = await newRun(dir, "close-waived");
     await toReviewing(waived);
-    expect((await closeRun({ runDir: waived, waiveReview: "skip", via: "arg" })).lifecycle).toBe(
-      "closed",
-    );
+    expect(
+      (await closeRun({ runDir: waived, waiveReview: "skip", via: "arg", ackWarnings: true }))
+        .lifecycle,
+    ).toBe("closed");
 
     const soft = await newRun(dir, "close-soft");
     await toReviewing(soft);
-    expect((await closeRun({ runDir: soft, via: "confirm" })).lifecycle).toBe("closed");
+    expect((await closeRun({ runDir: soft, via: "confirm", ackWarnings: true })).lifecycle).toBe(
+      "closed",
+    );
     const lines = (await readFile(join(soft, "events.jsonl"), "utf8")).trim().split("\n")
       .map((line) => JSON.parse(line) as EventLine);
     expect(lines.at(-1)).toMatchObject({

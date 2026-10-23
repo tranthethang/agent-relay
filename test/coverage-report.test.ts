@@ -6,6 +6,7 @@ import {
   assertCoverageBars,
   assertDuplication,
   buildReport,
+  gateCoverage,
   isMissingScanner,
   lcovFromCoverage,
   listSourceFiles,
@@ -186,7 +187,7 @@ test("buildReport rejects missing subprocess coverage and a missing source map",
 const reportScript = fileURLToPath(new URL("../scripts/maint/coverage-report.ts", import.meta.url));
 let reportCase = 0;
 
-async function runReport(cwd: string) {
+async function runReport(cwd: string, extra: readonly string[] = []) {
   const previousArgv = process.argv;
   const previousCwd = process.cwd();
   const previousExitCode = process.exitCode;
@@ -194,7 +195,7 @@ async function runReport(cwd: string) {
   const previousStderr = process.stderr.write;
   const stdout: string[] = [];
   const stderr: string[] = [];
-  process.argv = [process.execPath, reportScript];
+  process.argv = [process.execPath, reportScript, ...extra];
   process.chdir(cwd);
   process.exitCode = undefined;
   process.stdout.write = ((chunk: string | Uint8Array) => {
@@ -230,6 +231,9 @@ function loadReport(id: number): Promise<unknown> {
     case 3:
       // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/coverage-report.ts?cli=3");
+    case 4:
+      // @ts-expect-error The query reloads this CLI entry.
+      return import("../scripts/maint/coverage-report.ts?cli=4");
     default:
       throw new Error(`missing coverage-report import case ${id}`);
   }
@@ -289,9 +293,12 @@ test("coverage-report CLI runs successfully and handles errors", async () => {
     process.env.SONAR_TOKEN = "token";
     globalThis.fetch = mockSonarFetch(calls, [{ status: "SUCCESS" }], "1");
     try {
-      const ok = await runReport(root);
-      expect(ok.status).toBe(0);
-      expect(ok.stdout).toContain("files:");
+      const report = await runReport(root);
+      expect(report.status).toBe(0);
+      expect(report.stdout).toContain("files:");
+      expect(calls).toEqual([]);
+      const sonar = await runReport(root, ["--duplication"]);
+      expect(sonar.status).toBe(0);
       expect(calls.some((url) => url.includes("qualitygates"))).toBe(false);
       expect(calls.some((url) => url.includes("component=agent-relay"))).toBe(true);
       expect(calls.some((url) => url.includes("duplicated_lines_density"))).toBe(true);
@@ -614,6 +621,26 @@ test("assertCoverageBars passes at 95 overall and above 90 per file", async () =
         [join(root, "scripts", "maint", "edge.ts")]: countedFile(980, 980),
       });
     }).not.toThrow();
+  });
+});
+
+test("coverage report skips sonar when the host is missing", async () => {
+  await withTempDir(async (root) => {
+    const coverage = {
+      [join(root, "src", "edge.ts")]: countedFile(1000, 1000),
+    };
+    await expect(gateCoverage({
+      argv: ["coverage-report.ts"],
+      root,
+      coverage,
+      env: {},
+    })).resolves.toBeUndefined();
+    await expect(gateCoverage({
+      argv: ["coverage-report.ts", "--duplication"],
+      root,
+      coverage,
+      env: {},
+    })).rejects.toThrow("SONAR_HOST_URL missing");
   });
 });
 

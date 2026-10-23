@@ -258,3 +258,35 @@ test("atry context outputs readable text and handles edge cases", async () => {
     expect(emptyResult.tasks[0]?.reason).toBe("not needed");
   });
 });
+
+test("atry context reads a review JSON that keeps the removed tests key", async () => {
+  await withTempDir(async (root) => {
+    const runDir = await seedContext(root);
+    await writeFile(
+      join(runDir, "30-self-review", "02.json"),
+      `${JSON.stringify({ ...selfReview, tests: "pass" })}\n`,
+    );
+    const cli = await runCli(["context", runName, "--json"], root);
+    expect(cli.code).toBe(0);
+    const body = JSON.parse(cli.stdout) as {
+      schema: number;
+      reviews: { self: { path: string } };
+    };
+    expect(body.schema).toBe(1);
+    expect(body.reviews.self.path).toBe("30-self-review/02.json");
+    expect(body.reviews.self).not.toHaveProperty("tests");
+  });
+});
+
+test("atry context still refuses an unknown review key", async () => {
+  await withTempDir(async (root) => {
+    const runDir = await seedContext(root);
+    await writeFile(
+      join(runDir, "30-self-review", "02.json"),
+      `${JSON.stringify({ ...selfReview, nope: true })}\n`,
+    );
+    const cli = await runCli(["context", runName], root);
+    expect(cli.code).toBe(2);
+    expect(cli.stderr).toContain("30-self-review/02.json");
+  });
+});

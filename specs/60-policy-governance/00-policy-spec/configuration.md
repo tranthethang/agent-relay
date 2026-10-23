@@ -85,13 +85,13 @@ Controls plan size.
 
 ### `strict.reviewIntegrity`
 
-Controls the review checks at `close`: missing reviews, a tree that differs from the latest review, changes after the latest review, open items, and failed tests.
+Controls the review checks at `close`: missing reviews, a tree that differs from the latest review, changes made during the latest review, open items, and failed tests.
 
-| Command      | `false` (default)                                                                                             | `true`                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `atry close` | With `--via`, closes and stores the warnings in the `closed` event. Without `--via`, the checks still refuse. | Refuses until each check passes, or the person passes the matching flag |
+| Command      | `false` (default)                                                                                                                                                                    | `true`                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `atry close` | With `--via`, refuses and lists any warnings until `--ack-warnings` is present; then closes and stores the warnings in the `closed` event. Without `--via`, the checks still refuse. | Refuses until each check passes, or the person passes the matching flag |
 
-`--ack-open` accepts open items. `--ack-fixes` accepts changes after the latest review. `--waive-review <reason>` records a waiver and skips the review checks, but not the open item check.
+`--ack-open` accepts open items in every close. Open items are a gate, so `--ack-warnings` does not accept them and a soft close also needs `--ack-open`. `--ack-fixes` accepts changes made during the latest review in a strict close. In a soft close, `--ack-warnings` accepts that delta; `--ack-fixes` does not replace `--ack-warnings`. `--ack-warnings` does not bypass `strict.reviewIntegrity: true`, and it does not bypass the cross-delta rule. A cross-review delta needs a self-review completed after it. `--waive-review <reason>` records a waiver and skips the required-review and tree checks, but not the open item check, the cross-delta rule, or the warning gate.
 
 ## Presets
 

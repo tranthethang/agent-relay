@@ -1,7 +1,7 @@
 ---
 name: atry-distill
-description: Use when the user wants to export a run manifest, at any run state.
-requires-atry: ">=0.1.0"
+description: "Export an agent-relay run manifest with atry. Use this when the user wants a distill of the run at any state, including an open plan or a closed run. Do not use it to implement tasks, to review findings, or to rewrite the run history."
+requires-atry: ">=0.10.7"
 ---
 
 # Distill
@@ -15,10 +15,12 @@ This skill writes `90-distill/manifest.json` for one run. It does not close the 
 <!-- BEGIN PREFLIGHT -->
 
 Run `atry preflight --requires "<requires-atry>"` before any other command in this skill.
-Stop when that command exits non-zero.
+Stop when that command exits non-zero. A dev build needs `--allow-dev` or `ATRY_DEV=1`; do not use a dev build for a real run.
 When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
+Read `references/file-conventions.md` before you edit a run file.
 When the context JSON has `run.worktree`, edit files and run git in `run.worktree.path`.
+A claim result with `worktree.path` takes precedence over `run.worktree.path`.
 
 <!-- END PREFLIGHT -->
 

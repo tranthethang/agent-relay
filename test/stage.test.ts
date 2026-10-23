@@ -1,9 +1,16 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
-import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
+import {
+  ensurePlanReady,
+  gitCommit,
+  reachReview,
+  runCli,
+  withTempGitRepo,
+  writeReadyPlan,
+} from "./helper.js";
 import { createRun, writeTasks } from "./plan-helper.js";
 
 const execFileAsync = promisify(execFile);
@@ -57,6 +64,7 @@ test("atry stage start and done record tool, model, head, and size", async () =>
     const planDone = await runCli(["stage", "done", run.path, "plan", "--tool", "cursor"], dir);
     expect(planDone.code).toBe(0);
     expect(planDone.stdout).not.toContain("head:");
+    await writeReadyPlan(run.path);
     await runCli(["approve", run.path, "--via", "arg"], dir);
     const implement = await runCli([
       "stage",
@@ -115,6 +123,7 @@ test("implement done refuses a file edited after the last task done", async () =
     await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
     await gitCommit(dir);
     const clean = await createRun(dir, "clean-scope");
+    await writeReadyPlan(clean);
     expect((await runCli(["approve", clean, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", clean, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
@@ -125,6 +134,7 @@ test("implement done refuses a file edited after the last task done", async () =
     const run = await createRun(dir, "late-edit");
     await writeTasks(run, [{ title: "Kept", files: ["src/kept.ts"] }]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
@@ -172,6 +182,7 @@ test("implement stays open until every indexed task is done or skipped", async (
       { title: "Third", deps: ["T2"], files: ["src/third.ts"] },
     ]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
@@ -219,9 +230,11 @@ test("implement done requires a valid index and keeps an empty plan open to comp
   await withTempGitRepo(async (dir) => {
     await gitCommit(dir);
     const run = await createRun(dir, "index-gate");
+    await writeReadyPlan(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
+    await rm(join(run, "10-plan", "index.json"));
 
     const missingNext = await runCli(["next", "--json", run], dir);
     expect(missingNext.code).toBe(3);
@@ -275,6 +288,7 @@ test("plan amend adds a new pending task to the implement gate", async () => {
     const run = await createRun(dir, "amend-gate");
     await writeTasks(run, [{ title: "First", files: ["src/first.ts"] }]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);

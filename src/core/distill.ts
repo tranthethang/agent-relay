@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { z } from "zod";
-import { atomicWrite } from "./files.js";
+import { fromZod, RelayError } from "./error.js";
+import { atomicWrite, isEnoent, joinUnder, readJson } from "./files.js";
 import { schemaVersion } from "./vocab.js";
 
 const manifestRel = "90-distill/manifest.json";
@@ -26,16 +27,104 @@ export type DistillResult = {
   files: number;
 };
 
+export type DistillOptions = {
+  includeTestLogs?: boolean;
+};
+
+export type DistillVerifyResult = {
+  schema: 1;
+  ok: boolean;
+  files: number;
+  missing: string[];
+  mismatched: string[];
+  extra: string[];
+};
+
 export function distillText(result: DistillResult): string {
   return `${result.path}\nfiles: ${result.files}\n`;
 }
 
-export async function distillRun(runDir: string): Promise<DistillResult> {
+export function distillVerifyText(result: DistillVerifyResult): string {
+  const lines = [`ok: ${result.ok ? "yes" : "no"}`, `files: ${result.files}`];
+  for (const path of result.missing) lines.push(`missing: ${path}`);
+  for (const path of result.mismatched) lines.push(`mismatched: ${path}`);
+  for (const path of result.extra) lines.push(`extra: ${path}`);
+  return `${lines.join("\n")}\n`;
+}
+
+export async function verifyDistill(runDir: string): Promise<DistillVerifyResult> {
+  const manifest = await readManifest(runDir);
+  const missing: string[] = [];
+  const mismatched: string[] = [];
+  for (const file of manifest.files) {
+    const full = joinUnder(runDir, file.path);
+    let data: Buffer;
+    try {
+      data = await readFile(full);
+    } catch (error) {
+      if (isEnoent(error)) {
+        missing.push(file.path);
+        continue;
+      }
+      throw error;
+    }
+    const sha256 = createHash("sha256").update(data).digest("hex");
+    if (data.byteLength !== file.size || sha256 !== file.sha256) mismatched.push(file.path);
+  }
+  const extra = await extraFiles(runDir, new Set(manifest.files.map((file) => file.path)));
+  return {
+    schema: schemaVersion,
+    ok: missing.length === 0 && mismatched.length === 0 && extra.length === 0,
+    files: manifest.files.length,
+    missing,
+    mismatched,
+    extra,
+  };
+}
+
+// Files under the run directory that the manifest does not name. The manifest
+// itself never counts. A test log counts only when the manifest names it.
+async function extraFiles(runDir: string, listed: Set<string>): Promise<string[]> {
+  const extra: string[] = [];
+  for (const file of await listFiles(runDir)) {
+    const path = relative(runDir, file).split(sep).join("/");
+    if (path === manifestRel) continue;
+    if (listed.has(path)) continue;
+    if (path.endsWith(".test.log")) continue;
+    extra.push(path);
+  }
+  return extra.sort(comparePath);
+}
+
+async function readManifest(runDir: string): Promise<DistillManifest> {
+  const path = join(runDir, manifestRel);
+  let value: unknown;
+  try {
+    value = await readJson(path);
+  } catch (error) {
+    if (isEnoent(error)) throw new RelayError("not_found", "manifest not found", manifestRel);
+    throw error;
+  }
+  const parsed = distillManifestSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  const issue = fromZod(parsed.error);
+  throw new RelayError(
+    "validation",
+    issue.message,
+    issue.fieldPath.length === 0 ? manifestRel : `${manifestRel}:${issue.fieldPath}`,
+  );
+}
+
+export async function distillRun(
+  runDir: string,
+  options: DistillOptions = {},
+): Promise<DistillResult> {
   const listed = await listFiles(runDir);
   const files: DistillManifest["files"] = [];
   for (const file of listed) {
     const path = relative(runDir, file).split(sep).join("/");
     if (path === manifestRel) continue;
+    if (options.includeTestLogs !== true && path.endsWith(".test.log")) continue;
     const data = await readFile(file);
     files.push({
       path,

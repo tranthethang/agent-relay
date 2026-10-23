@@ -29,3 +29,23 @@ test("implement asks before approve and uses task verbs", () => {
   expect(text).not.toContain("implement-plan.md");
   expect(assertNoShellSnippet(text)).toBeUndefined();
 });
+
+test("implement edits and commits in the claim worktree", () => {
+  expect(text).toContain("Read `references/file-conventions.md` before you edit a run file.");
+  expect(text).toContain("Edit them in the claim result's");
+  expect(text).toContain("`worktree.path` when it has one.");
+  expect(text).toContain("Use `run.worktree.path` only when no task");
+  expect(text).toContain("Commit there before `atry task done`.");
+  expect(text).toContain("A refused run names");
+  expect(text).toContain("`atry task start` does not create a task worktree.");
+  expect(text).toContain("A task worktree must be committed before `atry task done`.");
+});
+
+test("implement dispatches on kind and not on command text", () => {
+  expect(text).toContain("Dispatch on `kind` and `args`.");
+  expect(text).toContain("When `kind` is `approve`");
+  expect(text).toContain("When `kind` is `stage-start`");
+  expect(text).toContain("When `kind` is `stage-done`");
+  expect(text).toContain("When `kind` is `task-start`");
+  expect(text).not.toMatch(/selected action (is|contains|names)/);
+});

@@ -1,7 +1,7 @@
 ---
 name: atry-brainstorm
-description: Use when the user invokes atry-brainstorm or asks only to investigate or discuss without file changes.
-requires-atry: ">=0.1.0"
+description: "Investigate an agent-relay question before any file change. Use this when the user wants to discuss a run, a plan, or a design and does not want edits yet. Do not use it to implement code, to write the plan file, or to review a finished change."
+requires-atry: ">=0.10.7"
 ---
 
 # Brainstorm
@@ -17,10 +17,12 @@ This skill investigates and discusses. It stays read-only until the user allows 
 <!-- BEGIN PREFLIGHT -->
 
 Run `atry preflight --requires "<requires-atry>"` before any other command in this skill.
-Stop when that command exits non-zero.
+Stop when that command exits non-zero. A dev build needs `--allow-dev` or `ATRY_DEV=1`; do not use a dev build for a real run.
 When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
+Read `references/file-conventions.md` before you edit a run file.
 When the context JSON has `run.worktree`, edit files and run git in `run.worktree.path`.
+A claim result with `worktree.path` takes precedence over `run.worktree.path`.
 
 <!-- END PREFLIGHT -->
 

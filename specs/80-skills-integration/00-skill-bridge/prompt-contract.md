@@ -16,7 +16,12 @@ The `atry next <run> --json` command serves as an executable prompt contract bet
   },
   "actions": [
     {
+      "kind": "task-start",
       "command": "atry task start 1792385260 T1",
+      "args": {
+        "run": "1792385260",
+        "task": "T1"
+      },
       "reason": "An implement task is still open.",
       "needsHuman": false,
       "read": [
@@ -43,3 +48,69 @@ The `atry next <run> --json` command serves as an executable prompt contract bet
 - **`reason`**: A single human-readable explanatory sentence describing why this step was chosen.
 - **`read`**: An array of file paths that the agent should read into context before executing the command.
 - **`needsHuman`**: True when the recommendation requires a human decision or when the developer must choose among several actions. Each action also marks its own decision requirement.
+
+## Action Kind
+
+Each action holds a `kind`. A skill dispatches on `kind` and on `args`.
+A skill does not match the text of `command`.
+
+| `kind`        | Command shape                            | `args`           | `reason`                                         | `needsHuman` | Flags           |
+| ------------- | ---------------------------------------- | ---------------- | ------------------------------------------------ | ------------ | --------------- |
+| `plan-new`    | `atry plan new <run>`                    | `run`            | The plan has no overview or task input.          | `false`      |                 |
+| `plan-done`   | `atry plan done <run>`                   | `run`            | The plan has no task index.                      | `false`      |                 |
+| `approve`     | `atry approve <run> --preview`           | `run`            | The plan is incomplete.                          | `true`       |                 |
+| `approve`     | `atry approve <run>`                     | `run`            | The plan is waiting for approval.                | `true`       |                 |
+| `stage-start` | `atry stage start <run> implement`       | `run`, `stage`   | Implement has not started.                       | `false`      |                 |
+| `task-start`  | `atry task start <run> <task>`           | `run`, `task`    | An implement task is still open.                 | `false`      |                 |
+| `integrate`   | `atry integrate <run> <task>`            | `run`, `task`    | A done task still has a worktree.                | `false`      |                 |
+| `stage-done`  | `atry stage done <run> implement`        | `run`, `stage`   | Every implement task is done or skipped.         | `false`      |                 |
+| `review-new`  | `atry review new <run> self`             | `run`, `review`  | No self-review covers the current tree.          | `false`      |                 |
+| `review-done` | `atry review done <run> self`            | `run`, `review`  | Self-review has started.                         | `false`      |                 |
+| `review-new`  | `atry review new <run> cross`            | `run`, `review`  | Cross-review has not started.                    | `false`      | `requiresModel` |
+| `review-done` | `atry review done <run> cross`           | `run`, `review`  | Cross-review has started.                        | `false`      |                 |
+| `close`       | `atry close <run>`                       | `run`            | The run is ready for a developer close decision. | `true`       |                 |
+| `decide`      | `atry review decide <run> Q<n> <answer>` | `run`            | A review question is still open.                 | `true`       |                 |
+| `none`        | `none`                                   |                  | The run is closed or abandoned.                  | `false`      |                 |
+| `none`        | `atry list <run>`                        | `run` for a list | No pending task is ready to start.               | `false`      |                 |
+
+`args.run` is the run id. `args.task` is a task id such as `T1`. `args.review`
+is `self` or `cross`. `args.stage` is `implement`.
+
+The two `approve` rows share the `approve` kind and differ in `command`.
+`needsHuman` is true for `approve`, `close`, and `decide`, because each one
+waits for a developer decision.
+
+`requiresModel` marks an action where the caller must pass `--model`. Only a
+cross-review start carries it.
+
+While a run is `planned`, `next` reads the plan files instead of recommending
+`approve` straight away. It returns `plan new` when the overview or
+`tasks.input.json` is missing, `plan done` when `10-plan/index.json` is missing,
+`approve --preview` when a task file lacks Detail or Acceptance, and `approve`
+when the plan is complete. When the caller does not pass a plan state, `next`
+keeps the `approve` recommendation.
+
+`task start` carries no `requiresSession`. The command has no `--session` flag.
+A shared run calls `atry claim <run> <task> --session <tag>` before `task start`.
+
+`kind` is `none` for a run that is closed or abandoned. It is also `none` for
+`atry list <run>`, which reads the plan index and changes nothing. That action
+carries `read: ["10-plan/index.json"]`, so the developer can see the blocked
+tasks. A closed run carries no actions.
+
+## Read Paths
+
+| `kind`                              | `read`                                                       |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `plan-new`                          | `10-plan/`                                                   |
+| `plan-done`                         | `10-plan/` and `10-plan/tasks.input.json`                    |
+| `approve`                           | `10-plan/overview.md` and `10-plan/index.json`               |
+| `task-start`, `integrate`           | `10-plan/overview.md` and `10-plan/<task>.md`                |
+| `stage-start`, `stage-done`         | `10-plan/overview.md` and `10-plan/index.json`               |
+| `review-new`, `review-done` (self)  | `10-plan/overview.md` and `20-implement/`                    |
+| `review-new`, `review-done` (cross) | the self paths and `30-self-review/`                         |
+| `decide`                            | `30-self-review/` and `40-cross-review/`                     |
+| `close`                             | `10-plan/overview.md`, `30-self-review/`, `40-cross-review/` |
+| `none`                              | empty for a closed run; the plan index for `atry list`       |
+
+`command` and `recommendation` stay in the payload. `schema` stays `1`.
