@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
-import { gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
+import { ensurePlanReady, gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
 import { createRun, writeTasks } from "./plan-helper.js";
 
 const execFileAsync = promisify(execFile);
@@ -23,6 +23,7 @@ async function approved(dir: string, slug: string): Promise<string> {
   const run = await createRun(dir, slug);
   await writeTasks(run, [{ title: "Own", files: ["src/own.ts"] }]);
   expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+  await ensurePlanReady(run);
   expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
   return run;
 }
@@ -91,6 +92,23 @@ test("a clean start moves base to HEAD and records rebased before started", asyn
     );
     expect(completed?.size).toEqual({ files: 1, added: 1, deleted: 0 });
     expect(completed?.extra).toBeUndefined();
+  });
+});
+
+test("implement start refuses a plan that is no longer complete", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await approved(dir, "thin-plan");
+    await writeFile(
+      join(run, "10-plan", "T1.md"),
+      "# T1: Own\n\n## Detail\n\nOnly detail.\n",
+    );
+    const before = await events(run);
+    const result = await start(run, dir);
+    expect(result.code).toBe(4);
+    expect(result.stderr).toContain("implement start refused: plan is not ready");
+    expect(result.stderr).toContain("10-plan/T1.md: Acceptance");
+    expect(await events(run)).toEqual(before);
   });
 });
 

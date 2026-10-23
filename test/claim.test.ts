@@ -369,7 +369,7 @@ test("task done sees an outside edit in the task worktree", async () => {
   });
 });
 
-test("integrate keeps a dirty worktree after a clean merge", async () => {
+test("task done and integrate refuse an uncommitted task worktree", async () => {
   await withTempGitRepo(async (repo) => {
     await withTempDir(async (dir) => {
       await enableWorktree(repo, dir);
@@ -380,22 +380,40 @@ test("integrate keeps a dirty worktree after a clean merge", async () => {
       await startImplement(repo, run);
       expect((await runCli(["claim", run, "T1", "--session", "alice"], repo)).code).toBe(0);
       const taskPath = join(dir, name, "T1");
+      await writeFile(join(taskPath, "note.txt"), "task\n");
+
+      const refusedDone = await runCli(["task", "done", run, "T1", "--session", "alice"], repo);
+      expect(refusedDone.code).toBe(4);
+      expect(refusedDone.stderr).toContain("commit in the task worktree before atry task done");
+      expect((await lstat(taskPath)).isDirectory()).toBe(true);
+      expect(await readFile(join(run, "events.jsonl"), "utf8")).not.toContain("task-done");
+
       await commitFile(taskPath, "note.txt", "task\n");
       const done = await runCli(["task", "done", run, "T1", "--session", "alice"], repo);
       expect(done.code, done.stderr).toBe(0);
+
       await writeFile(join(taskPath, "later.txt"), "dirty\n");
       const kept = await runCli(["integrate", run, "T1"], repo);
-      expect(kept.code, kept.stderr).toBe(0);
-      expect(kept.stdout).toContain("merged: yes");
-      expect(kept.stdout).toContain("worktree: kept (worktree has changes)");
+      expect(kept.code, kept.stderr).toBe(4);
+      expect(kept.stdout).toContain("merged: no");
+      expect(kept.stdout).toContain(
+        "worktree: kept (worktree has uncommitted changes; commit before integrate)",
+      );
       expect((await lstat(taskPath)).isDirectory()).toBe(true);
-      const events = await readFile(join(run, "events.jsonl"), "utf8");
-      expect(events).not.toContain("\"action\":\"cleaned\"");
+      expect(await readFile(join(run, "events.jsonl"), "utf8")).not.toContain(
+        "\"action\":\"cleaned\"",
+      );
+      const next = await runCli(["next", run, "--json"], repo);
+      expect(JSON.parse(next.stdout).command).toContain("integrate");
+      const checkout = await runCheckout(run);
+      await expect(readFile(join(checkout, "note.txt"), "utf8")).rejects.toThrow();
+
       await rm(join(taskPath, "later.txt"));
-      const removed = await runCli(["integrate", run, "T1"], repo);
-      expect(removed.code, removed.stderr).toBe(0);
-      expect(removed.stdout).toContain("merged: yes");
+      const merged = await runCli(["integrate", run, "T1"], repo);
+      expect(merged.code, merged.stderr).toBe(0);
+      expect(merged.stdout).toContain("merged: yes");
       await expect(lstat(taskPath)).rejects.toThrow();
+      expect(await readFile(join(checkout, "note.txt"), "utf8")).toBe("task\n");
       const after = await readFile(join(run, "events.jsonl"), "utf8");
       expect(after).toContain("\"action\":\"cleaned\"");
     });

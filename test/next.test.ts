@@ -1,9 +1,11 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 import { type EventLine } from "../src/core/event.js";
 import { explainNext, formatAge, nextActions, nextStep } from "../src/core/next.js";
 import { reduceEvents } from "../src/core/reduce.js";
 import { type PlanIndex } from "../src/core/tasks.js";
-import { runCli, withTempDir } from "./helper.js";
+import { gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
 import { plannedState, runCache, seedRelay, seedRun } from "./seed.js";
 
 const start = Date.parse("2026-10-17T00:00:00.000Z");
@@ -22,7 +24,7 @@ test("formatAge uses minutes, hours, then days", () => {
 test("explainNext marks approve, close, and decide as human steps", () => {
   expect(explainNext("atry approve 1792208725")).toMatchObject({
     needsHuman: true,
-    read: ["10-plan/overview.md"],
+    read: ["10-plan/overview.md", "10-plan/index.json"],
     reason: "The plan is waiting for approval.",
   });
   expect(explainNext("atry close 1792208725").needsHuman).toBe(true);
@@ -44,8 +46,8 @@ test("each action carries a kind, args, and its requirement flags", () => {
   expect(task).toMatchObject({
     kind: "task-start",
     args: { run: id, task: "T2" },
-    requiresSession: true,
   });
+  expect(task?.requiresSession).toBeUndefined();
   expect(task?.read).toEqual(["10-plan/overview.md", "10-plan/T2.md"]);
 
   const cross = explainNext(`atry review new ${id} cross`).actions[0];
@@ -99,6 +101,60 @@ test("nextStep uses the plan index when run state has no task row", () => {
   expect(nextStep("1792208725", state, events, undefined, { schema: 1, tasks: [] })).toBe(
     "atry stage done 1792208725 implement",
   );
+});
+
+test("nextStep walks the plan state before approve", () => {
+  const id = "1792208725";
+  const planned = reduceEvents([ev("run", "created")]);
+  const index: PlanIndex = {
+    schema: 1,
+    tasks: [{ id: "T1", title: "One", deps: [], files: [], path: "10-plan/T1.md" }],
+  };
+  expect(
+    nextStep(id, planned, [], undefined, null, [], {
+      overview: false,
+      tasksInput: false,
+      index: null,
+      ready: false,
+    }),
+  ).toBe(`atry plan new ${id}`);
+  expect(
+    nextStep(id, planned, [], undefined, null, [], {
+      overview: true,
+      tasksInput: true,
+      index: null,
+      ready: false,
+    }),
+  ).toBe(`atry plan done ${id}`);
+  expect(
+    nextStep(id, planned, [], undefined, null, [], {
+      overview: true,
+      tasksInput: true,
+      index,
+      ready: false,
+    }),
+  ).toBe(`atry approve ${id} --preview`);
+  expect(
+    nextStep(id, planned, [], undefined, null, [], {
+      overview: true,
+      tasksInput: true,
+      index,
+      ready: true,
+    }),
+  ).toBe(`atry approve ${id}`);
+  expect(nextStep(id, planned, [])).toBe(`atry approve ${id}`);
+  expect(explainNext(`atry approve ${id} --preview`).actions[0]).toMatchObject({
+    kind: "approve",
+    reason: "The plan is incomplete.",
+  });
+  expect(explainNext(`atry plan done ${id}`).actions[0]).toMatchObject({
+    kind: "plan-done",
+    read: ["10-plan/", "10-plan/tasks.input.json"],
+  });
+  expect(explainNext(`atry plan new ${id}`).actions[0]).toMatchObject({
+    kind: "plan-new",
+    read: ["10-plan/"],
+  });
 });
 
 test("nextStep names the following verb", () => {
@@ -170,6 +226,52 @@ test("nextActions lists eligible tasks and review or close choices", () => {
   ]);
 });
 
+test("next walks the plan states before approve", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const created = await runCli([
+      "run",
+      "new",
+      "--slug",
+      "next-plan",
+      "--title",
+      "Next plan",
+      "--json",
+    ], dir);
+    expect(created.code, created.stderr).toBe(0);
+    const run = JSON.parse(created.stdout) as { path: string; id: string };
+
+    const empty = await runCli(["next", run.id, "--json"], dir);
+    expect(JSON.parse(empty.stdout)).toMatchObject({ command: `atry plan new ${run.id}` });
+
+    await runCli(["plan", "new", run.path], dir);
+    await writeFile(
+      join(run.path, "10-plan", "overview.md"),
+      "# Overview\n\n## Goal\n\nShip the plan.\n",
+    );
+    await writeFile(
+      join(run.path, "10-plan", "tasks.input.json"),
+      `${JSON.stringify({ schema: 1, tasks: [{ title: "One", deps: [], files: [] }] })}\n`,
+    );
+    const noIndex = await runCli(["next", run.id, "--json"], dir);
+    expect(JSON.parse(noIndex.stdout)).toMatchObject({ command: `atry plan done ${run.id}` });
+
+    await runCli(["plan", "done", run.path], dir);
+    const thin = await runCli(["next", run.id, "--json"], dir);
+    expect(JSON.parse(thin.stdout)).toMatchObject({
+      command: `atry approve ${run.id} --preview`,
+      reason: "The plan is incomplete.",
+    });
+
+    await writeFile(
+      join(run.path, "10-plan", "T1.md"),
+      "# T1: One\n\n## Detail\n\nDo it.\n\n## Acceptance\n\n- It works.\n",
+    );
+    const ready = await runCli(["next", run.id, "--json"], dir);
+    expect(JSON.parse(ready.stdout)).toMatchObject({ command: `atry approve ${run.id}` });
+  });
+});
+
 test("atry next covers each lifecycle", async () => {
   const cases: {
     lifecycle: string;
@@ -181,9 +283,9 @@ test("atry next covers each lifecycle", async () => {
     {
       lifecycle: "planned",
       events: [ev("run", "created")],
-      command: "atry approve 1792208725",
-      kind: "approve",
-      needsHuman: true,
+      command: "atry plan new 1792208725",
+      kind: "plan-new",
+      needsHuman: false,
     },
     {
       lifecycle: "approved",

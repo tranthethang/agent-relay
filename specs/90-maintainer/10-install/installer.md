@@ -15,12 +15,25 @@ npx skills add tranthethang/agent-relay -g --copy
 The npm tarball holds `dist/atry.js` and `skills/`. `atry skills install`
 copies the six bundles from that tarball into one tool directory, so the CLI
 and the skills come from one version. `--dir <path>` replaces the tool path.
-A second install reports each bundle as `present` and writes nothing.
+It runs on every install: a missing bundle is `installed`, a bundle whose
+canonical files changed is `updated`, and an identical bundle is `unchanged`.
+The copy overwrites `SKILL.md` and `references/` and keeps extra local files.
 
-`atry skills status` reads `requires-atry` from each installed bundle and
-compares it with the running CLI. It exits 1 on a missing bundle or a version
-mismatch, and prints the install command. Without `--tool` or `--dir` it checks
-the three tool directories below.
+The release sets the package version before the build. A post-publish job
+installs the published tarball into a temporary prefix and checks `atry
+version`, `atry preflight`, `atry skills install`, and `atry skills status`.
+Upgrade the CLI, then run `atry skills install` again to update the bundles.
+
+`atry skills status` compares each installed bundle with the bundled one. A
+bundle is `ok` when its floor fits and its content matches. It is `stale` when
+only the content differs, `mismatch` when the floor is too high, and `missing`
+when `SKILL.md` is absent. With no `--tool` or `--dir` it checks the tool
+directories that exist. `--all` checks every directory, so an absent tool
+fails. It exits 1 and prints the exact install command.
+
+`atry doctor` checks the installed bundles and the version that `atry` on
+`PATH` reports. It fails when a bundle is stale or missing, or when `PATH`
+runs a different base version from the running CLI.
 
 | Tool        | `skills` agent id | `atry skills install` directory |
 | ----------- | ----------------- | ------------------------------- |

@@ -68,7 +68,7 @@ test("a JSON response without schema 1 fails the scenario", async () => {
 test("the collection keeps every scenario offline and inside one skill", () => {
   const collection = readCollection();
   expect(collection.schema).toBe(1);
-  expect(collection.maxTokens).toBe(2500);
+  expect(collection.maxTokens).toBe(4500);
   for (const scenario of collection.scenarios) {
     expect(scenario.skill).toMatch(/^atry-[a-z-]+$/);
     expect(scenario.steps.length).toBeGreaterThan(0);

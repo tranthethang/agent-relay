@@ -31,14 +31,18 @@ test("release workflow computes X.M.Z and publishes from main", () => {
     "npm ci",
     "scripts/maint/next-version.ts",
     "--check-requires",
+    "npm version",
     "npm run check",
     "npm run build",
     "npm test",
-    "npm version",
     "git push origin",
     "npm install -g npm@11.15.0",
     "npm publish --provenance --access public --tag latest",
     "gh release create",
+    "atry version",
+    "atry preflight --requires \">=0.10.7\"",
+    "atry skills install --tool claude-code",
+    "atry skills status --dir",
   ];
   let cursor = -1;
   for (const step of order) {
@@ -46,4 +50,13 @@ test("release workflow computes X.M.Z and publishes from main", () => {
     expect(index).toBeGreaterThan(cursor);
     cursor = index;
   }
+
+  expect(yaml.indexOf("npm version")).toBeLessThan(yaml.indexOf("npm run build"));
+  expect(yaml.indexOf("npm version")).toBeLessThan(yaml.indexOf("npm test"));
+  expect(yaml).toContain("outputs:");
+  expect(yaml).toContain("version: ${{ steps.version.outputs.version }}");
+  expect(yaml).toContain("needs: publish");
+  expect(yaml).toContain("npm install --prefix");
+  expect(yaml).toContain("install.bundles.length !== 6");
+  expect(yaml).toContain("status.ok !== true");
 });

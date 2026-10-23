@@ -83,7 +83,7 @@ export function registerLifecycle(program: Command): void {
     .description("Record plan approval")
     .argument("[run]", "run id, slug, name, or path")
     .option("--via <via>", "confirm or arg")
-    .option("--preview", "print Goal, Decisions, and the task count")
+    .option("--preview", "print Goal, Non-goals, Constraints, Decisions, and the tasks")
     .action(async (
       run: string | undefined,
       opts: { via?: string; preview?: boolean },

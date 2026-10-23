@@ -20,6 +20,8 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Refuse unless main
         if: github.ref != 'refs/heads/main'
@@ -61,6 +63,11 @@ jobs:
           set -euo pipefail
           node --experimental-strip-types scripts/maint/next-version.ts --check-requires "${{ steps.version.outputs.version }}"
 
+      # The build reads the version from `package.json`. Set it first, so the
+      # bundle and `dist/package.json` report the release version.
+      - name: Set the package version
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
+
       - name: Install dprint
         run: npm install -g dprint@0.57.4
 
@@ -98,9 +105,6 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Set the package version
-        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
-
       - name: Push the tag
         run: |
           set -euo pipefail
@@ -118,3 +122,55 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "v${{ steps.version.outputs.version }}" --generate-notes
+
+  # This job installs the published tarball. It proves that the CLI and the six
+  # bundles in the registry work together, not only the local build.
+  smoke:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install the published package into a temporary prefix
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+          prefix="${RUNNER_TEMP}/atry-smoke"
+          npm install --prefix "$prefix" "@tranthethang/agent-relay@${VERSION}"
+          echo "${prefix}/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Smoke the published CLI and skills
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+          installed="$(atry version | head -n 1)"
+          if [ "$installed" != "$VERSION" ]; then
+            echo "atry version is ${installed}, expected ${VERSION}" >&2
+            exit 1
+          fi
+          atry preflight --requires ">=0.10.7"
+          skills="${RUNNER_TEMP}/atry-smoke-skills"
+          atry skills install --tool claude-code --dir "$skills" --json > "${RUNNER_TEMP}/install.json"
+          atry skills status --dir "$skills" --json > "${RUNNER_TEMP}/status.json"
+          node -e '
+          const { readFileSync } = require("node:fs");
+          const read = (name) => JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/${name}`, "utf8"));
+          const install = read("install.json");
+          if (install.bundles.length !== 6) {
+            console.error(`installed ${install.bundles.length} bundles, expected 6`);
+            process.exit(1);
+          }
+          const status = read("status.json");
+          if (status.ok !== true) {
+            console.error("skills status is not ok");
+            process.exit(1);
+          }
+          console.log("the published CLI and the six skills work together");
+          '
+          rm -f "${RUNNER_TEMP}/install.json" "${RUNNER_TEMP}/status.json"

@@ -40,6 +40,19 @@ node dist/atry.js preflight --requires ">=0.10.7" --allow-dev
 
 A release build sets a real version before the build and prints no marker.
 
+## Release
+
+The release workflow computes `X.M.Z`, checks `requires-atry`, and sets the
+package version before the build. It then checks format and types, builds,
+inspects the tarball, and tests. It publishes one version for the CLI and the
+six bundles. Do not lower `requires-atry` to make a release pass.
+
+A post-publish job installs the published tarball into a temporary prefix. It
+runs `atry version`, `atry preflight --requires ">=0.10.7"`,
+`atry skills install`, and `atry skills status`. It fails on a version
+mismatch, a preflight failure, a status failure, or a bundle count other than
+six.
+
 ## Tests
 
 Detail: [`specs/90-maintainer/20-testing/testing.md`](specs/90-maintainer/20-testing/testing.md).

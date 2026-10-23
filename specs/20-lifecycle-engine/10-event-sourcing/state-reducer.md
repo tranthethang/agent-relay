@@ -13,6 +13,7 @@ function reduceEvents(events: readonly EventLine[]): RunState;
 - Starts from `lifecycle: "planned"`, `stage: "plan"`, `approved: false`, and `tasks: []`.
 - Applies each event in order.
 - Sets `lifecycle` from `created`, `approved`, `started`, `completed` on `implement`, `closed`, and `abandoned`.
+- A `plan` `completed` event in `approved` sets `approved: false` and `lifecycle: "planned"`. A plan change after approval therefore needs a new approval.
 - Sets task status to `pending`, `in-progress`, `done`, or `skipped`.
 - `claimed`, `stolen`, and `task-started` set `in-progress`. `released` clears `session` and leaves the status.
 - `waived`, `rebased`, `cleaned`, and `drifted` do not change lifecycle, stage, or tasks.

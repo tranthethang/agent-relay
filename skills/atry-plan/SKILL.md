@@ -17,10 +17,12 @@ This stage creates one run and fills the plan stage folder. It does not implemen
 <!-- BEGIN PREFLIGHT -->
 
 Run `atry preflight --requires "<requires-atry>"` before any other command in this skill.
-Stop when that command exits non-zero.
+Stop when that command exits non-zero. A dev build needs `--allow-dev` or `ATRY_DEV=1`; do not use a dev build for a real run.
 When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
+Read `references/file-conventions.md` before you edit a run file.
 When the context JSON has `run.worktree`, edit files and run git in `run.worktree.path`.
+A claim result with `worktree.path` takes precedence over `run.worktree.path`.
 
 <!-- END PREFLIGHT -->
 
@@ -46,8 +48,10 @@ Continue only after the user chooses.
 6. Fill `10-plan/overview.md` with the edit tool.
 7. Fill `10-plan/tasks.input.json` with the edit tool.
 8. Run `atry plan done <run>`.
-9. Fill each `10-plan/T<n>.md` file that `plan done` creates.
+9. Fill the `## Detail` and `## Acceptance` sections in each `10-plan/T<n>.md` file that `plan done` creates. Approval needs both to hold text.
 10. Do not run `atry stage done` for plan. `plan done` records the completed event.
+
+`plan done` refuses a task list with zero tasks.
 
 Use a slug of lowercase letters and single hyphens.
 `run new` records `base` from git HEAD. Do not invent a ref.
@@ -74,13 +78,17 @@ Use at most eight tasks.
 Edit `tasks.input.json` when the user adds tasks after `plan done`.
 Keep every existing title so the current ids stay.
 Append only new tasks. Then run `atry plan amend <run>`.
-Fill each new task file that `plan amend` creates.
+Fill the `## Detail` and `## Acceptance` sections in each new task file that
+`plan amend` creates. `plan amend` refuses a task list with zero tasks.
+Amend after approval returns the run to `planned`, so it needs approval again.
 
 ## Approve and close
 
 This skill does not approve or close.
 A later skill runs `atry approve <run> --preview` or `atry close <run> --preview`.
 That skill shows the preview and asks for one `y` or `n` answer.
+`atry approve` refuses a plan with no index, zero tasks, or an empty Detail or
+Acceptance section. `--preview` lists the missing items.
 
 ## Non-goals
 

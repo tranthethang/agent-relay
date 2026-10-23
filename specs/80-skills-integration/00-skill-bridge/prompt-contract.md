@@ -22,7 +22,6 @@ The `atry next <run> --json` command serves as an executable prompt contract bet
         "run": "1792385260",
         "task": "T1"
       },
-      "requiresSession": true,
       "reason": "An implement task is still open.",
       "needsHuman": false,
       "read": [
@@ -57,9 +56,11 @@ A skill does not match the text of `command`.
 
 | `kind`        | Command shape                            | `args`           | Flags                     |
 | ------------- | ---------------------------------------- | ---------------- | ------------------------- |
+| `plan-new`    | `atry plan new <run>`                    | `run`            |                           |
+| `plan-done`   | `atry plan done <run>`                   | `run`            |                           |
 | `approve`     | `atry approve <run>`                     | `run`            |                           |
 | `stage-start` | `atry stage start <run> implement`       | `run`, `stage`   |                           |
-| `task-start`  | `atry task start <run> <task>`           | `run`, `task`    | `requiresSession`         |
+| `task-start`  | `atry task start <run> <task>`           | `run`, `task`    |                           |
 | `integrate`   | `atry integrate <run> <task>`            | `run`, `task`    |                           |
 | `stage-done`  | `atry stage done <run> implement`        | `run`, `stage`   |                           |
 | `review-new`  | `atry review new <run> self`             | `run`, `review`  | `requiresModel` for cross |
@@ -72,9 +73,17 @@ A skill does not match the text of `command`.
 is `self` or `cross`. `args.stage` is `implement`.
 
 `requiresModel` marks an action where the caller must pass `--model`. Only a
-cross-review start carries it. `requiresSession` marks an action where a shared
-run needs a session tag. A task start carries it, because the caller may need
-`atry claim ... --session <tag>`.
+cross-review start carries it.
+
+While a run is `planned`, `next` reads the plan files instead of recommending
+`approve` straight away. It returns `plan new` when the overview or
+`tasks.input.json` is missing, `plan done` when `10-plan/index.json` is missing,
+`approve --preview` when a task file lacks Detail or Acceptance, and `approve`
+when the plan is complete. When the caller does not pass a plan state, `next`
+keeps the `approve` recommendation.
+
+`task start` carries no `requiresSession`. The command has no `--session` flag.
+A shared run calls `atry claim <run> <task> --session <tag>` before `task start`.
 
 `kind` is `none` for a run that is closed or abandoned. It is also `none` for
 `atry list <run>`, which reads the plan index and changes nothing. That action
@@ -85,7 +94,9 @@ tasks. A closed run carries no actions.
 
 | `kind`                              | `read`                                                       |
 | ----------------------------------- | ------------------------------------------------------------ |
-| `approve`                           | `10-plan/overview.md`                                        |
+| `plan-new`                          | `10-plan/`                                                   |
+| `plan-done`                         | `10-plan/` and `10-plan/tasks.input.json`                    |
+| `approve`                           | `10-plan/overview.md` and `10-plan/index.json`               |
 | `task-start`, `integrate`           | `10-plan/overview.md` and `10-plan/<task>.md`                |
 | `stage-start`, `stage-done`         | `10-plan/overview.md` and `10-plan/index.json`               |
 | `review-new`, `review-done` (self)  | `10-plan/overview.md` and `20-implement/`                    |

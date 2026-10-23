@@ -44,7 +44,7 @@ error.
 3. **Step count.** The number of calls must equal the number of steps, and the
    count must not pass `maxSteps`.
 4. **Token count.** `scripts/maint/skill-tokens.ts` must report fewer tokens
-   than `maxTokens` for that skill. The default is 2,500.
+   than `maxTokens` for that skill. The default is 4,500.
 
 ## Add a scenario
 

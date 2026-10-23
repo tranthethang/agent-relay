@@ -17,10 +17,12 @@ This stage implements an existing plan, one task at a time. It does not plan aga
 <!-- BEGIN PREFLIGHT -->
 
 Run `atry preflight --requires "<requires-atry>"` before any other command in this skill.
-Stop when that command exits non-zero.
+Stop when that command exits non-zero. A dev build needs `--allow-dev` or `ATRY_DEV=1`; do not use a dev build for a real run.
 When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
+Read `references/file-conventions.md` before you edit a run file.
 When the context JSON has `run.worktree`, edit files and run git in `run.worktree.path`.
+A claim result with `worktree.path` takes precedence over `run.worktree.path`.
 
 <!-- END PREFLIGHT -->
 
@@ -38,6 +40,10 @@ Read the selected action's paths before you run its command.
 Stop when the state is closed or abandoned and no action is available.
 When `kind` is `approve`, run `atry approve <run> --preview`.
 Show that preview and ask the user to answer `y` or `n`.
+When the preview prints `ready: no`, stop and show the missing items. A plan
+amend after approval returns the run to `planned`, so the plan needs work again.
+When `kind` is `plan-new` or `plan-done`, stop. The plan is not ready; switch to
+the plan skill.
 When the skill call includes a `yes` token, use that token as `y`.
 When the user answers `n`, stop and do not record an event.
 When the user answers `y` for approve, run `atry approve <run> --via confirm`.
@@ -62,19 +68,25 @@ Repeat from the first step in this section.
 3. When several sessions share the run, run `atry claim <run> <task> --session <tag>`.
 4. When the claim fails, pick a different task or stop.
 5. When you work alone, run `atry task start <run> <task>`.
-6. Change only the files listed for that task. When `run.worktree` exists, change them in `run.worktree.path`.
+6. Change only the files listed for that task. Edit them in the claim result's
+   `worktree.path` when it has one. Use `run.worktree.path` only when no task
+   worktree exists.
 7. Fill `20-implement/<task>.md` with the edit tool. Read `references/example-implement.md` first.
 8. Record the files, the assumptions, and the risks in that file.
-9. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.
-10. When `task done` refuses, read the paths in the message.
-11. When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.
+9. Run `git status` in the tree you edited. Commit there before `atry task done`.
+10. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.
+11. When `task done` refuses, read the paths in the message. A refused run names
+    the dirty worktree; commit there and retry.
+12. When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.
     When it is false, continue after the warning and check the recorded extras.
-12. Put that reason in the task report.
-13. When a task is not feasible, run `atry task skip <run> <task> --reason <text>`.
-14. Add `--session <tag>` to `task skip` when you hold a claim.
-15. Run `atry release <run> <task> --session <tag>` only when you stop without done or skip.
+13. Put that reason in the task report.
+14. When a task is not feasible, run `atry task skip <run> <task> --reason <text>`.
+15. Add `--session <tag>` to `task skip` when you hold a claim.
+16. Run `atry release <run> <task> --session <tag>` only when you stop without done or skip.
 
 `task done` and `task skip` drop the claim lock. Do not call `release` after them.
+`atry task start` does not create a task worktree. Use `atry claim` when the run
+uses a task worktree. A task worktree must be committed before `atry task done`.
 Do not invent a meaning the plan does not state. Skip that task and record the reason.
 A stale lock can move with `atry steal <run> <task> --session <tag> --ttl <minutes>`.
 

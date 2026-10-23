@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
+import { gitCommit, reachReview, runCli, withTempGitRepo, writeReadyPlan } from "./helper.js";
 
 test("implement start without approval exits 4", async () => {
   await withTempGitRepo(async (dir) => {
@@ -109,6 +109,7 @@ test("stage and approve verbs follow the plan state diagram", async () => {
       expect(result.code).toBe(4);
       expect(result.stderr).toContain(message);
     }
+    await writeReadyPlan(run.path);
     await runCli(["approve", run.path, "--via", "arg"], dir);
     const twice = await runCli(["approve", run.path, "--via", "arg"], dir);
     expect(twice.code).toBe(4);

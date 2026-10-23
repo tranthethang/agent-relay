@@ -6,7 +6,7 @@ import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
 import { atomicWrite, isEnoent, readJson } from "./files.js";
-import { gitHead, workTree } from "./git.js";
+import { gitHead, treeStatus, workTree } from "./git.js";
 import {
   acquireLock,
   createStealGuard,
@@ -187,6 +187,19 @@ export async function integrateTask(runDir: string, task: string): Promise<Integ
     assertDeps(loaded.run.state, id, item.deps, "integrate");
     const record = await locateTaskWorktree(runDir, loaded, id);
     const checkout = await runGitCwd(runDir, loaded.run);
+    const status = await treeStatus(record.path);
+    if (status.length > 0) {
+      return {
+        schema: schemaVersion,
+        path: record.path,
+        task: id,
+        branch: record.branch,
+        merged: false,
+        paths: [],
+        worktree: "kept",
+        worktreeReason: "worktree has uncommitted changes; commit before integrate",
+      };
+    }
     const merged = await mergeTaskBranch(checkout, record.branch);
     if (!merged.merged) {
       return {

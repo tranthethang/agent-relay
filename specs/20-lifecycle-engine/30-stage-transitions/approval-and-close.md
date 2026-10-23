@@ -5,8 +5,10 @@
 ## Approval Gate (`atry approve`)
 
 - Requires option `--via <confirm|arg>`.
-- Supports `--preview` to print the run goal, settled decisions, and task count without recording an approval event.
-- Does not check the task count. `atry plan done` applies the eight-task limit when `strict.plan` is true.
+- Reads `10-plan/overview.md` and `10-plan/index.json`. It refuses with exit 4, and records no event, when the index is missing, the index has zero tasks, or a task file has an empty `## Detail` or `## Acceptance` section.
+- Supports `--preview` to print the goal, non-goals, constraints, decisions, each task file, and `ready: yes` or `ready: no` with the missing items. The preview records no event and does not throw for an incomplete plan.
+- `atry stage start <run> implement` applies the same readiness check.
+- Does not apply the eight-task limit. `atry plan done` applies it when `strict.plan` is true.
 - Records actor provenance (`agent-env` when running in recognized agent environments, otherwise `unknown`).
 
 ## Close Gate (`atry close`)

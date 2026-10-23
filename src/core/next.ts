@@ -5,6 +5,8 @@ import { openPlanTasks, type PlanIndex } from "./tasks.js";
 import { schemaVersion } from "./vocab.js";
 
 export const actionKinds = [
+  "plan-new",
+  "plan-done",
   "approve",
   "stage-start",
   "task-start",
@@ -48,6 +50,15 @@ export type NextResult = {
   read: string[];
 };
 
+// State read from the run directory. `atry next` must not infer the plan
+// step from the lifecycle alone.
+export type PlanState = {
+  overview: boolean;
+  tasksInput: boolean;
+  index: PlanIndex | null;
+  ready: boolean;
+};
+
 export function formatAge(fromMs: number, nowMs: number): string {
   const ms = Math.max(0, nowMs - fromMs);
   const minutes = Math.floor(ms / 60000);
@@ -64,8 +75,9 @@ export function nextStep(
   reviews?: { required: readonly string[]; done: readonly string[] },
   index?: PlanIndex | null,
   integrateTasks: readonly string[] = [],
+  plan?: PlanState,
 ): string {
-  const early = nextBeforeReview(id, state, index, integrateTasks);
+  const early = nextBeforeReview(id, state, index, integrateTasks, plan);
   if (early !== undefined) return early;
   if (lastStageAction(events, "self-review") === "started") return `atry review done ${id} self`;
   if (lastStageAction(events, "cross-review") === "started") return `atry review done ${id} cross`;
@@ -79,9 +91,10 @@ function nextBeforeReview(
   state: RunState,
   index: PlanIndex | null | undefined,
   integrateTasks: readonly string[],
+  plan: PlanState | undefined,
 ): string | undefined {
   if (state.lifecycle === "abandoned" || state.lifecycle === "closed") return "none";
-  if (state.lifecycle === "planned") return `atry approve ${id}`;
+  if (state.lifecycle === "planned") return plannedCommand(id, plan);
   if (state.lifecycle === "approved") return `atry stage start ${id} implement`;
   if (state.lifecycle !== "implementing") return undefined;
   const integrate = integrateCommands(id, state, index, integrateTasks);
@@ -89,6 +102,14 @@ function nextBeforeReview(
   if (command !== undefined) return command;
   if (openPlanTasks(index ?? null, state).length > 0) return `atry task start ${id}`;
   return `atry stage done ${id} implement`;
+}
+
+function plannedCommand(id: string, plan: PlanState | undefined): string {
+  if (plan === undefined) return `atry approve ${id}`;
+  if (!plan.overview || !plan.tasksInput) return `atry plan new ${id}`;
+  if (plan.index === null) return `atry plan done ${id}`;
+  if (!plan.ready) return `atry approve ${id} --preview`;
+  return `atry approve ${id}`;
 }
 
 function integrateCommands(
@@ -260,8 +281,12 @@ export function nextText(result: NextResult): string {
 
 function actionReadPaths(kind: ActionKind, args: NextActionArgs): string[] {
   switch (kind) {
+    case "plan-new":
+      return ["10-plan/"];
+    case "plan-done":
+      return ["10-plan/", "10-plan/tasks.input.json"];
     case "approve":
-      return ["10-plan/overview.md"];
+      return ["10-plan/overview.md", "10-plan/index.json"];
     case "task-start":
     case "integrate":
       return args.task === undefined
@@ -287,6 +312,8 @@ function actionReadPaths(kind: ActionKind, args: NextActionArgs): string[] {
 
 function actionKind(command: string): ActionKind {
   if (command === "none") return "none";
+  if (/\bplan new\b/.test(command)) return "plan-new";
+  if (/\bplan done\b/.test(command)) return "plan-done";
   if (/\bapprove\b/.test(command)) return "approve";
   if (/\bstage start\b/.test(command)) return "stage-start";
   if (/\bstage done\b/.test(command)) return "stage-done";
@@ -335,12 +362,14 @@ function actionFor(command: string): NextAction {
     read: actionReadPaths(kind, args),
   };
   if (kind === "review-new" && args.review === "cross") action.requiresModel = true;
-  if (kind === "task-start") action.requiresSession = true;
   return action;
 }
 
 function reasonFor(command: string): string {
   if (command === "none") return "The run is closed or abandoned.";
+  if (command.includes(" plan new ")) return "The plan has no overview or task input.";
+  if (command.includes(" plan done ")) return "The plan has no task index.";
+  if (command.endsWith(" --preview")) return "The plan is incomplete.";
   if (command.includes(" approve ")) return "The plan is waiting for approval.";
   if (command.includes(" stage start ")) return "Implement has not started.";
   if (command.includes(" task start ")) return "An implement task is still open.";

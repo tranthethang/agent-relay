@@ -23,7 +23,16 @@ test("preflight asks for atry preflight and context", () => {
   expect(partial).not.toMatch(/\b(mktemp|trap|heredoc|grep|sed)\b/);
   expect(partial).not.toContain("```");
   expect(partial).not.toContain("verify.sh");
-  expect(partial).not.toContain("file-conventions");
+});
+
+test("preflight points at file conventions and explains dev builds", () => {
+  expect(partial).toContain("Read `references/file-conventions.md` before you edit a run file.");
+  expect(partial).toContain("--allow-dev");
+  expect(partial).toContain("ATRY_DEV=1");
+  expect(partial).toContain("do not use a dev build for a real run");
+  expect(partial).toContain(
+    "A claim result with `worktree.path` takes precedence over `run.worktree.path`.",
+  );
 });
 
 test("requires-atry values must match", () => {

@@ -25,6 +25,10 @@ test("a sequential run moves from run new to close", async () => {
     await writeFile(join(run, "10-plan", "tasks.input.json"), `${JSON.stringify(tasksInput)}\n`);
     const planned = await mustCli(["plan", "done", run, "--json"], dir);
     expect(JSON.parse(planned.stdout)).toMatchObject({ tasks: ["T1"] });
+    await writeFile(
+      join(run, "10-plan", "T1.md"),
+      "# T1: Add the note\n\n## Detail\n\nWrite the note.\n\n## Acceptance\n\n- The note exists.\n",
+    );
     await mustCli(["approve", run, "--via", "arg"], dir);
     await mustCli(["stage", "start", run, "implement", "--tool", "cursor"], dir);
     await mustCli(["task", "start", run, "T1"], dir);

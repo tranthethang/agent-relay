@@ -20,6 +20,7 @@ When executing stages or reviews, tools declare their identifier via `--tool <na
 
 - Installed skill bundles live at `~/.claude/skills/atry-*`.
 - Claude Code reads installed bundles rather than editing files directly inside `skills/` during runs.
+- Re-run `atry skills install --tool claude-code` after a CLI upgrade. The copy overwrites `SKILL.md` and `references/`, keeps extra local files, and reports each bundle as `installed`, `updated`, or `unchanged`.
 
 ### Antigravity
 

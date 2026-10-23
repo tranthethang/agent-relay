@@ -38,11 +38,23 @@ atry version
 ```
 
 `atry skills install` copies the bundled skills into the tool directory.
-`--dir <path>` writes to another directory. A second install reports every
-bundle as `present` and changes nothing.
-`atry skills status` compares `requires-atry` in each installed bundle with the
-running CLI. It exits 1 on a missing bundle or a version mismatch, and prints
-the install command.
+`--dir <path>` writes to another directory. It runs on every install: a
+missing bundle is `installed`, a bundle whose canonical files changed is
+`updated`, and an identical bundle is `unchanged`. The copy overwrites
+`SKILL.md` and `references/`, and it keeps files that are not in the bundle.
+`atry skills status` compares each installed bundle with the bundled one. A
+bundle is `ok` when its floor fits and its content matches. It is `stale` when
+only the content differs, `mismatch` when the floor is too high, and `missing`
+when `SKILL.md` is absent. With no `--tool` or `--dir`, it checks the tool
+directories that exist. `--all` checks every known directory. It exits 1 on a
+failed bundle and prints the exact install command, such as
+`npm i -g @tranthethang/agent-relay@0.10.7`.
+
+The CLI and the six bundles ship as one version. After you upgrade the CLI,
+run `atry skills install` again so the installed bundle text matches. The
+release workflow sets the version before the build. A post-publish job installs
+the published tarball and runs `atry version`, `atry preflight`,
+`atry skills install`, and `atry skills status`.
 
 The five tool names are `claude-code`, `cursor`, `codex`, `antigravity`, and
 `kiro`. Each tool writes one of three directories:
@@ -122,15 +134,28 @@ only when you dogfood a build from this repo.
 `atry stats` reads `events.jsonl` across runs. `atry stats <run>` reads one run.
 A row reports stage time, review rounds, waivers, failed tests, and drift.
 Stage time is a number of milliseconds. The command does not write an event.
-`atry doctor` checks Node 22, git, the CLI version, the bundled skills, the policy file, and `atry` on `PATH`.
-It prints one line per check. It exits 1 when a check fails.
+`atry doctor` checks Node 22, git, the CLI version, the bundled skills, the
+installed bundles, the policy file, `atry` on `PATH`, and the version that
+`PATH` reports. It prints one line per check. It exits 1 when a check fails,
+when an installed bundle is stale, or when `PATH` runs a different base version
+from the running CLI.
 A missing policy file passes and reports `default`.
 `atry next <run>` prints the next command. `--json` adds `command`, `reason`, `needsHuman`, and `read`.
-`atry approve <run> --preview` prints Goal, Decisions, and the task count.
+Before approval, `next` follows the plan files: `plan new` when the overview or
+task input is missing, `plan done` when `10-plan/index.json` is missing,
+`approve --preview` when a task file lacks Detail or Acceptance, and `approve`
+when the plan is complete.
+`atry approve <run> --preview` prints Goal, Non-goals, Constraints, Decisions,
+each task file, and `ready: yes` or `ready: no` with the missing items.
 `atry close <run> --preview` prints `recommend: y` or `recommend: n` and the reasons.
 Neither preview records an event.
+`atry approve` refuses a plan with no `10-plan/index.json`, zero tasks, or an
+empty Detail or Acceptance section. `atry plan done` and `atry plan amend`
+refuse zero tasks. A `plan amend` after approval returns the run to `planned`,
+so it needs approval again.
 The skills ask before they run those verbs. Implement start refuses when the
-plan is not approved. Close checks the required reviews for its policy, the
+plan is not approved or is no longer complete. Close checks the required
+reviews for its policy, the
 latest completed review tree against the current code tree, open questions,
 and changes made after the latest review started.
 With `strict.reviewIntegrity` false (the default) and `--via` set, `close`
@@ -268,10 +293,14 @@ With worktree on, `claim` creates one worktree and one branch for the task.
 The lock stores the path and the branch. A failed claim removes both.
 `release` removes a clean worktree and its branch when the run branch contains that branch.
 `release` keeps a worktree that has changes or unmerged commits. It prints the reason.
+A task worktree must be committed before `atry task done` and before `atry integrate`.
+`task done` exits 4 and names `worktree` when the task worktree has uncommitted changes.
+The tool does not commit for the agent. Commit in the task worktree first.
 `atry integrate` merges that branch into the run branch after each dependency is done or skipped.
 A conflict exits 4, keeps the worktree, and prints each path.
 A clean merge removes the worktree and records a `run` `cleaned` event with the task and the branch.
-A dirty worktree stays after that merge. The command prints the reason and skips the cleaned event.
+A dirty task worktree refuses the merge with exit 4, prints `merged: no` and
+`worktree: kept`, and skips the cleaned event. Nothing merges until the agent commits.
 `atry next` recommends integrate after the task is done while that worktree remains.
 `task done` ignores
 a path that another in-progress task's `files` covers. `atry guard <run> <path>`

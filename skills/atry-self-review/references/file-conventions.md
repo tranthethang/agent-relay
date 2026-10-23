@@ -27,6 +27,10 @@ or the copies under `skills/*/references/`.
 Markdown is prose. `atry` does not parse it. JSON that an agent fills starts
 as a scaffold with every key present.
 
+A run with `worktree.enabled` has its own worktree. Commit in that worktree, not
+in the main tree, before `atry stage done`. A claimed task has a task worktree
+under it. Commit there before `atry task done`.
+
 Brainstorms live at `.agent-relay/brainstorms/{YMD}-{slug}/` with `notes.md`
 and `open.json`. A brainstorm is not a run.
 
@@ -74,12 +78,21 @@ and the branch `<run>-<task>`. The lock stores that path and that branch.
 A failed claim removes both. `release` removes a clean worktree and its branch when
 the run branch contains that branch. `release` keeps a worktree with changes or
 unmerged commits. It prints the reason.
+A claim result with `worktree.path` is where the task edits and commits belong.
+Edit and commit in that path. Use `run.worktree.path` only when no task worktree
+exists. `atry task start` does not create a task worktree. Use `atry claim` when
+the run uses a task worktree.
+A task worktree must be committed before `atry task done` and `atry integrate`.
+`task done` exits 4 when the task worktree has uncommitted changes. The tool
+does not commit. Run `git status` in the task worktree and commit there before
+`atry task done`. A refused `task done` or `integrate` names the dirty worktree.
+Commit there and retry.
 `atry integrate <run> <task>` merges `<run>-<task>` into the run branch.
 It refuses when a dependency is not done or skipped.
+It refuses a dirty task worktree with exit 4, `merged: no`, and `worktree: kept`.
 A conflict exits 4, keeps the worktree, and prints each path.
 A clean merge removes the worktree and records a `run` `cleaned` event.
 That event stores the task and the branch name.
-A dirty worktree stays after the merge. The command prints the reason and skips that event.
 
 ## Parallel runs
 

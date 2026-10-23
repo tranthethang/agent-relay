@@ -27,14 +27,15 @@ The claim subsystem (`src/core/claim.ts`) enables multiple agent sessions to wor
    - `atry task done` and `atry task skip` drop the task claim lock automatically upon completion.
    - Those commands do not remove the task worktree. `atry integrate` finds it from `worktree.dir`.
    - When a task worktree exists, `task done` diffs that worktree against its branch point.
+   - The task worktree must be clean and committed. `task done` exits 4 with field `worktree` when the task worktree has uncommitted changes. The tool does not commit. Commit in the task worktree first.
 
 4. **Integrate**:
    ```bash
    atry integrate <run> <task>
    ```
    - Rejects the merge when a dependency is not `done` or `skipped`.
+   - Checks the task worktree before the merge. A dirty tree returns `merged: false` and `worktree: kept` with the reason `worktree has uncommitted changes; commit before integrate`. The command exits 4, merges nothing, and keeps the worktree.
    - Merges `<run>-<task>` into the run branch.
    - A conflict exits 4. The command aborts the merge, keeps the worktree, and prints each path.
    - A clean merge removes the worktree and its branch.
    - It records a `run` `cleaned` event. `task` is the task id. `ref` is the branch name.
-   - A dirty worktree stays after a merged branch. The command prints the reason and skips that event.

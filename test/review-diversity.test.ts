@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, test } from "vitest";
 import { modelLine, modelVendor } from "../src/core/model.js";
 import { diversityWarnings } from "../src/core/review.js";
-import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
+import { gitCommit, reachReview, runCli, withTempGitRepo, writeReadyPlan } from "./helper.js";
 import { createRun } from "./plan-helper.js";
 
 test("model vendor and line use a shared vendor map", () => {
@@ -86,6 +86,7 @@ test("atry review done keeps the implement model when stage done omits it", asyn
   await withTempGitRepo(async (dir) => {
     await gitCommit(dir);
     const run = await createRun(dir, "review-implement-model");
+    await writeReadyPlan(run);
     for (
       const args of [
         ["approve", run, "--via", "arg"],

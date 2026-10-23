@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { RelayError } from "../src/core/error.js";
-import { installCommand, preflightResult, versionMeets } from "../src/core/preflight.js";
+import {
+  installCommandFor,
+  preflightResult,
+  preflightText,
+  versionMeets,
+} from "../src/core/preflight.js";
 import { runCli, withTempGitRepo } from "./helper.js";
 
 // `npm test` builds first, so the CLI reports the dev build version.
@@ -69,11 +74,22 @@ test("preflightResult reads a release version without a marker", () => {
   });
 });
 
+test("installCommandFor names the required release", () => {
+  expect(installCommandFor(">=0.10.7")).toBe("npm i -g @tranthethang/agent-relay@0.10.7");
+  expect(() => installCommandFor("0.10.7")).toThrow(RelayError);
+  expect(preflightText(preflightResult("0.10.6", ">=0.10.7"))).toBe(
+    "requires: >=0.10.7\ninstall: npm i -g @tranthethang/agent-relay@0.10.7\n",
+  );
+  expect(preflightText(preflightResult("0.10.7", ">=0.10.7"))).toBe("");
+});
+
 test("preflight refuses the dev build without consent", async () => {
   await withTempGitRepo(async (dir) => {
     const result = await runCli(["preflight", "--requires", `>=${base}`], dir);
     expect(result.code).toBe(1);
-    expect(result.stdout).toBe(`${installCommand}\n`);
+    expect(result.stdout).toBe(
+      `requires: >=${base}\ninstall: ${installCommandFor(`>=${base}`)}\n`,
+    );
     expect(result.stderr).toBe("");
   });
 });
@@ -93,7 +109,9 @@ test("preflight exits usage and prints the install command when the version is l
   await withTempGitRepo(async (dir) => {
     const result = await runCli(["preflight", "--requires", ">=99.1.0", "--allow-dev"], dir);
     expect(result.code).toBe(1);
-    expect(result.stdout).toBe(`${installCommand}\n`);
+    expect(result.stdout).toBe(
+      "requires: >=99.1.0\ninstall: npm i -g @tranthethang/agent-relay@99.1.0\n",
+    );
     expect(result.stderr).toBe("");
   });
 });

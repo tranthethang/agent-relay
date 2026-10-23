@@ -1,4 +1,4 @@
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   assertClaimOwner,
@@ -13,8 +13,8 @@ import {
 } from "./claim.js";
 import { RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
-import { atomicWrite } from "./files.js";
-import { changedPaths, workTree } from "./git.js";
+import { atomicWrite, isEnoent, readJson } from "./files.js";
+import { changedPaths, treeStatus, workTree } from "./git.js";
 import { appendEvent, openRun, withRunLock } from "./mutate.js";
 import { normalizePath } from "./overlap.js";
 import { readPolicy } from "./policy.js";
@@ -87,6 +87,120 @@ export function tasksInputScaffold(): string {
   return `${JSON.stringify({ schema: schemaVersion, tasks: [] })}\n`;
 }
 
+// The text under one `## Heading`, up to the next `## ` heading.
+export function sectionText(markdown: string, heading: string): string {
+  const lines = markdown.split("\n");
+  const start = lines.indexOf(`## ${heading}`);
+  if (start === -1) return "";
+  const body: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.startsWith("## ")) break;
+    body.push(line);
+  }
+  return body.join("\n").trim();
+}
+
+export type PlanTaskPreview = {
+  id: string;
+  title: string;
+  files: string[];
+  detail: string;
+  acceptance: string;
+  detailOk: boolean;
+  acceptanceOk: boolean;
+};
+
+export type PlanReadiness = {
+  goal: string;
+  nonGoals: string;
+  constraints: string;
+  decisions: string;
+  tasks: number;
+  taskFiles: PlanTaskPreview[];
+  ready: boolean;
+  missing: string[];
+};
+
+// The plan state that `atry next` needs. It is read from the run directory,
+// not inferred from the lifecycle alone.
+export type PlanFilesState = {
+  overview: boolean;
+  tasksInput: boolean;
+  index: PlanIndex | null;
+  ready: boolean;
+};
+
+export async function planReadiness(runDir: string): Promise<PlanReadiness> {
+  const overview = await readTextOrEmpty(join(runDir, "10-plan", "overview.md"));
+  const index = await readIndexOrNull(runDir);
+  const taskFiles: PlanTaskPreview[] = [];
+  const taskGaps: string[] = [];
+  for (const task of index?.tasks ?? []) {
+    const inside = !task.path.includes("..") && task.path.startsWith("10-plan/");
+    const text = inside ? await readTextOrEmpty(join(runDir, task.path)) : "";
+    const detail = sectionText(text, "Detail");
+    const acceptance = sectionText(text, "Acceptance");
+    taskFiles.push({
+      id: task.id,
+      title: task.title,
+      files: task.files,
+      detail,
+      acceptance,
+      detailOk: detail.length > 0,
+      acceptanceOk: acceptance.length > 0,
+    });
+    if (detail.length === 0) taskGaps.push(`${task.path}: Detail`);
+    if (acceptance.length === 0) taskGaps.push(`${task.path}: Acceptance`);
+  }
+  const missing: string[] = [];
+  const goal = sectionText(overview, "Goal");
+  if (goal.length === 0) missing.push("10-plan/overview.md");
+  if (index === null) missing.push("10-plan/index.json");
+  if (index !== null && index.tasks.length === 0) missing.push("10-plan/index.json");
+  missing.push(...taskGaps);
+  return {
+    goal,
+    nonGoals: sectionText(overview, "Non-goals"),
+    constraints: sectionText(overview, "Constraints"),
+    decisions: sectionText(overview, "Decisions"),
+    tasks: taskFiles.length,
+    taskFiles,
+    ready: missing.length === 0,
+    missing,
+  };
+}
+
+export async function planFilesState(runDir: string): Promise<PlanFilesState> {
+  const readiness = await planReadiness(runDir);
+  return {
+    overview: await exists(join(runDir, "10-plan", "overview.md")),
+    tasksInput: await exists(join(runDir, "10-plan", "tasks.input.json")),
+    index: await readIndexOrNull(runDir),
+    ready: readiness.ready,
+  };
+}
+
+async function readTextOrEmpty(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (isEnoent(error)) return "";
+    throw error;
+  }
+}
+
+async function readIndexOrNull(runDir: string): Promise<PlanIndex | null> {
+  let value: unknown;
+  try {
+    value = await readJson(join(runDir, "10-plan", "index.json"));
+  } catch (error) {
+    if (isEnoent(error)) return null;
+    throw error;
+  }
+  const parsed = planIndexSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 export function indexFromTasks(
   tasks: TasksInput["tasks"],
   ids?: readonly string[],
@@ -140,6 +254,9 @@ export async function planDone(runDir: string): Promise<PlanDoneResult> {
       throw new RelayError("gate", `plan done refused: ${started.id} has started`, started.id);
     }
     const input = await readTasksInput(runDir);
+    if (input.tasks.length === 0) {
+      throw new RelayError("gate", "plan done refused: plan has no tasks", "tasks");
+    }
     assertPlanFiles(input.tasks);
     const cwd = await runGitCwd(runDir, loaded.run);
     const policy = await readPolicy(cwd, loaded.run.base);
@@ -155,33 +272,49 @@ export async function planDone(runDir: string): Promise<PlanDoneResult> {
   });
 }
 
+function matchExistingIds(current: PlanIndex, input: TasksInput): (string | undefined)[] {
+  const unmatched = new Map<string, string[]>();
+  for (const task of current.tasks) {
+    unmatched.set(task.title, [...(unmatched.get(task.title) ?? []), task.id]);
+  }
+  return input.tasks.map((task) => unmatched.get(task.title)?.shift());
+}
+
+function assertAmendAllowed(
+  state: RunState,
+  current: PlanIndex,
+  input: TasksInput,
+  matched: readonly (string | undefined)[],
+): void {
+  for (const task of current.tasks) {
+    if (matched.includes(task.id)) continue;
+    if (hasStarted(state, task.id)) {
+      throw new RelayError("gate", `plan amend refused: ${task.id} has started`, task.id);
+    }
+  }
+  for (let index = 0; index < input.tasks.length; index += 1) {
+    const id = matched[index];
+    const task = input.tasks[index];
+    if (id === undefined || task === undefined) continue;
+    if (!hasStarted(state, id)) continue;
+    const previous = current.tasks.find((item) => item.id === id);
+    if (previous === undefined || sameDeps(previous.deps, task.deps)) continue;
+    throw new RelayError("gate", `plan amend refused: ${id} has started`, `${id}.deps`);
+  }
+}
+
 export async function planAmend(runDir: string): Promise<PlanDoneResult> {
   return withRunLock(runDir, async (loaded) => {
     const current = await loadPlanIndex(runDir);
     const input = await readTasksInput(runDir);
+    if (input.tasks.length === 0) {
+      throw new RelayError("gate", "plan amend refused: plan has no tasks", "tasks");
+    }
     assertPlanFiles(input.tasks);
     const cwd = await runGitCwd(runDir, loaded.run);
     const policy = await readPolicy(cwd, loaded.run.base);
-    const unmatched = new Map<string, string[]>();
-    for (const task of current.tasks) {
-      unmatched.set(task.title, [...(unmatched.get(task.title) ?? []), task.id]);
-    }
-    const matched = input.tasks.map((task) => unmatched.get(task.title)?.shift());
-    for (const task of current.tasks) {
-      if (matched.includes(task.id)) continue;
-      if (hasStarted(loaded.run.state, task.id)) {
-        throw new RelayError("gate", `plan amend refused: ${task.id} has started`, task.id);
-      }
-    }
-    for (let index = 0; index < input.tasks.length; index += 1) {
-      const id = matched[index];
-      const task = input.tasks[index];
-      if (id === undefined || task === undefined) continue;
-      if (!hasStarted(loaded.run.state, id)) continue;
-      const previous = current.tasks.find((item) => item.id === id);
-      if (previous === undefined || sameDeps(previous.deps, task.deps)) continue;
-      throw new RelayError("gate", `plan amend refused: ${id} has started`, `${id}.deps`);
-    }
+    const matched = matchExistingIds(current, input);
+    assertAmendAllowed(loaded.run.state, current, input, matched);
     let next = maxTaskNumber([
       ...current.tasks.map((task) => task.id),
       ...(await planFileIds(runDir)),
@@ -193,6 +326,9 @@ export async function planAmend(runDir: string): Promise<PlanDoneResult> {
     });
     const index = indexFromTasks(input.tasks, ids, policy.strict.plan);
     await writePlanFiles(runDir, index);
+    if (loaded.run.state.lifecycle === "approved") {
+      await appendEvent(loaded, runDir, { stage: "plan", action: "completed" });
+    }
     const result = doneResult(runDir, index);
     if (!policy.strict.plan && index.tasks.length > maxPlanTasks) {
       result.warning =
@@ -253,6 +389,16 @@ export async function taskDone(
     const cwd = await runGitCwd(runDir, loaded.run);
     const policy = await readPolicy(cwd, loaded.run.base);
     const taskBase = await taskWorktreeBase(runDir, loaded.run, id);
+    if (taskBase !== undefined) {
+      const status = await treeStatus(taskBase.cwd);
+      if (status.length > 0) {
+        throw new RelayError(
+          "gate",
+          "task worktree has uncommitted changes; commit in the task worktree before atry task done",
+          "worktree",
+        );
+      }
+    }
     const diffCwd = taskBase?.cwd ?? cwd;
     const diffFrom = taskBase?.from ?? from;
     const outside = outsidePaths(
@@ -517,6 +663,6 @@ async function writePlanFiles(runDir: string, index: PlanIndex): Promise<void> {
   for (const task of index.tasks) {
     const file = join(runDir, "10-plan", `${task.id}.md`);
     if (await exists(file)) continue;
-    await atomicWrite(file, `# ${task.id}: ${task.title}\n\n## Detail\n`);
+    await atomicWrite(file, `# ${task.id}: ${task.title}\n\n## Detail\n\n## Acceptance\n`);
   }
 }

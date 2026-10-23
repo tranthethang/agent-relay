@@ -8,6 +8,16 @@ const versionPattern = new RegExp(String.raw`^${part}\.${part}\.${part}$`);
 
 export const installCommand = "npm i -g @tranthethang/agent-relay@latest";
 
+// The exact install command for a `>=X.Y.Z` range. A caller that must name a
+// version uses this instead of the `@latest` shortcut.
+export function installCommandFor(required: string): string {
+  const match = rangePattern.exec(required);
+  if (match === null) {
+    throw new RelayError("usage", "requires must be >=X.Y.Z", "requires");
+  }
+  return `npm i -g @tranthethang/agent-relay@${match[1]}.${match[2]}.${match[3]}`;
+}
+
 export type PreflightResult = {
   schema: typeof schemaVersion;
   ok: boolean;
@@ -15,6 +25,11 @@ export type PreflightResult = {
   required: string;
   dev?: true;
 };
+
+export function preflightText(result: PreflightResult): string {
+  if (result.ok) return "";
+  return `requires: ${result.required}\ninstall: ${installCommandFor(result.required)}\n`;
+}
 
 // A dev build reports `<base>-dev`. The base is the release version it was
 // built from, so consent compares that base and the result still marks the dev

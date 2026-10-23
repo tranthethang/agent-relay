@@ -3,7 +3,10 @@
 | Symptom                                            | Likely cause                                   | What to do                                             |
 | -------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------ |
 | `atry: command not found`                          | The npm bin is not on `PATH`                   | `npm i -g @tranthethang/agent-relay`                   |
-| Skill version check stops                          | Installed `atry` is older than `requires-atry` | Install `@latest`                                      |
+| Skill version check stops                          | Installed `atry` is older than `requires-atry` | Install the named version, e.g. `@0.10.7`              |
+| `atry skills status` prints `stale`                | The installed bundle content is older          | Run `atry skills install --tool <tool>`                |
+| `atry doctor` fails `installed-skills`             | A bundle is missing, stale, or below the floor | Read the bundle name, then reinstall that tool         |
+| `atry doctor` fails `path-version`                 | `PATH` runs a different version from the CLI   | Put the intended `atry` first on `PATH`, then recheck  |
 | `atry version` prints `lib=…/.agent-relay/lib`     | The old bash `atry` is earlier on `PATH`       | Delete `~/.local/bin/atry`, `~/.agent-relay`           |
 | `implement start refused: plan is not approved`    | `atry approve` has not run                     | Approve in chat, then retry                            |
 | `close refused: latest review has open questions`  | The newest review JSON has `open` entries      | Answer them, or close with `--ack-open`                |

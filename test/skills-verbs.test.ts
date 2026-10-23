@@ -45,6 +45,17 @@ test("every atry command named by a skill exists", async () => {
   expect(await unknownCommands(skillNames.map((name) => skillText(name)).join("\n"))).toEqual([]);
 });
 
+test("every skill names the file conventions and the dev-build rule", async () => {
+  for (const name of skillNames) {
+    const text = skillText(name);
+    expect(text, name).toContain(
+      "Read `references/file-conventions.md` before you edit a run file.",
+    );
+    expect(text, name).toContain("A dev build needs `--allow-dev` or `ATRY_DEV=1`");
+  }
+  expect(await unknownCommands(skillNames.map((name) => skillText(name)).join("\n"))).toEqual([]);
+});
+
 test("the verb check fails on a skill that names atry bogus", async () => {
   expect(atryCommands("Run `atry bogus <run> --json`.")).toEqual([["bogus"]]);
   expect(await unknownCommands("Run `atry bogus <run> --json`.")).toEqual(["bogus"]);

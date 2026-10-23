@@ -17,10 +17,12 @@ This skill investigates and discusses. It stays read-only until the user allows 
 <!-- BEGIN PREFLIGHT -->
 
 Run `atry preflight --requires "<requires-atry>"` before any other command in this skill.
-Stop when that command exits non-zero.
+Stop when that command exits non-zero. A dev build needs `--allow-dev` or `ATRY_DEV=1`; do not use a dev build for a real run.
 When `atry` reports an unknown command, tell the user to run `npm i -g @tranthethang/agent-relay@latest`.
 When this skill names a run, call `atry context <run> --json` first.
+Read `references/file-conventions.md` before you edit a run file.
 When the context JSON has `run.worktree`, edit files and run git in `run.worktree.path`.
+A claim result with `worktree.path` takes precedence over `run.worktree.path`.
 
 <!-- END PREFLIGHT -->
 

@@ -14,7 +14,7 @@ test("atry next --json snapshots each lifecycle", async () => {
     {
       lifecycle: "planned",
       events: [ev("run", "created")],
-      command: "atry approve",
+      command: "atry plan new",
     },
     {
       lifecycle: "approved",
@@ -78,22 +78,22 @@ test("atry next --json snapshots each lifecycle", async () => {
               "args": {
                 "run": "1792208700",
               },
-              "command": "atry approve 1792208700",
-              "kind": "approve",
-              "needsHuman": true,
+              "command": "atry plan new 1792208700",
+              "kind": "plan-new",
+              "needsHuman": false,
               "read": [
-                "10-plan/overview.md",
+                "10-plan/",
               ],
-              "reason": "The plan is waiting for approval.",
+              "reason": "The plan has no overview or task input.",
             },
           ],
-          "command": "atry approve 1792208700",
-          "needsHuman": true,
+          "command": "atry plan new 1792208700",
+          "needsHuman": false,
           "read": [
-            "10-plan/overview.md",
+            "10-plan/",
           ],
-          "reason": "The plan is waiting for approval.",
-          "recommendation": "atry approve 1792208700",
+          "reason": "The plan has no overview or task input.",
+          "recommendation": "atry plan new 1792208700",
           "schema": 1,
           "state": {
             "approved": false,
@@ -253,23 +253,50 @@ test("approve and close previews snapshot their prompt text", async () => {
         })
       }\n`,
     );
+    await writeFile(
+      join(run.path, "10-plan/T1.md"),
+      "# T1: One\n\n## Detail\n\nDo the task.\n\n## Acceptance\n\n- It works.\n",
+    );
     const approveText = await runCli(["approve", run.path, "--preview"], dir);
     const approveJson = await runCli(["approve", run.path, "--preview", "--json"], dir);
     expect(approveText.stdout).toMatchInlineSnapshot(`
       "Goal:
       Ship the preview.
 
+      Non-goals:
+
+
+      Constraints:
+
+
       Decisions:
       - Keep the headings exact.
 
       tasks: 1
+      - T1: One
+      ready: yes
       "
     `);
     expect(JSON.parse(approveJson.stdout)).toMatchInlineSnapshot(`
       {
+        "constraints": "",
         "decisions": "- Keep the headings exact.",
         "goal": "Ship the preview.",
+        "missing": [],
+        "nonGoals": "",
+        "ready": true,
         "schema": 1,
+        "taskFiles": [
+          {
+            "acceptance": "- It works.",
+            "acceptanceOk": true,
+            "detail": "Do the task.",
+            "detailOk": true,
+            "files": [],
+            "id": "T1",
+            "title": "One",
+          },
+        ],
         "tasks": 1,
       }
     `);

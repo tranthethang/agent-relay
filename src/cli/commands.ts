@@ -7,7 +7,8 @@ import { exitCodes, RelayError } from "../core/error.js";
 import { type EventLine } from "../core/event.js";
 import { reviewIntegrity } from "../core/lifecycle.js";
 import { explainNextWithChoices, nextActions, nextStep, nextText } from "../core/next.js";
-import { installCommand, preflightResult } from "../core/preflight.js";
+import { planFilesState } from "../core/plan.js";
+import { preflightResult, preflightText } from "../core/preflight.js";
 import { type RunState } from "../core/reduce.js";
 import { oneToken, selectRun } from "../core/select.js";
 import { statusDetail, statusDetailText, statusList, statusListText } from "../core/status.js";
@@ -90,6 +91,9 @@ export function registerCommands(program: Command): void {
       const integrate = index === null
         ? []
         : await openTaskWorktrees(runDir, loaded.run, index.tasks.map((task) => task.id));
+      const plan = loaded.run.state.lifecycle === "planned"
+        ? await planFilesState(runDir)
+        : undefined;
       const step = nextStep(
         loaded.run.id,
         loaded.run.state,
@@ -97,6 +101,7 @@ export function registerCommands(program: Command): void {
         reviews,
         index,
         integrate,
+        plan,
       );
       const choices = nextActions(
         loaded.run.id,
@@ -134,7 +139,7 @@ export function registerCommands(program: Command): void {
     .action((opts: { requires: string; allowDev?: boolean }, command: Command) => {
       const allowDev = opts.allowDev === true || process.env.ATRY_DEV === "1";
       const result = preflightResult(packageVersion(), opts.requires, allowDev);
-      writeResult(result, commandJson(command), (row) => (row.ok ? "" : `${installCommand}\n`));
+      writeResult(result, commandJson(command), preflightText);
       if (!result.ok) process.exitCode = exitCodes.usage;
     });
 

@@ -55,6 +55,13 @@ function applyLifecycle(state: RunState, event: EventLine): void {
     applyStarted(state, event);
     return;
   }
+  if (event.action === "completed" && event.stage === "plan" && state.lifecycle === "approved") {
+    // A plan change after approval needs a new approval.
+    state.approved = false;
+    state.lifecycle = "planned";
+    state.stage = "plan";
+    return;
+  }
   if (event.action === "completed" && event.stage === "implement") {
     state.stage = event.stage;
     state.lifecycle = "reviewing";

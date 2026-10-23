@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
-import { gitCommit, runCli, withTempGitRepo } from "./helper.js";
+import { ensurePlanReady, gitCommit, runCli, withTempGitRepo } from "./helper.js";
 import { createRun, writeTasks } from "./plan-helper.js";
 
 const execFileAsync = promisify(execFile);
@@ -22,6 +22,7 @@ test("atry task start done and skip record events and check deps", async () => {
     const early = await runCli(["task", "start", run, "T1"], dir);
     expect(early.code).toBe(4);
     expect(early.stderr).toContain("task start refused: run is planned");
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
@@ -94,6 +95,7 @@ test("task done checks edits against task files", async () => {
       { title: "Peer", files: ["src/peer.ts"] },
     ]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
@@ -129,6 +131,7 @@ test("task done checks edits against task files", async () => {
     const many = await createRun(dir, "task-scope-extra");
     await writeTasks(many, [{ title: "Wide", files: ["src/kept.ts"] }]);
     expect((await runCli(["plan", "done", many], dir)).code).toBe(0);
+    await ensurePlanReady(many);
     expect((await runCli(["approve", many, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", many, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);
@@ -182,6 +185,7 @@ test("non-strict scope records extras and continues through implement completion
     const run = await createRun(dir, "task-scope-warning");
     await writeTasks(run, [{ title: "Own file", files: ["src/own.ts"] }]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect(
       (await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir))
@@ -228,6 +232,7 @@ test("task done ignores files of a task that finished during the window", async 
       { title: "Bob", files: ["src/bob.ts"] },
     ]);
     expect((await runCli(["plan", "done", run], dir)).code).toBe(0);
+    await ensurePlanReady(run);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
     expect((await runCli(["stage", "start", run, "implement", "--tool", "cursor"], dir)).code)
       .toBe(0);

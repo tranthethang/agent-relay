@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { skillNames } from "./skill-text.js";
 
 const repo = new URL("..", import.meta.url);
 const script = ["--experimental-strip-types", "scripts/maint/sync-references.ts"];
@@ -56,6 +57,42 @@ test("sync:check passes on a clean tree", () => {
   expect(
     readFileSync(new URL("../scripts/maint/sync-references.ts", import.meta.url), "utf8"),
   ).not.toContain("review-walkthrough-template.md");
+});
+
+test("every bundle carries the file conventions, dev note, and implement parallel part", () => {
+  const conventions = readFileSync(
+    new URL("../specs/70-storage-and-git/00-directory-conventions/core.md", import.meta.url),
+    "utf8",
+  );
+  const parallel = readFileSync(
+    new URL("../specs/70-storage-and-git/00-directory-conventions/parallel.md", import.meta.url),
+    "utf8",
+  );
+  for (const name of skillNames) {
+    const skill = readFileSync(new URL(`../skills/${name}/SKILL.md`, import.meta.url), "utf8");
+    expect(skill, name).toContain(
+      "Read `references/file-conventions.md` before you edit a run file.",
+    );
+    expect(skill, name).toContain("ATRY_DEV=1");
+    expect(skill, name).toContain("--allow-dev");
+    const bundle = readFileSync(
+      new URL(`../skills/${name}/references/file-conventions.md`, import.meta.url),
+      "utf8",
+    );
+    expect(bundle, name).toContain(conventions.trim());
+  }
+  const implementBundle = readFileSync(
+    new URL("../skills/atry-implement/references/file-conventions.md", import.meta.url),
+    "utf8",
+  );
+  expect(implementBundle).toContain(parallel.trim());
+  expect(implementBundle).toContain("## Parallel claim");
+  expect(implementBundle).toContain("Run `git status` in the task worktree");
+  const brainstormBundle = readFileSync(
+    new URL("../skills/atry-brainstorm/references/file-conventions.md", import.meta.url),
+    "utf8",
+  );
+  expect(brainstormBundle).not.toContain("## Parallel claim");
 });
 
 test("sync:check fails after one edit to a bundle copy", () => {

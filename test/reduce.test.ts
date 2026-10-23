@@ -53,6 +53,17 @@ test("reduceEvents records implement done as reviewing", () => {
   expect(state.stage).toBe("implement");
 });
 
+test("reduceEvents sends a plan completed after approval back to planned", () => {
+  const state = reduceEvents([
+    ev({ stage: "run", action: "created" }),
+    ev({ stage: "plan", action: "approved" }),
+    ev({ stage: "plan", action: "completed" }),
+  ]);
+  expect(state.lifecycle).toBe("planned");
+  expect(state.stage).toBe("plan");
+  expect(state.approved).toBe(false);
+});
+
 test("reduceEvents keeps a later stage after close", () => {
   const state = reduceEvents([
     ev({ stage: "implement", action: "started" }),

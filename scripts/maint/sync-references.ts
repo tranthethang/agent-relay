@@ -23,7 +23,7 @@ const WRITING_SKILLS = [
 const SKILL_PARTS: Record<string, string[]> = {
   "atry-brainstorm": ["core", "notes"],
   "atry-plan": ["core", "notes"],
-  "atry-implement": ["core", "notes"],
+  "atry-implement": ["core", "parallel", "notes"],
   "atry-self-review": ["core", "review-headings", "parallel", "notes"],
   "atry-cross-review": ["core", "review-headings", "parallel", "notes"],
   "atry-distill": ["core", "manifest", "notes"],
