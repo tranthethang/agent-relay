@@ -88,6 +88,11 @@ async function snapshot(path: string): Promise<Snapshot | null> {
     return { text: await readFile(path, "utf8"), mtimeMs: info.mtimeMs };
   } catch (error) {
     if (lockCode(error) === "ENOENT") return null;
+    // Windows reports EPERM when reading a lock file that is pending delete.
+    if (lockCode(error) === "EPERM") {
+      await sleep();
+      return null;
+    }
     throw error;
   }
 }

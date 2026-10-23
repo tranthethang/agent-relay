@@ -1,6 +1,8 @@
 # agent-relay
 
 [![CI](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/tranthethang/agent-relay/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/gh/tranthethang/agent-relay/graph/badge.svg)](https://codecov.io/gh/tranthethang/agent-relay)
+[![CodeQL](https://github.com/tranthethang/agent-relay/actions/workflows/codeql.yml/badge.svg)](https://github.com/tranthethang/agent-relay/actions/workflows/codeql.yml)
 
 Markdown skills plus a TypeScript CLI (`atry`) for one piece of work in stages:
 plan, implement, self-review, and cross-review. You run each stage yourself, in
