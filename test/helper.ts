@@ -55,6 +55,9 @@ export async function withTempGitRepo<T>(fn: (dir: string) => Promise<T>): Promi
   const dir = await mkdtemp(join(parent, "atry-"));
   try {
     await execFileAsync("git", ["init"], { cwd: dir });
+    // `git merge` needs a committer identity even when it ends in a conflict.
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
+    await execFileAsync("git", ["config", "user.name", "test"], { cwd: dir });
     return await fn(dir);
   } finally {
     await rm(dir, { recursive: true, force: true });
