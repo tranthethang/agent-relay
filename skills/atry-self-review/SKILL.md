@@ -75,19 +75,16 @@ Repeat from the first step in this section.
 After the user answers an open question, record the answer with
 `atry review decide <run> Q<n> <answer>`. Use `a` or `b` for a choice card.
 Use the user's text for a `Need:` card.
-Let `atry review done` print `test command: <command>` and run the configured `testCommand` from the run's base policy only when you pass `--run-tests`.
+`review done` prints `test command: <command>`. Run the configured `testCommand` from the base policy only with `--run-tests`.
 Fill the printed markdown file with the edit tool. Read `references/example-review.md` before you write that file.
-Set `fixed` and `open` in the printed JSON file.
-`review done` stores the configured test command's exit code, duration, and tree.
-It does not print test stdout or stderr.
-It writes the last 200 output lines to the matching `.test.log` file.
-The close preview names a delta when one is present.
-When `atry next` recommends `review new <run> self` after a cross-review, run this stage again.
+Set `fixed` and `open` in the printed JSON.
+`review done` stores the test command's exit code, duration, and tree.
+It prints no test output. It writes the last 200 lines to `.test.log`.
+The close preview names a delta when present.
+When `atry next` recommends `review new <run> self`, run this stage again.
 `close` refuses that tree until the new self-review is done.
 
 Fix a confirmed bug before `review done`.
-Leave a style-only note in the markdown file. Do not change code for style.
-Write a genuine tradeoff as a question card and in `open`.
 `review new` records the stage start. Do not also run `atry stage start`.
 
 ## Non-goals

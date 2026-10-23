@@ -58,8 +58,9 @@ The example shows the headings that the skill asks for, so the agent sees the
 quality bar and not only prose.
 
 An example counts toward the stage token budget. `npm run tokens` must stay
-under 2,500 tokens for each stage. A new example can push a review stage over
-that line, so check the count after you add one.
+under 4,500 tokens for each stage. `evals/scenarios.json` sets `maxTokens` to
+4500, and the eval fails at that number. A new example can push a review stage
+over that line, so check the count after you add one.
 
 `test/skills-examples.test.ts` checks that each skill names its example, that
 the file exists, that the headings are present, and that a review example has
@@ -69,15 +70,21 @@ one card and one `open` item.
 
 `npm run tokens` counts characters in each `SKILL.md` plus every
 `references/*.md` path that file names. It divides by 4 and rounds to the
-nearest integer. The total row is the sum of the stage rows. This table is a
-snapshot at commit `2dea9637d1689264e3bdc44e50f7de7b84c6017e`.
+nearest integer. The total row is the sum of the stage rows.
 
-| stage        | references                                            | chars | tokens |
-| ------------ | ----------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md                                 |  5100 |   1275 |
-| plan         | references/writing.md                                 |  5874 |   1469 |
-| implement    | references/writing.md                                 |  6678 |   1670 |
-| self-review  | references/writing.md, references/reviewer-conduct.md |  7752 |   1938 |
-| cross-review | references/writing.md, references/reviewer-conduct.md |  7930 |   1983 |
-| distill      | (none)                                                |  1020 |    255 |
-| total        |                                                       | 34354 |   8590 |
+The table below is a snapshot. The command is the source. Run the command
+after you edit a skill, and replace the rows with its output.
+
+| stage        | references                                                                                                                | chars | tokens |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------- | ----: | ----: |
+| brainstorm   | references/writing.md, references/file-conventions.md                                                                     |  8181 |  2045 |
+| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                     | 10301 |  2575 |
+| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                    | 13995 |  3499 |
+| self-review  | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-review.md       | 16255 |  4064 |
+| cross-review | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-cross-review.md | 16356 |  4089 |
+| distill      | references/file-conventions.md                                                                                            |  4729 |  1182 |
+| total        |                                                                                                                           | 69817 | 17454 |
+
+`test/skill-tokens.test.ts` reads `maxTokens` from `evals/scenarios.json`. It
+fails when a stage reaches `maxTokens` minus 50. It also fails when the total
+row does not equal the sum of the stage rows.

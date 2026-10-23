@@ -28,7 +28,7 @@ A claim result with `worktree.path` takes precedence over `run.worktree.path`.
 
 Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigravity`, `kiro`, or `unknown`.
 Use a different tool than implement and self-review when you can.
-`review done` prints a warning when the tool matches. The warning does not stop the command.
+`review done` prints a warning when the tool matches, but does not stop the command.
 
 ## Loop
 
@@ -74,18 +74,15 @@ Repeat from the first step in this section.
 3. Diff the work from `run.base` to the current HEAD. When `run.worktree` exists, diff in `run.worktree.path`.
 4. Ask where each earlier claim can be wrong. Then check that place.
 
-`review new cross` requires `--model`. After the user answers an open
-question, record the answer with `atry review decide <run> Q<n> <answer>`.
+`review new cross` requires `--model`. Record each answer with
+`atry review decide <run> Q<n> <answer>`.
 Use `a` or `b` for a choice card and the user's text for a `Need:` card.
-Let `atry review done` print `test command: <command>` and run the configured `testCommand` from the run's base policy only when you pass `--run-tests`.
+`review done` prints `test command: <command>`. Run the configured `testCommand` from the base policy only with `--run-tests`.
 Fill the printed markdown file with the edit tool. Read `references/example-cross-review.md` before you write that file.
 Set `fixed` and `open` in the printed JSON file.
-`review done` stores the configured test command's exit code, duration, and
-tree in the event and writes its last 200 output lines to `.test.log`.
-It does not print that output.
+`review done` stores the test exit code, duration, and tree.
+It writes the last 200 output lines to `.test.log` and prints none.
 
 Fix a confirmed bug before `review done`.
-Leave a style-only note in the markdown file. Do not change code for style.
-Write a genuine tradeoff as a question card and in `open`.
 A fix needs a later self-review before close. `atry next` recommends it.
 `review new` records the stage start. Do not also run `atry stage start`.
