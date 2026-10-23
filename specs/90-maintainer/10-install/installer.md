@@ -3,7 +3,7 @@
 Two paths. Both copy the same six bundles.
 
 ```bash
-npm i -g @tranthethang/agent-relay
+npm i -g @tranthethang/agent-relay@0.10.7
 atry skills install --tool claude-code
 atry skills status --tool claude-code
 ```
@@ -14,10 +14,12 @@ npx skills add tranthethang/agent-relay -g --copy
 
 The npm tarball holds `dist/atry.js` and `skills/`. `atry skills install`
 copies the six bundles from that tarball into one tool directory, so the CLI
-and the skills come from one version. `--dir <path>` replaces the tool path.
-It runs on every install: a missing bundle is `installed`, a bundle whose
-canonical files changed is `updated`, and an identical bundle is `unchanged`.
-The copy overwrites `SKILL.md` and `references/` and keeps extra local files.
+and the six bundles come from one version: `0.10.7`. `--dir <path>` replaces
+the tool path. It runs on every install: a missing bundle is `installed`, a
+bundle whose canonical files changed is `updated`, and an identical bundle is
+`unchanged`. The copy overwrites `SKILL.md` and `references/` and keeps extra
+local files. A second install after an upgrade therefore updates the canonical
+files and leaves extra local files alone.
 
 The release sets the package version before the build. A post-publish job
 installs the published tarball into a temporary prefix and checks `atry
@@ -37,6 +39,7 @@ runs a different base version from the running CLI.
 
 | Tool        | `skills` agent id | `atry skills install` directory |
 | ----------- | ----------------- | ------------------------------- |
+| Cowork      | `cowork`          | `~/.agents/skills/<name>/`      |
 | Cursor      | `cursor`          | `~/.agents/skills/<name>/`      |
 | Codex       | `codex`           | `~/.agents/skills/<name>/`      |
 | Antigravity | `antigravity`     | `~/.agents/skills/<name>/`      |
@@ -47,8 +50,24 @@ runs a different base version from the running CLI.
 directories. `--copy` avoids symlinks. `-g` writes under the user home.
 
 Cursor, Codex, and Antigravity share one directory because those agents use
-the universal `.agents/skills` layout. Claude Code and Kiro get their own
-copies.
+the universal `.agents/skills` layout. Cowork reads that layout too. Claude
+Code and Kiro get their own copies.
+
+## Install deadlocks and stale bundles
+
+- An `@latest` tag that still points at an older release cannot satisfy a
+  bundle floor of `>=0.10.7`. Install `@0.10.7` by name. Do not lower
+  `requires-atry` to clear the error.
+- A stale bundle has a floor that fits and content that differs. Run
+  `atry skills install --tool <tool>` again. The copy updates `SKILL.md` and
+  `references/` and keeps extra local files.
+- A content hash mismatch is `stale` when only the content differs and
+  `mismatch` when the floor is too high. `stale` needs a reinstall; `mismatch`
+  needs a newer CLI.
+- `atry doctor` compares the running CLI with the `atry` on `PATH`. If
+  `path-version` fails, the shell runs a different base version from the one
+  you upgraded. Put the intended `atry` first on `PATH`, then rerun
+  `atry skills install` and `atry skills status`.
 
 `npm i -g` installs the `atry` binary from `dist/atry.js`. It requires
 Node.js 22 or newer.
@@ -75,4 +94,5 @@ real home directory.
 command, unless `ATRY_DEV=1` is set or `--allow-dev` is passed. The `atry`
 binary on `PATH` does not read this build. The release workflow sets a real
 version before the build, so a published package reports that version and no
-marker.
+marker. Use `--allow-dev` or `ATRY_DEV=1` only for a local build. Do not use a
+dev build for a real run.

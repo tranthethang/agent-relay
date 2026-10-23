@@ -12,7 +12,7 @@ edit against the in-progress task files.
 
 Does:
 
-- Install six skill bundles with `npx skills add`.
+- Install six skill bundles with `atry skills install` or `npx skills add`.
 - Install the `atry` CLI from npm. The binary name is `atry`.
 - Store run state in `events.jsonl` and a `run.json` cache.
 - Scaffold the files an agent fills, then validate them.
@@ -27,21 +27,25 @@ Does not:
 
 ## Install
 
-Node.js 22 or newer. The npm tarball holds the CLI and the six skill bundles,
-so both come from one version.
+Node.js 22 or newer. This release is `0.10.7`. The npm tarball holds the CLI
+and the six skill bundles, so the `atry` binary and the six bundles are one
+version: `0.10.7`.
 
 ```bash
-npm i -g @tranthethang/agent-relay
+npm i -g @tranthethang/agent-relay@0.10.7
 atry skills install --tool claude-code
 atry skills status --tool claude-code
 atry version
 ```
 
-`atry skills install` copies the bundled skills into the tool directory.
-`--dir <path>` writes to another directory. It runs on every install: a
-missing bundle is `installed`, a bundle whose canonical files changed is
-`updated`, and an identical bundle is `unchanged`. The copy overwrites
-`SKILL.md` and `references/`, and it keeps files that are not in the bundle.
+`atry skills install --tool <tool>` copies the six bundled skills from the
+running CLI into one tool directory. `--dir <path>` writes to another
+directory. It runs on every install: a missing bundle is `installed`, a bundle
+whose canonical files changed is `updated`, and an identical bundle is
+`unchanged`. The copy overwrites `SKILL.md` and `references/`, and it keeps
+files that are not in the bundle. A second install after an upgrade therefore
+updates the canonical files and leaves extra local files alone.
+
 `atry skills status` compares each installed bundle with the bundled one. A
 bundle is `ok` when its floor fits and its content matches. It is `stale` when
 only the content differs, `mismatch` when the floor is too high, and `missing`
@@ -50,11 +54,20 @@ directories that exist. `--all` checks every known directory. It exits 1 on a
 failed bundle and prints the exact install command, such as
 `npm i -g @tranthethang/agent-relay@0.10.7`.
 
-The CLI and the six bundles ship as one version. After you upgrade the CLI,
-run `atry skills install` again so the installed bundle text matches. The
-release workflow sets the version before the build. A post-publish job installs
-the published tarball and runs `atry version`, `atry preflight`,
-`atry skills install`, and `atry skills status`.
+`atry doctor` checks the installed bundle content and the `atry` version on
+`PATH`. It fails when a bundle is stale or missing, or when `PATH` runs a
+different base version from the running CLI.
+
+Upgrade the CLI first, then run `atry skills install` again so the installed
+bundle text matches the new CLI. Do not install an older CLI to clear a skill
+floor: a bundle whose `requires-atry` is `>=0.10.7` needs `0.10.7` or newer.
+An `@latest` tag that still points at `0.10.6` cannot satisfy that floor, so
+install `@0.10.7` by name.
+
+A dev build is only for a local build from this repository. `atry preflight`
+refuses a `-dev` version unless you pass `--allow-dev` or set `ATRY_DEV=1`.
+Use either one only while you dogfood that build. Do not use a dev build for a
+real run.
 
 The six tool names are `claude-code`, `cowork`, `cursor`, `codex`,
 `antigravity`, and `kiro`. Each tool writes one of three directories:
@@ -65,9 +78,9 @@ The six tool names are `claude-code`, `cowork`, `cursor`, `codex`,
 | Cowork, Cursor, Codex, Antigravity | `~/.agents/skills/` |
 | Kiro                               | `~/.kiro/skills/`   |
 
-`cowork` uses the same directory as Cursor, Codex, and Antigravity, because the
-Cowork client reads `.agents/skills`. An install for one of those tools is
-visible to the other three.
+`cowork` uses `.agents/skills`, the same directory as Cursor, Codex, and
+Antigravity, because the Cowork client reads `.agents/skills`. An install for
+one of those tools is visible to the other three.
 
 A user who does not install npm can copy the bundles from the Git tree:
 
@@ -99,30 +112,44 @@ Text is the default. `--json` adds `"schema": 1`.
 
 ```bash
 atry version
-atry preflight --requires ">=X.Y.Z"
-atry next <run>
-atry run new --slug <slug> --title <title>
+atry preflight --requires ">=X.Y.Z" [--allow-dev]
+atry doctor
 atry resolve [run]
 atry status [run]
+atry next <run>
 atry stats [run] [--since <ISO date>] [--failed]
-atry doctor
 atry context <run> --json [--task T1]
+atry brainstorm new --slug <slug>
+atry brainstorm done <dir>
+atry run new --slug <slug> --title <title> [--from <brainstorm>]
 atry plan new <run>
 atry plan done <run>
+atry plan amend <run>
 atry approve <run> --via confirm|arg
 atry approve <run> --preview
-atry close <run> --preview
-atry policy init [--preset lenient|standard|strict]
-atry stage start <run> implement --tool <tool>
+atry stage start <run> implement --tool <tool> [--model <model>]
+atry stage done <run> implement --tool <tool> [--model <model>] [--allow-extra "<reason>"]
 atry task start <run> T1
-atry task done <run> T1
-atry stage done <run> implement --tool <tool> [--allow-extra "<reason>"]
+atry task done <run> T1 [--session <tag>] [--allow-extra "<reason>"]
+atry task skip <run> T1 --reason "<text>" [--session <tag>]
+atry claim <run> T1 --session <tag>
+atry release <run> T1 --session <tag> [--force --reason "<text>"]
+atry steal <run> T1 --session <tag> --ttl <minutes>
+atry integrate <run> T1
+atry guard <run> <path> [--session <tag>]
+atry list <run>
 atry review new <run> self --tool <tool> [--model <model>]
 atry review new <run> cross --tool <tool> --model <model>
 atry review done <run> self|cross [--run-tests]
 atry review decide <run> Q<n> <answer>
+atry close <run> --preview
 atry close <run> --via confirm|arg [--ack-open] [--ack-fixes] [--ack-warnings]
 atry close <run> --waive-review "<reason>" [--ack-open] [--ack-warnings]
+atry close <run> --abandon "<reason>"
+atry policy init [--preset lenient|standard|strict]
+atry policy check
+atry skills install --tool <tool> [--dir <path>]
+atry skills status [--tool <tool>] [--dir <path>] [--all]
 atry worktree cleanup [run]
 atry hook install --tool claude-code
 atry hook check
@@ -132,7 +159,8 @@ atry distill verify <run>
 
 `atry approve` and `atry close` are for the person who coordinates the run.
 `atry preflight --requires ">=X.Y.Z"` exits 0 when the installed version meets that range.
-A lower version prints `npm i -g @tranthethang/agent-relay@latest` and exits 1.
+A lower version prints the exact install command for that range, such as
+`npm i -g @tranthethang/agent-relay@0.10.7`, and exits 1.
 A dev build is refused the same way. Add `--allow-dev`, or set `ATRY_DEV=1`,
 only when you dogfood a build from this repo.
 `atry stats` reads `events.jsonl` across runs. `atry stats <run>` reads one run.
@@ -167,16 +195,17 @@ reviews for its policy, the latest completed review tree against the current
 code tree, open questions, and changes made during the latest review.
 With `strict.reviewIntegrity` false (the default) and `--via` set, `close`
 treats the review checks as warnings. It lists each warning and refuses until
-you add `--ack-warnings`. With the flag it closes and records the warnings in
-the `closed` event. The review skills pass `--via` and ask the user before they
-add `--ack-warnings`. Without `--via`, or with `strict.reviewIntegrity` true,
-`close` refuses until each check passes; `--ack-warnings` does not change
-that. Pass `--ack-open` for open questions. Open questions are a gate in every
-close, so `--ack-warnings` does not accept them. Pass `--ack-fixes` for a
-strict close with changes made during the latest review. In a soft close,
-`--ack-warnings` accepts that delta, and `--ack-fixes` does not replace
-`--ack-warnings`. When a cross-review records a delta, close needs a
-self-review completed after it. `--ack-warnings` does not bypass that rule.
+you add `--ack-warnings`. `--ack-warnings` accepts warnings only: it closes
+and records them in the `closed` event, and it changes nothing else. The review
+skills pass `--via` and ask the user before they add `--ack-warnings`. Without
+`--via`, or with `strict.reviewIntegrity` true, `close` refuses until each
+check passes; `--ack-warnings` does not change that. `--ack-open` accepts an
+open question. Open questions are a gate in every close, so `--ack-warnings`
+does not accept them. `--ack-fixes` applies to a strict close with changes made
+during the latest review. In a soft close, `--ack-warnings` accepts that delta,
+and `--ack-fixes` does not replace `--ack-warnings`. When a cross-review
+records a delta, close needs a self-review completed after it. `--ack-warnings`
+does not skip that self-review.
 `--waive-review <reason>` records a review waiver
 and skips the required-review and tree checks. It does not skip the
 open-question check, the cross-delta rule, or the warning gate.
@@ -403,10 +432,29 @@ npm test
 npm run check
 npm run sync:check
 npm run evals
+npm run coverage:report
 git config core.hooksPath .githooks
 brew install dprint
 brew install sonar-scanner
 ```
+
+### Tests and evals
+
+`npm run evals` runs two layers. The fake layer replays recorded scenarios
+through `evals/fake-atry.ts`. It checks the command surface, the JSON shape,
+the step count, and each skill's token budget. It does not call a model, and a
+fake pass is not behavioral evidence.
+
+The real layer drives the built CLI through `evals/real.ts` in a temporary git
+repository and a temporary `HOME`. It checks exit codes, JSON fields, file
+contents, and git state. That layer is the behavioral check and the release
+evidence. It also does not call a model or the network.
+
+A model-backed review stays manual: install the skills, run one scenario in a
+tool, and compare the commands the agent issues with the recorded steps. CI
+cannot run that layer. `npm test`, `npm run check`, `npm run sync:check`, and
+`npm run evals` show what the code does. They do not prove that an agent
+followed a skill.
 
 Contributor rules: [`AGENTS.md`](AGENTS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).
 Security reports and trust limits: [`SECURITY.md`](SECURITY.md).

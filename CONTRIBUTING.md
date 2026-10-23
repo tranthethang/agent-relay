@@ -51,7 +51,20 @@ A post-publish job installs the published tarball into a temporary prefix. It
 runs `atry version`, `atry preflight --requires ">=0.10.7"`,
 `atry skills install`, and `atry skills status`. It fails on a version
 mismatch, a preflight failure, a status failure, or a bundle count other than
-six.
+six. The release is complete only after that job passes.
+
+Release evidence:
+
+- `npm test`, `npm run check`, `npm run sync:check`, and `npm run evals`.
+- The real CLI eval result.
+- `npm run coverage:report`.
+- `atry skills status` for the release bundle.
+- The post-publish smoke result.
+- A strict close for the release run, or a recorded reason for every waiver.
+
+The P1 and P2 runs closed with warnings. Those warnings are historical. Do not
+use them as release evidence, and do not treat the fake 9/9 result as proof of
+behavior.
 
 ## Tests
 
@@ -67,9 +80,10 @@ npm run evals
 CI runs `npm test` on macOS, Linux, and Windows. It also checks formatting
 and skill-reference sync. It also runs `npm run evals`, which drives the fake
 layer and the real CLI layer under `evals/`. The fake layer checks the command
-surface and the token budget. The real layer checks what the built CLI does to a
-temporary repository. Neither layer calls a model. Linux CI also runs
-`npm run coverage:report`.
+surface and the token budget. The real layer is the behavioral check and the
+release evidence: it drives the built CLI in a temporary repository. Neither
+layer calls a model, and neither proves that an agent followed a skill. Linux
+CI also runs `npm run coverage:report`.
 
 ## Formatting
 

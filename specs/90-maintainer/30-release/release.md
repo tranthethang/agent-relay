@@ -23,7 +23,20 @@ Open the Actions tab. Run [`.github/workflows/release.yml`](../../../.github/wor
 
 The job installs dependencies first, because the version script imports `src/core/error.ts`, which imports `zod`. It sets `TZ=Asia/Ho_Chi_Minh` and computes the version with `scripts/maint/next-version.ts`. It checks `requires-atry` against that version. It sets `npm version <v> --no-git-tag-version` before the build, so the bundle and `dist/package.json` hold the release version. It checks format and types, builds, inspects the tarball, and tests. It then pushes tag `v<v>`, publishes, and creates a GitHub Release with generated notes. It does not commit to the repo.
 
-A `smoke` job runs after `publish`. It installs `@tranthethang/agent-relay@<v>` into a temporary prefix and puts that prefix on `PATH`. It runs `atry version`, `atry preflight --requires ">=0.10.7"`, `atry skills install --tool claude-code --dir <tmp>/skills`, and `atry skills status --dir <tmp>/skills`. It fails when the version differs, preflight fails, status fails, or the bundle count is not six. The CLI and the six bundles are one version.
+A `smoke` job runs after `publish`. It installs `@tranthethang/agent-relay@<v>` into a temporary prefix and puts that prefix on `PATH`. It runs `atry version`, `atry preflight --requires ">=0.10.7"`, `atry skills install --tool claude-code --dir <tmp>/skills`, and `atry skills status --dir <tmp>/skills`. It fails when the version differs, preflight fails, status fails, or the bundle count is not six. The CLI and the six bundles are one version. The release is complete only after that job passes; a green `publish` job alone is not a release.
+
+## Release evidence
+
+Record these before you call a release done:
+
+- `npm test`, `npm run check`, `npm run sync:check`, and `npm run evals`.
+- The real CLI eval result from `evals/real.ts`.
+- `npm run coverage:report`.
+- `atry skills status` for the release bundle.
+- The post-publish smoke result.
+- A strict close for the release run, or a recorded reason for every waiver.
+
+The P1 and P2 runs closed with warnings. Those warnings are historical. Do not use them as release evidence, and do not treat the fake 9/9 result as proof of behavior.
 
 A release does not bump `requires-atry`. A skill change that needs a newer CLI bumps it. The shared value lives in `scripts/maint/next-version.ts` as `skillMinimumVersion`; the tests refuse a skill whose `requires-atry` is a different range. The workflow refuses when `requires-atry` is higher than the new version.
 

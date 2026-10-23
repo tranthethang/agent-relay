@@ -44,12 +44,14 @@ checks the command surface, the JSON shape, the step count, and each skill's
 token budget. It does not use a model and does not use the network. A fake pass
 is not behavioral evidence.
 
-The real layer drives `node dist/atry.js` through `evals/real.ts`. It creates a
-temporary git repository and a temporary `HOME`, then asserts exit codes, JSON
-fields, file contents, and git state. It covers the plan gate, the worktree
-commit rule, stale installed skills, and close acknowledgement. It also does
-not use a model or the network. Build first with `npm run build`, because the
-layer runs the built CLI.
+The real layer is the behavioral check and the release evidence. It drives
+`node dist/atry.js` through `evals/real.ts`. It creates a temporary git
+repository and a temporary `HOME`, then asserts exit codes, JSON fields, file
+contents, and git state. It covers the plan gate, the worktree commit rule,
+stale installed skills, and close acknowledgement. It also does not use a
+model or the network. Build first with `npm run build`, because the layer runs
+the built CLI. The release evidence checklist is in
+[`../30-release/release.md`](../30-release/release.md).
 
 CI runs both layers on macOS, Linux, and Windows after `npm test`. A real
 failure is not hidden behind a fake pass: the command exits 1 and the summary
