@@ -11,6 +11,7 @@ import { schemaVersion } from "./vocab.js";
 // `npx skills add` uses. `--dir` replaces this path.
 export const skillToolDirs = {
   "claude-code": ".claude/skills",
+  cowork: ".agents/skills",
   cursor: ".agents/skills",
   codex: ".agents/skills",
   antigravity: ".agents/skills",

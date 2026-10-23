@@ -13,6 +13,7 @@ import {
   parseSkillTool,
   skillsInstallText,
   skillsStatusText,
+  skillToolDirs,
   statusSkills,
 } from "../src/core/skills.js";
 import { runCli } from "./helper.js";
@@ -194,6 +195,31 @@ test("an empty directory reports every bundle missing", async () => {
   });
 });
 
+test("cowork installs and checks the .agents/skills directory", async () => {
+  await withDir(async (dir) => {
+    expect(parseSkillTool("cowork")).toBe("cowork");
+    expect(skillToolDirs.cowork).toBe(".agents/skills");
+    expect(skillToolDirs.cowork).toBe(skillToolDirs.cursor);
+    const install = await runCli(
+      ["skills", "install", "--tool", "cowork", "--dir", dir, "--json"],
+      dir,
+    );
+    expect(install.code, install.stderr).toBe(0);
+    const body = JSON.parse(install.stdout) as InstallBody;
+    expect(body.tool).toBe("cowork");
+    expect(body.dir).toBe(dir);
+    expect(body.bundles).toHaveLength(6);
+    const status = await runCli(
+      ["skills", "status", "--tool", "cowork", "--dir", dir, "--json"],
+      dir,
+    );
+    expect(status.code, status.stderr).toBe(0);
+    const statusBody = JSON.parse(status.stdout) as StatusBody;
+    expect(statusBody.ok).toBe(true);
+    expect(statusBody.dirs[0]?.dir).toBe(dir);
+  });
+});
+
 test("skills rejects an unknown tool before it writes a file", async () => {
   await withDir(async (dir) => {
     const result = await runCli(["skills", "install", "--tool", "vim", "--dir", dir], dir);
@@ -301,6 +327,12 @@ test("CLI uses isolated home defaults for install and status", async () => {
     const installed = await isolated(["skills", "install", "--tool", "cursor", "--json"]);
     expect(installed.code, installed.stderr).toBe(0);
     expect(JSON.parse(installed.stdout).dir).toBe(join(home, ".agents", "skills"));
+    const cowork = await isolated(["skills", "install", "--tool", "cowork", "--json"]);
+    expect(cowork.code, cowork.stderr).toBe(0);
+    expect(JSON.parse(cowork.stdout).dir).toBe(join(home, ".agents", "skills"));
+    const coworkStatus = await isolated(["skills", "status", "--tool", "cowork", "--json"]);
+    expect(coworkStatus.code, coworkStatus.stderr).toBe(0);
+    expect(JSON.parse(coworkStatus.stdout).ok).toBe(true);
     const missing = await isolated(["skills", "status", "--tool", "kiro", "--json"]);
     expect(missing.code).toBe(1);
     expect(JSON.parse(missing.stdout).ok).toBe(false);

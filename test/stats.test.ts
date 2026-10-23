@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { statsForRelay, statsForRun, statsText } from "../src/core/stats.js";
+import { parseStatsSince, statsForRelay, statsForRun, statsText } from "../src/core/stats.js";
 import { runCli, withTempDir } from "./helper.js";
 import { plannedState, runCache, runName, seedRelay, seedRun } from "./seed.js";
 
@@ -121,5 +121,66 @@ test("stats rethrows a read error that is not a relay error", async () => {
     const runDir = join(relay, runName);
     await mkdir(join(runDir, "events.jsonl"), { recursive: true });
     await expect(statsForRelay(root)).rejects.toThrow();
+  });
+});
+
+test("stats --since and --failed keep matching runs and can combine", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const olderName = "20261001-1792208726-older-run";
+    const newerName = "20261020-1792208727-newer-run";
+    await seedRun(relay, olderName, runCache(plannedState), [
+      { schema: 1, ts: "2026-10-01T00:00:00.000Z", stage: "run", action: "created" },
+    ]);
+    await seedRun(relay, newerName, runCache(plannedState), [
+      { schema: 1, ts: "2026-10-20T00:00:00.000Z", stage: "run", action: "created" },
+      {
+        schema: 1,
+        ts: "2026-10-20T00:01:00.000Z",
+        stage: "self-review",
+        action: "completed",
+        tests: { exit: 1, ms: 1, tree },
+      },
+    ]);
+
+    const since = await runCli(["stats", "--since", "2026-10-10", "--json"], root);
+    expect(since.code, since.stderr).toBe(0);
+    expect((JSON.parse(since.stdout) as { runs: { name: string }[] }).runs.map((run) => run.name))
+      .toEqual([newerName]);
+
+    const failed = await runCli(["stats", "--failed", "--json"], root);
+    expect(failed.code, failed.stderr).toBe(0);
+    expect((JSON.parse(failed.stdout) as { runs: { name: string }[] }).runs.map((run) => run.name))
+      .toEqual([newerName]);
+
+    const both = await runCli(
+      ["stats", "--since", "2026-10-10", "--failed", "--json"],
+      root,
+    );
+    expect(both.code, both.stderr).toBe(0);
+    expect((JSON.parse(both.stdout) as { runs: { name: string }[] }).runs.map((run) => run.name))
+      .toEqual([newerName]);
+
+    const none = await runCli(["stats", "--since", "2026-10-25"], root);
+    expect(none.stdout).toBe("runs: none\n");
+
+    const oneRun = await runCli(["stats", olderName, "--since", "2026-10-10"], root);
+    expect(oneRun.stdout).toBe("runs: none\n");
+
+    const direct = await statsForRelay(root, { since: new Date("2026-10-10") });
+    expect(direct.runs.map((run) => run.name)).toEqual([newerName]);
+    const directFailed = await statsForRun(join(relay, olderName), { failed: true });
+    expect(directFailed.runs).toEqual([]);
+  });
+});
+
+test("stats rejects an invalid --since date with exit 2", async () => {
+  await withTempDir(async (root) => {
+    await seedRelay(root);
+    const result = await runCli(["stats", "--since", "not-a-date"], root);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("invalid --since date: not-a-date");
+    expect(() => parseStatsSince("2026-13-01")).toThrow("invalid --since date");
+    expect(parseStatsSince("2026-10-01").toISOString()).toBe("2026-10-01T00:00:00.000Z");
   });
 });

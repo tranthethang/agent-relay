@@ -89,3 +89,58 @@ test("verify reports a size mismatch and a bad manifest", async () => {
     await expect(verifyDistill(run)).rejects.toThrow();
   });
 });
+
+test("verify reports files that the manifest does not name", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "distill-verify-extra");
+    expect((await runCli(["distill", run], dir)).code).toBe(0);
+
+    const clean = await verifyDistill(run);
+    expect(clean.ok).toBe(true);
+    expect(clean.extra).toEqual([]);
+
+    await mkdir(join(run, "90-distill"), { recursive: true });
+    await writeFile(join(run, "notes.md"), "later\n");
+    await writeFile(join(run, "90-distill", "manifest.old.json"), "{}\n");
+    const extra = await verifyDistill(run);
+    expect(extra.ok).toBe(false);
+    expect(extra.extra).toEqual(["90-distill/manifest.old.json", "notes.md"]);
+    expect(distillVerifyText(extra)).toContain("ok: no");
+    expect(distillVerifyText(extra)).toContain("extra: notes.md");
+    expect(distillVerifyText(extra)).not.toContain("extra: 90-distill/manifest.json");
+
+    const cli = await runCli(["distill", "verify", run], dir);
+    expect(cli.code).toBe(1);
+    expect(cli.stdout).toContain("extra: notes.md");
+    const json = await runCli(["distill", "verify", run, "--json"], dir);
+    expect(json.code).toBe(1);
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      schema: 1,
+      ok: false,
+      extra: ["90-distill/manifest.old.json", "notes.md"],
+    });
+  });
+});
+
+test("verify skips an unnamed test log and checks a named one", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "distill-verify-logs");
+    await mkdir(join(run, "30-self-review"), { recursive: true });
+    await writeFile(join(run, "30-self-review", "01.test.log"), "one\n");
+    expect((await runCli(["distill", run], dir)).code).toBe(0);
+
+    const skipped = await verifyDistill(run);
+    expect(skipped.ok).toBe(true);
+    expect(skipped.extra).toEqual([]);
+
+    expect((await runCli(["distill", run, "--include-test-logs"], dir)).code).toBe(0);
+    await writeFile(join(run, "30-self-review", "01.test.log"), "two\n");
+    await writeFile(join(run, "30-self-review", "02.test.log"), "new\n");
+    const changed = await verifyDistill(run);
+    expect(changed.ok).toBe(false);
+    expect(changed.mismatched).toEqual(["30-self-review/01.test.log"]);
+    expect(changed.extra).toEqual([]);
+  });
+});

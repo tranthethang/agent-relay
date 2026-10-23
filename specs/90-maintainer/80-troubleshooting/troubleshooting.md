@@ -31,6 +31,10 @@
 | `plan has more than 8 tasks`                       | The plan gate                                  | Split the plan                                         |
 | `skills add` fails for one agent                   | That agent has no global skill directory       | Pass `-a` for the agents you use                       |
 | `atry stats` prints `runs: none`                   | The relay directory has no runs                | Create a run, then run `atry stats` again              |
+| `atry stats` drops a run you expected              | `--since` or `--failed` filtered it out        | Drop the filter, or check the run event dates          |
+| `since: invalid --since date: ...`                 | `--since` is not an ISO date                   | Pass a date such as `2026-10-01`                       |
+| `atry distill verify` prints `extra: <path>`       | A run file is not in the manifest              | Re-run `atry distill`, or remove the stray file        |
+| `atry skills install --tool cowork`                | Cowork shares `~/.agents/skills`               | The same directory serves Cursor, Codex, Antigravity   |
 | `atry doctor` exits 1                              | One check failed                               | Read the failed line and fix that check                |
 
 `atry` errors name a field path, for example `tasks[0].deps[0]: unknown id T9`.

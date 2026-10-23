@@ -24,18 +24,32 @@ export type StatsResult = {
   warnings?: string[];
 };
 
+export type StatsFilter = {
+  since?: Date;
+  failed?: boolean;
+};
+
+export function parseStatsSince(value: string): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new RelayError("validation", `invalid --since date: ${value}`, "since");
+  }
+  return date;
+}
+
 export function statsText(result: StatsResult): string {
   if (result.runs.length === 0) return "runs: none\n";
   return `${result.runs.map(rowText).join("\n")}\n`;
 }
 
-export async function statsForRelay(cwd: string): Promise<StatsResult> {
+export async function statsForRelay(cwd: string, filter: StatsFilter = {}): Promise<StatsResult> {
   const relayDir = await findRelayDir(cwd);
   const runs: StatsRow[] = [];
   const warnings: string[] = [];
   for (const name of await listRunNames(relayDir)) {
     try {
-      runs.push(await statsRow(join(relayDir, name)));
+      const row = await statsRow(join(relayDir, name), filter);
+      if (row !== undefined) runs.push(row);
     } catch (error) {
       if (!(error instanceof RelayError)) throw error;
       const warning = `${name}: ${error.message}`;
@@ -48,13 +62,24 @@ export async function statsForRelay(cwd: string): Promise<StatsResult> {
   return result;
 }
 
-export async function statsForRun(runDir: string): Promise<StatsResult> {
-  return { schema: schemaVersion, runs: [await statsRow(runDir)] };
+export async function statsForRun(runDir: string, filter: StatsFilter = {}): Promise<StatsResult> {
+  const row = await statsRow(runDir, filter);
+  return { schema: schemaVersion, runs: row === undefined ? [] : [row] };
 }
 
-async function statsRow(runDir: string): Promise<StatsRow> {
+function matchesFilter(events: readonly EventLine[], filter: StatsFilter): boolean {
+  if (filter.failed === true && !events.some((event) => failedTest(event))) return false;
+  if (filter.since !== undefined) {
+    const since = filter.since.getTime();
+    if (!events.some((event) => Date.parse(event.ts) >= since)) return false;
+  }
+  return true;
+}
+
+async function statsRow(runDir: string, filter: StatsFilter): Promise<StatsRow | undefined> {
   const name = basename(runDir);
   const events = await readEvents(runDir);
+  if (!matchesFilter(events, filter)) return undefined;
   return {
     name,
     id: runIdFromName(name),

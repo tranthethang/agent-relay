@@ -44,7 +44,10 @@ atry distill verify <run>
 
 - Read `90-distill/manifest.json`. Do not write that file.
 - Recompute the byte size and the SHA-256 of each listed file.
-- Exit 0 when every file matches.
-- Exit 1 when a file is missing or the size or hash differs. Name each path.
+- Walk the run directory with the same filter as `atry distill`. Skip `90-distill/manifest.json`.
+- Report each remaining path that the manifest does not name as `extra: <path>`.
+- Skip a `*.test.log` that the manifest does not name. Verify a `*.test.log` that the manifest names.
+- Exit 0 when every file matches and no extra file exists.
+- Exit 1 when a file is missing, the size or hash differs, or an extra file exists. Name each path.
 - Exit 3 when the manifest is missing.
-- `--json` keeps `schema` 1. The object includes `ok`, `files`, `missing`, and `mismatched`.
+- `--json` keeps `schema` 1. The object includes `ok`, `files`, `missing`, `mismatched`, and `extra`.

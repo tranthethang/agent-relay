@@ -28,6 +28,12 @@ When executing stages or reviews, tools declare their identifier via `--tool <na
 - Use the writing rules in `specs/80-skills-integration/00-skill-bridge/writing.md` for plan overviews and review findings.
   Those rules recommend short sentences for skill text. They do not claim ASD-STE100 compliance.
 
+### Cowork
+
+- Cowork reads skill bundles from `~/.agents/skills/atry-*`, the same directory as Cursor, Codex, and Antigravity.
+- Run `atry skills install --tool cowork` to write that directory. Run `atry skills status --tool cowork` to check it.
+- One install for Cursor, Codex, Antigravity, or Cowork serves the other three, because the four tools share the directory.
+
 ### OpenAI Codex
 
 - Codex environment threads are recognized automatically via `CODEX_THREAD_ID`.

@@ -56,14 +56,18 @@ release workflow sets the version before the build. A post-publish job installs
 the published tarball and runs `atry version`, `atry preflight`,
 `atry skills install`, and `atry skills status`.
 
-The five tool names are `claude-code`, `cursor`, `codex`, `antigravity`, and
-`kiro`. Each tool writes one of three directories:
+The six tool names are `claude-code`, `cowork`, `cursor`, `codex`,
+`antigravity`, and `kiro`. Each tool writes one of three directories:
 
-| Tool                       | Directory           |
-| -------------------------- | ------------------- |
-| Claude Code                | `~/.claude/skills/` |
-| Cursor, Codex, Antigravity | `~/.agents/skills/` |
-| Kiro                       | `~/.kiro/skills/`   |
+| Tool                               | Directory           |
+| ---------------------------------- | ------------------- |
+| Claude Code                        | `~/.claude/skills/` |
+| Cowork, Cursor, Codex, Antigravity | `~/.agents/skills/` |
+| Kiro                               | `~/.kiro/skills/`   |
+
+`cowork` uses the same directory as Cursor, Codex, and Antigravity, because the
+Cowork client reads `.agents/skills`. An install for one of those tools is
+visible to the other three.
 
 A user who does not install npm can copy the bundles from the Git tree:
 
@@ -100,7 +104,7 @@ atry next <run>
 atry run new --slug <slug> --title <title>
 atry resolve [run]
 atry status [run]
-atry stats [run]
+atry stats [run] [--since <ISO date>] [--failed]
 atry doctor
 atry context <run> --json [--task T1]
 atry plan new <run>
@@ -134,6 +138,10 @@ only when you dogfood a build from this repo.
 `atry stats` reads `events.jsonl` across runs. `atry stats <run>` reads one run.
 A row reports stage time, review rounds, waivers, failed tests, and drift.
 Stage time is a number of milliseconds. The command does not write an event.
+`--since <ISO date>` keeps a run with at least one event at or after the date.
+`--failed` keeps a run with at least one failed test. Both filters combine, and
+they apply to a single run too. An invalid date exits 2. The JSON keeps
+`schema: 1` and adds no filter field.
 `atry doctor` checks Node 22, git, the CLI version, the bundled skills, the
 installed bundles, the policy file, `atry` on `PATH`, and the version that
 `PATH` reports. It prints one line per check. It exits 1 when a check fails,
@@ -200,10 +208,11 @@ when the tests started. A non-zero exit records failure but does not refuse
 when the same review stage records another event while the tests run.
 `atry distill` leaves every `*.test.log` out of the manifest; pass
 `--include-test-logs` to export them.
-`atry distill verify <run>` recomputes each hash.
-It exits 1 when a file is missing or different.
-It does not rewrite the manifest.
-A missing manifest exits 3.
+`atry distill verify <run>` recomputes each hash and reports a file that the
+manifest does not name. It prints `extra: <path>` for each extra file. It
+skips the manifest and a `*.test.log` that the manifest does not name. It
+exits 1 when a file is missing, different, or extra. It does not rewrite the
+manifest. A missing manifest exits 3.
 
 The optional `strict` policy groups control scope, plan, and review-integrity
 gates independently. Each group defaults to `false`, which reports a warning
