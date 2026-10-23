@@ -522,7 +522,11 @@ test("close checks empty reasons, open questions, missing reviews, and fixes", a
       join(selfDir, "01.json"),
       `${JSON.stringify({ ...review, open: [{ q: "Which?", a: "A", b: "B" }] })}\n`,
     );
-    await expect(closeRun({ runDir })).rejects.toThrow(/open questions/);
+    await expect(closeRun({ runDir })).rejects.toMatchObject({ code: "gate", fieldPath: "open" });
+    await expect(closeRun({ runDir, via: "arg", ackWarnings: true })).rejects.toMatchObject({
+      code: "gate",
+      fieldPath: "open",
+    });
     await rm(join(selfDir, "01.json"));
     await addEvents(runDir, [{
       stage: "self-review",
@@ -530,10 +534,33 @@ test("close checks empty reasons, open questions, missing reviews, and fixes", a
       tree: self.tree,
       delta: { files: 1, added: 1, deleted: 0 },
     }]);
-    expect((await closePreview(runDir)).reasons).toEqual(["reviewer changes after latest review"]);
+    expect((await closePreview(runDir)).reasons).toEqual(["changes made during the latest review"]);
     await expect(closeRun({ runDir })).rejects.toThrow(/unacknowledged fixes/);
     const closed = await closeRun({ runDir, ackFixes: true });
     expect(closed).toEqual({ schema: 1, path: runDir, lifecycle: "closed" });
+  });
+});
+
+test("a soft close accepts an open question with ackOpen and adds no warning", async () => {
+  await withTempGitRepo(async (dir) => {
+    const runDir = await newRun(dir, "soft-open");
+    await toReviewing(runDir);
+    await startStage({ runDir, stage: "self-review", tool: "cursor" });
+    await doneStage({ runDir, stage: "self-review", tool: "cursor" });
+    await writeFile(
+      join(runDir, "30-self-review", "01.json"),
+      `${JSON.stringify({ ...review, open: [{ q: "Which?", a: "A", b: "B" }] })}\n`,
+    );
+    await expect(closeRun({ runDir, via: "confirm", ackWarnings: true })).rejects.toMatchObject({
+      code: "gate",
+      fieldPath: "open",
+    });
+    const closed = await closeRun({ runDir, via: "confirm", ackOpen: true });
+    expect(closed.lifecycle).toBe("closed");
+    const lines = (await readFile(join(runDir, "events.jsonl"), "utf8")).trim().split("\n")
+      .map((line) => JSON.parse(line) as EventLine);
+    expect(lines.at(-1)).toMatchObject({ action: "closed", via: "confirm" });
+    expect(lines.at(-1)?.reason).toBeUndefined();
   });
 });
 

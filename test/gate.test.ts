@@ -75,7 +75,7 @@ test("close requires policy reviews and matching review trees", async () => {
     expect((await runCli(["review", "done", run, "cross"], dir)).code).toBe(0);
     const delta = await runCli(["close", run], dir);
     expect(delta.code).toBe(4);
-    expect(delta.stderr).toContain("unacknowledged fixes");
+    expect(delta.stderr).toContain("no later self-review");
     const unreviewed = await runCli(["close", run, "--ack-fixes"], dir);
     expect(unreviewed.code).toBe(4);
     expect(unreviewed.stderr).toContain("no later self-review");

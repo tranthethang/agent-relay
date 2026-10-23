@@ -65,8 +65,11 @@ npm run evals
 ```
 
 CI runs `npm test` on macOS, Linux, and Windows. It also checks formatting
-and skill-reference sync. It also runs `npm run evals`, the deterministic skill
-layer under `evals/`. Linux CI also runs `npm run coverage:report`.
+and skill-reference sync. It also runs `npm run evals`, which drives the fake
+layer and the real CLI layer under `evals/`. The fake layer checks the command
+surface and the token budget. The real layer checks what the built CLI does to a
+temporary repository. Neither layer calls a model. Linux CI also runs
+`npm run coverage:report`.
 
 ## Formatting
 

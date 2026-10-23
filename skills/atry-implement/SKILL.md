@@ -48,7 +48,11 @@ When the skill call includes a `yes` token, use that token as `y`.
 When the user answers `n`, stop and do not record an event.
 When the user answers `y` for approve, run `atry approve <run> --via confirm`.
 When the `yes` token is that answer, run `atry approve <run> --via arg`.
-When `kind` is `review-new`, `review-done`, `close`, or `decide`, stop. A review skill closes the run and asks the user before a soft close passes `--ack-warnings`.
+When `kind` is `review-new`, `review-done`, `close`, or `decide`, stop.
+A review skill runs `atry close <run> --preview` before it closes.
+It asks the user before a soft close passes `--ack-warnings` or `--ack-open`.
+A cross-review delta needs a self-review first.
+A strict close stops for the person, who can pass `--ack-fixes`.
 When `kind` is `stage-start`, run `atry stage start <run> implement --tool <tool>`.
 When `kind` is `integrate`, run `atry integrate <run> <task>`.
 When that command prints `worktree: kept`, stop and show the reason.

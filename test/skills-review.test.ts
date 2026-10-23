@@ -21,6 +21,8 @@ test("self-review uses review new and review done", () => {
     "When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm --ack-warnings`.",
   );
   expect(selfReview).toContain("configured `testCommand`");
+  expect(selfReview).toContain("ask the user before you pass `--ack-open`");
+  expect(selfReview).toContain("Run the self-review skill again");
   expect(selfReview).not.toContain("Set `fixed`, `tests`, and `open`");
   expect(selfReview).not.toContain("--ack-fixes");
   expect(selfReview).not.toContain("review upsert");
@@ -45,7 +47,10 @@ test("cross-review asks before close and gates the yes token", () => {
   expect(crossReview).toContain(
     "When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm --ack-warnings`.",
   );
-  expect(crossReview).not.toContain("--ack-open");
+  expect(crossReview).toContain(
+    "Add `--ack-open` to that command when the preview lists `open items`.",
+  );
+  expect(crossReview).toContain("Run the self-review skill again");
   expect(crossReview).not.toContain("Do not close yet");
   expect(crossReview).not.toContain("review upsert");
   expect(assertNoShellSnippet(crossReview)).toBeUndefined();

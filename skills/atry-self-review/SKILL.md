@@ -42,9 +42,11 @@ When `kind` is `approve`, stop. This skill does not approve.
 When `kind` is `review-new` or `review-done` and `args.review` is `cross`, stop. Use the cross-review skill for that stage.
 When `kind` is `close`, run `atry close <run> --preview`.
 Show that preview and ask the user to answer `y` or `n`.
+When the preview lists `cross-review changes have no later self-review`, stop. Run the self-review skill again.
 When it recommends `n`, read `strict.reviewIntegrity` from the run base policy.
 When that setting is `true`, stop without closing.
 When it is `false`, show the listed integrity warnings and let the user decide.
+When the preview lists `open items`, ask the user before you pass `--ack-open`.
 When the user answers `y` and the preview lists a warning, show the warnings again.
 Pass `--ack-warnings` only after the user confirms that answer.
 When the skill call includes a `yes` token, use that token as `y`.
@@ -52,7 +54,9 @@ When the user answers `n`, stop and do not record an event.
 When the preview says `recommend: n` and `strict.reviewIntegrity` is `true`, stop and do not record an event.
 When the user answers `y` and the preview says `recommend: y`, run `atry close <run> --via confirm`.
 When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm --ack-warnings`.
+Add `--ack-open` to that command when the preview lists `open items`.
 When the `yes` token is that answer, run `atry close <run> --via arg --ack-warnings`.
+Add `--ack-open` to that command when the preview lists `open items`.
 When `kind` is `review-new` and `args.review` is `self`, run `atry review new <run> self --tool <tool>`.
 Add `--model <model>` when you know the model.
 When `kind` is `review-done` and `args.review` is `self`, follow the review method.

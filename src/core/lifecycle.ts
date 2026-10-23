@@ -182,7 +182,7 @@ export async function approvePreview(runDir: string): Promise<ApprovePreview> {
 
 export async function closePreview(runDir: string): Promise<ClosePreview> {
   const loaded = await rebuildRun(runDir);
-  const reasons = await closeReasons(runDir, loaded.run.base, loaded.events);
+  const reasons = await closeReasons(runDir, loaded.run.base, loaded.events, "preview");
   const preview: ClosePreview = {
     schema: schemaVersion,
     recommend: reasons.length === 0 ? "y" : "n",
@@ -203,6 +203,7 @@ async function closeReasons(
   runDir: string,
   base: string,
   events: readonly EventLine[],
+  mode: "preview" | "warnings",
 ): Promise<string[]> {
   const reasons: string[] = [];
   const integrity = await reviewIntegrity(runDir, base, events);
@@ -210,12 +211,14 @@ async function closeReasons(
     if (!integrity.done.includes(kind)) reasons.push(`missing ${kind} review`);
   }
   if (integrity.treeMatch === false) reasons.push("tree mismatch");
-  if (integrity.delta !== undefined) reasons.push("reviewer changes after latest review");
-  if (crossDeltaNeedsSelfReview(events)) {
-    reasons.push("cross-review changes have no later self-review");
+  if (integrity.delta !== undefined) reasons.push("changes made during the latest review");
+  if (mode === "preview") {
+    if (crossDeltaNeedsSelfReview(events)) {
+      reasons.push("cross-review changes have no later self-review");
+    }
+    const latest = await latestReview(runDir, events);
+    if (latest !== null && latest.open > 0) reasons.push("open items");
   }
-  const latest = await latestReview(runDir, events);
-  if (latest !== null && latest.open > 0) reasons.push("open items");
   const completed = [...events].reverse().find((event) =>
     event.action === "completed"
     && (event.stage === "self-review" || event.stage === "cross-review")
@@ -364,11 +367,12 @@ export async function closeRun(input: {
     assertMove(loaded.run.state, "close");
     const policy = await readPolicy(await gitCwd(input.runDir), loaded.run.base);
     const softClose = !policy.strict.reviewIntegrity && via !== undefined;
-    if (input.ackOpen !== true && !softClose) {
+    assertCrossDeltaSelfReview(loaded.events);
+    if (input.ackOpen !== true) {
       await assertNoOpenQuestions(input.runDir, loaded.events);
     }
     const warnings = softClose
-      ? await closeReasons(input.runDir, loaded.run.base, loaded.events)
+      ? await closeReasons(input.runDir, loaded.run.base, loaded.events, "warnings")
       : [];
     if (softClose && warnings.length > 0 && input.ackWarnings !== true) {
       throw new RelayError(
@@ -514,13 +518,6 @@ async function assertReviewIntegrity(
   }
   if (integrity.delta !== undefined && !ackFixes) {
     throw new RelayError("gate", "latest review has unacknowledged fixes", "review.delta");
-  }
-  if (crossDeltaNeedsSelfReview(events)) {
-    throw new RelayError(
-      "gate",
-      "cross-review changed code and no later self-review covers it",
-      "review.self",
-    );
   }
 }
 
@@ -770,7 +767,18 @@ async function measure(
 async function assertNoOpenQuestions(runDir: string, events: readonly EventLine[]): Promise<void> {
   const latest = await latestReview(runDir, events);
   if (latest === null || latest.open === 0) return;
-  throw new RelayError("gate", "latest review has open questions", latest.path);
+  throw new RelayError("gate", "latest review has open questions", "open");
+}
+
+// A cross-review can edit code after the earlier self-review passed. No later
+// self-review means the run is not ready to close, with or without a waiver.
+function assertCrossDeltaSelfReview(events: readonly EventLine[]): void {
+  if (!crossDeltaNeedsSelfReview(events)) return;
+  throw new RelayError(
+    "gate",
+    "cross-review changed code and no later self-review covers it",
+    "review.self",
+  );
 }
 
 // The folder whose review `completed` event is newest wins. Without events, cross beats self.

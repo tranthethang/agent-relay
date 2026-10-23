@@ -103,7 +103,7 @@ export function registerLifecycle(program: Command): void {
     .description("Close or abandon a run; a soft close needs --ack-warnings")
     .argument("[run]", "run id, slug, name, or path")
     .option("--ack-open", "close while the latest review has open questions")
-    .option("--ack-fixes", "accept fixes made after the latest review started")
+    .option("--ack-fixes", "accept changes made during the latest review")
     .option("--ack-warnings", "accept the warnings of a non-strict soft close")
     .option("--waive-review <reason>", "close without required reviews")
     .option("--via <via>", "confirm or arg")

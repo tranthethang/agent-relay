@@ -37,16 +37,34 @@ on `PATH`, plus `SONAR_HOST_URL` and `SONAR_TOKEN`. Linux CI runs the report.
 
 ## Skill evals
 
-`npm run evals` runs the deterministic skill layer. It does not use a model and
-it does not use the network. CI runs it on macOS, Linux, and Windows after
-`npm test`. See [`evals/README.md`](../../../evals/README.md) for the files and
-for the steps to add a scenario.
+`npm run evals` runs two layers and prints one combined summary.
+
+The fake layer replays `evals/scenarios.json` through `evals/fake-atry.ts`. It
+checks the command surface, the JSON shape, the step count, and each skill's
+token budget. It does not use a model and does not use the network. A fake pass
+is not behavioral evidence.
+
+The real layer drives `node dist/atry.js` through `evals/real.ts`. It creates a
+temporary git repository and a temporary `HOME`, then asserts exit codes, JSON
+fields, file contents, and git state. It covers the plan gate, the worktree
+commit rule, stale installed skills, and close acknowledgement. It also does
+not use a model or the network. Build first with `npm run build`, because the
+layer runs the built CLI.
+
+CI runs both layers on macOS, Linux, and Windows after `npm test`. A real
+failure is not hidden behind a fake pass: the command exits 1 and the summary
+counts both layers. `--drift` flips one recorded real expectation so the layer
+must fail; the test suite uses it to show that behavior drift is caught. See
+[`evals/README.md`](../../../evals/README.md) for the files, the options, and
+the steps to add a scenario.
 
 The model-backed layer runs by hand. A person installs the skills, asks the
-tool to run one scenario from `evals/scenarios.json`, and compares the commands
-the agent issues with the recorded steps. That layer shows a judgement failure.
-CI cannot run it and does not claim to.
+tool to run one scenario, and compares the commands the agent issues with the
+recorded steps. That layer shows a judgement failure. CI cannot run it and does
+not claim to.
 
-The deterministic layer does not replace `test/skills-*.test.ts`. A skill test
-checks text, such as a heading or a shared reference. An eval checks that a run
-state leads to the recorded command sequence.
+The eval layers do not replace `test/skills-*.test.ts`. A skill test checks
+text, such as a heading or a shared reference. The fake eval checks a recorded
+command sequence and the token budget. The real eval checks what the built CLI
+does to a temporary repository. None of them proves that an agent followed a
+skill.

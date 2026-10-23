@@ -313,7 +313,7 @@ test("atry close reads the completed review, not a later unfinished scaffold", a
     await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
     const refused = await runCli(["close", run], dir);
     expect(refused.code).toBe(4);
-    expect(refused.stderr).toContain("30-self-review/01.json");
+    expect(refused.stderr).toBe("open: latest review has open questions\n");
   });
 });
 

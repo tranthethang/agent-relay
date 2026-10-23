@@ -205,6 +205,17 @@ test("nextStep asks for a self-review after a cross-review delta", () => {
   expect(nextStep(id, reduceEvents(covered), covered, reviews)).toBe(`atry close ${id}`);
 });
 
+test("nextStep does not ask for a self-review when the cross review has no delta", () => {
+  const id = "1792208725";
+  const reviews = { required: ["self", "cross"], done: ["self", "cross"] };
+  const events = [
+    ev("implement", "completed"),
+    ev("self-review", "completed"),
+    ev("cross-review", "completed"),
+  ];
+  expect(nextStep(id, reduceEvents(events), events, reviews)).toBe(`atry close ${id}`);
+});
+
 test("nextActions lists eligible tasks and review or close choices", () => {
   const events = [ev("implement", "started")];
   const state = reduceEvents(events);

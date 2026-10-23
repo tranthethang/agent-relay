@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import { realScenarioNames } from "../evals/real.ts";
 import { withTempDir } from "./helper.js";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -28,11 +29,12 @@ function readCollection(): Collection {
   return JSON.parse(readFileSync(scenariosPath, "utf8")) as Collection;
 }
 
-test("the deterministic layer passes on every skill bundle", () => {
-  const result = runEvals([]);
+test("the fake layer passes on every skill bundle", () => {
+  const result = runEvals(["--layer", "fake"]);
+  const count = readCollection().scenarios.length;
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
-  expect(result.stdout).toContain("evals: 9/9 passed");
+  expect(result.stdout).toContain(`evals: ${count}/${count} passed`);
 });
 
 test("a scenario with a wrong command exits 1 and names the step", async () => {
@@ -83,13 +85,27 @@ test("the collection keeps every scenario offline and inside one skill", () => {
   expect(new Set(names).size).toBe(names.length);
 });
 
-test("--list prints one line for each scenario", () => {
+test("--list prints one line for each fake and real scenario", () => {
   const result = runEvals(["--list"]);
+  const count = readCollection().scenarios.length + realScenarioNames().length;
   expect(result.status).toBe(0);
-  expect(result.stdout.trim().split("\n")).toHaveLength(9);
+  expect(result.stdout.trim().split("\n")).toHaveLength(count);
 });
 
-test("CI runs the deterministic layer on the three operating systems", () => {
+test("a wrong expected exit code fails the real layer", () => {
+  const result = runEvals(["--layer", "real", "--scenario", "real-plan-gate", "--drift"]);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("fail: real-plan-gate:");
+  expect(result.stderr).toContain("does not match");
+});
+
+test("--drift without the real layer is a usage error", () => {
+  const result = runEvals(["--layer", "fake", "--drift"]);
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain("--drift needs the real layer");
+});
+
+test("CI runs the eval layers on the three operating systems", () => {
   const yaml = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
   expect(yaml).toContain("os: [ubuntu-latest, macos-latest, windows-latest]");
   expect(yaml).toContain("npm run evals");

@@ -16,7 +16,8 @@
 `atry close` checks the integrity of the code delivered by the run:
 
 - With `strict.reviewIntegrity: true`, every integrity problem blocks close unless its existing acknowledgement or waiver option applies.
-- With `strict.reviewIntegrity: false`, integrity problems appear in the close preview. A close command with `--via` also collects them as warnings. It refuses and lists them until `--ack-warnings` is present, then closes and records the warnings in the close event. `--ack-warnings` never bypasses `strict.reviewIntegrity: true`.
+- With `strict.reviewIntegrity: false`, the remaining integrity problems appear in the close preview. A close command with `--via` also collects them as warnings. It refuses and lists them until `--ack-warnings` is present, then closes and records the warnings in the close event. `--ack-warnings` never bypasses `strict.reviewIntegrity: true`.
+- The open-question check and the cross-delta rule run for every close, in both modes.
 
 1. **Review Completeness**:
    - Compares completed reviews against repository policy (`.agent-relay.json`).
@@ -27,15 +28,24 @@
    - In strict mode, refuses if unreviewed changes were made to code after the latest review.
 
 3. **Reviewer Modifications**:
-   - In strict mode, if the reviewer modified code during review, requires `--ack-fixes` to confirm human awareness.
+   - The preview names a reviewer delta as `changes made during the latest review`.
+   - In strict mode, close requires `--ack-fixes` to confirm human awareness.
+   - In a soft close, `--ack-warnings` accepts the delta. `--ack-fixes` does not replace `--ack-warnings`.
 
 4. **Open Questions**:
-   - In strict mode, if the latest review contains unresolved question cards, requires `--ack-open`.
+   - If the latest review contains unresolved question cards, close fails with field `open` and exit 4.
+   - `--ack-open` accepts the questions and adds no warning.
+   - A soft close also needs `--ack-open`, even when `--ack-warnings` is present.
 
-5. **Preview**:
-   - `atry close <run> --preview` prints the close readiness status and diagnostic warnings without closing the run.
+5. **Cross-Review Delta**:
+   - When the latest cross-review recorded a delta and no self-review completed after it, close fails with field `review.self` and exit 4.
+   - `--ack-warnings` and `--ack-fixes` do not bypass this rule. Complete a self-review first.
+   - `atry next` recommends `atry review new <run> self` in this state.
 
-6. **Worktree Removal**:
+6. **Preview**:
+   - `atry close <run> --preview` prints the close readiness status and diagnostic reasons without closing the run.
+
+7. **Worktree Removal**:
    - When a run has a worktree record, `close` checks if the run branch is merged and the working tree is clean.
    - If removal fails or unmerged changes remain, `close` reports `worktree: kept (<reason>)` while preserving run closure.
    - Successful removal appends a `cleaned` run event.

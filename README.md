@@ -155,21 +155,23 @@ refuse zero tasks. A `plan amend` after approval returns the run to `planned`,
 so it needs approval again.
 The skills ask before they run those verbs. Implement start refuses when the
 plan is not approved or is no longer complete. Close checks the required
-reviews for its policy, the
-latest completed review tree against the current code tree, open questions,
-and changes made after the latest review started.
+reviews for its policy, the latest completed review tree against the current
+code tree, open questions, and changes made during the latest review.
 With `strict.reviewIntegrity` false (the default) and `--via` set, `close`
-treats those checks as warnings. It lists each warning and refuses until you
-add `--ack-warnings`. With the flag it closes and records the warnings in the
-`closed` event. The review skills pass `--via` and ask the user before they
+treats the review checks as warnings. It lists each warning and refuses until
+you add `--ack-warnings`. With the flag it closes and records the warnings in
+the `closed` event. The review skills pass `--via` and ask the user before they
 add `--ack-warnings`. Without `--via`, or with `strict.reviewIntegrity` true,
 `close` refuses until each check passes; `--ack-warnings` does not change
-that. Pass `--ack-open` for open questions and `--ack-fixes` for changes
-after the latest review. `--ack-fixes` does not replace a review: when a
-cross-review records a delta, close needs a self-review completed after it.
+that. Pass `--ack-open` for open questions. Open questions are a gate in every
+close, so `--ack-warnings` does not accept them. Pass `--ack-fixes` for a
+strict close with changes made during the latest review. In a soft close,
+`--ack-warnings` accepts that delta, and `--ack-fixes` does not replace
+`--ack-warnings`. When a cross-review records a delta, close needs a
+self-review completed after it. `--ack-warnings` does not bypass that rule.
 `--waive-review <reason>` records a review waiver
-and skips review integrity checks. It does not skip the open-question check
-or the warning gate.
+and skips the required-review and tree checks. It does not skip the
+open-question check, the cross-delta rule, or the warning gate.
 `atry close --abandon <reason>` stops a run from any open state.
 
 ### Review policy
@@ -391,6 +393,7 @@ scaffold that already has every key. Task status lives in events.
 npm test
 npm run check
 npm run sync:check
+npm run evals
 git config core.hooksPath .githooks
 brew install dprint
 brew install sonar-scanner

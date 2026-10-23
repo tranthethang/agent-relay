@@ -1,18 +1,28 @@
-// Deterministic skill eval layer.
+// Skill eval harness.
 //
 // Usage:
 //   node --experimental-strip-types evals/run.ts [--root DIR] [--scenarios FILE]
-//                                                  [--scenario NAME] [--list]
+//        [--scenario NAME] [--layer fake|real|all] [--drift] [--list]
 //
-// For every scenario, run.ts drives the fake `atry` through the recorded steps.
-// It checks four things: the command sequence, the JSON schema, the step count,
-// and the skill token count. It never calls a model and never uses the network.
+// The harness has two layers:
+//
+// - The fake layer replays the recorded steps in scenarios.json through
+//   evals/fake-atry.ts. It checks the command sequence, the JSON schema, the
+//   step count, and the skill token count. It never calls a model.
+// - The real layer drives `node dist/atry.js` through evals/real.ts. It creates
+//   temporary repositories and asserts exit codes, JSON fields, file contents,
+//   and git state.
+//
+// With no arguments both layers run. `--scenario NAME` runs the layer that owns
+// the name. `--drift` flips one recorded expectation and the real layer must
+// fail, which shows that behavior drift is caught.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { realScenarioNames, realScenarios, runRealEvals } from "./real.ts";
 
 type Step = {
   argv: string[];
@@ -35,23 +45,31 @@ type Collection = {
   scenarios: Scenario[];
 };
 
+type Layer = "fake" | "real" | "all";
+
 type Options = {
   root: string;
   scenarios: string;
+  scenariosGiven: boolean;
   only?: string;
   list: boolean;
+  layer?: Layer;
+  drift: boolean;
 };
 
 type Outcome = {
   scenario: string;
+  layer: "fake" | "real";
   skill: string;
   steps: number;
-  tokens: number;
+  tokens?: number;
+  summary: string;
   failures: string[];
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fakeAtry = join(here, "fake-atry.ts");
+const realNames = new Set(realScenarioNames());
 
 function fail(message: string): never {
   process.stderr.write(`evals: ${message}\n`);
@@ -62,7 +80,9 @@ function parseArgs(argv: string[]): Options {
   const options: Options = {
     root: resolve(here, ".."),
     scenarios: join(here, "scenarios.json"),
+    scenariosGiven: false,
     list: false,
+    drift: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -71,16 +91,34 @@ function parseArgs(argv: string[]): Options {
       options.list = true;
       continue;
     }
-    if (arg !== "--root" && arg !== "--scenarios" && arg !== "--scenario") {
+    if (arg === "--drift") {
+      options.drift = true;
+      continue;
+    }
+    if (
+      arg !== "--root" && arg !== "--scenarios" && arg !== "--scenario" && arg !== "--layer"
+    ) {
       fail(`unknown argument: ${arg}`);
     }
     if (value === undefined || value === "" || value.startsWith("--")) {
       fail(`${arg} requires a value`);
     }
     if (arg === "--root") options.root = resolve(value);
-    if (arg === "--scenarios") options.scenarios = resolve(value);
+    if (arg === "--scenarios") {
+      options.scenarios = resolve(value);
+      options.scenariosGiven = true;
+    }
     if (arg === "--scenario") options.only = value;
+    if (arg === "--layer") {
+      if (value !== "fake" && value !== "real" && value !== "all") {
+        fail(`--layer must be fake, real, or all`);
+      }
+      options.layer = value;
+    }
     index += 1;
+  }
+  if (options.drift && (options.layer === "fake" || options.scenariosGiven)) {
+    fail("--drift needs the real layer");
   }
   return options;
 }
@@ -281,45 +319,104 @@ function runScenario(
   }
   return {
     scenario: scenario.name,
+    layer: "fake",
     skill: scenario.skill,
     steps: scenario.steps.length,
     tokens: tokens ?? 0,
+    summary: scenario.summary,
     failures,
   };
 }
 
-function main(): void {
+function chosenLayers(options: Options): Layer[] {
+  if (options.layer === "all") return ["fake", "real"];
+  if (options.layer !== undefined) return [options.layer];
+  if (options.only !== undefined) return realNames.has(options.only) ? ["real"] : ["fake"];
+  if (options.scenariosGiven) return ["fake"];
+  return ["fake", "real"];
+}
+
+function listLayers(options: Options): Layer[] {
+  if (options.layer === "all") return ["fake", "real"];
+  if (options.layer !== undefined) return [options.layer];
+  return ["fake", "real"];
+}
+
+function rowText(row: Outcome): string {
+  return `${row.scenario.padEnd(24)}${row.layer.padEnd(8)}${row.skill.padEnd(24)}${
+    String(row.steps).padEnd(8)
+  }${(row.tokens === undefined ? "-" : String(row.tokens)).padEnd(8)}${
+    row.failures.length === 0 ? "ok" : "FAIL"
+  }`;
+}
+
+async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
-  const collection = loadCollection(options.scenarios);
-  const selected = collection.scenarios.filter((scenario) =>
-    options.only === undefined || scenario.name === options.only
-  );
+  const layers = chosenLayers(options);
+  if (options.drift && !layers.includes("real")) {
+    fail("--drift needs the real layer");
+  }
+
   if (options.list) {
-    for (const scenario of collection.scenarios) {
-      process.stdout.write(`${scenario.name}\t${scenario.skill}\t${scenario.summary}\n`);
+    if (listLayers(options).includes("fake")) {
+      for (const scenario of loadCollection(options.scenarios).scenarios) {
+        process.stdout.write(`${scenario.name}\tfake\t${scenario.summary}\n`);
+      }
+    }
+    if (listLayers(options).includes("real")) {
+      for (const scenario of realScenarios()) {
+        process.stdout.write(`${scenario.name}\treal\t${scenario.summary}\n`);
+      }
     }
     return;
   }
-  if (selected.length === 0) fail(`no scenario named ${options.only ?? ""}`.trim());
 
-  const counts = skillTokens(options.root);
-  const outcomes = selected.map((scenario) => runScenario(scenario, options, collection, counts));
-  const failed = outcomes.filter((outcome) => outcome.failures.length > 0);
-  process.stdout.write("scenario\t\t\t\t\tskill\t\t\tsteps\ttokens\tresult\n");
-  for (const outcome of outcomes) {
-    process.stdout.write(
-      `${outcome.scenario.padEnd(24)}${outcome.skill.padEnd(24)}${String(outcome.steps).padEnd(8)}${
-        String(outcome.tokens).padEnd(8)
-      }${outcome.failures.length === 0 ? "ok" : "FAIL"}\n`,
+  const rows: Outcome[] = [];
+  if (layers.includes("fake")) {
+    const collection = loadCollection(options.scenarios);
+    const selected = collection.scenarios.filter((scenario) =>
+      options.only === undefined || scenario.name === options.only
     );
-  }
-  for (const outcome of failed) {
-    for (const message of outcome.failures) {
-      process.stderr.write(`fail: ${outcome.scenario}: ${message}\n`);
+    const counts = skillTokens(options.root);
+    for (const scenario of selected) {
+      rows.push(runScenario(scenario, options, collection, counts));
     }
   }
-  process.stdout.write(`evals: ${outcomes.length - failed.length}/${outcomes.length} passed\n`);
+  if (layers.includes("real")) {
+    if (!existsSync(join(options.root, "dist", "atry.js"))) {
+      fail("dist/atry.js is missing; run npm run build");
+    }
+    const results = await runRealEvals({ only: options.only, drift: options.drift });
+    for (const result of results) {
+      rows.push({
+        scenario: result.scenario,
+        layer: "real",
+        skill: "cli",
+        steps: result.steps,
+        summary: "",
+        failures: result.failures,
+      });
+    }
+  }
+
+  if (options.only !== undefined && rows.length === 0) {
+    fail(`no scenario named ${options.only}`);
+  }
+
+  process.stdout.write(
+    `${"scenario".padEnd(24)}${"layer".padEnd(8)}${"skill".padEnd(24)}${"steps".padEnd(8)}${
+      "tokens".padEnd(8)
+    }result\n`,
+  );
+  for (const row of rows) process.stdout.write(`${rowText(row)}\n`);
+  for (const row of rows) {
+    for (const message of row.failures) {
+      process.stderr.write(`fail: ${row.scenario}: ${message}\n`);
+    }
+  }
+  const failed = rows.filter((row) => row.failures.length > 0);
+  process.stdout.write(`evals: ${rows.length - failed.length}/${rows.length} passed\n`);
   if (failed.length > 0) process.exitCode = 1;
 }
 
-main();
+await main();

@@ -67,7 +67,7 @@ test("atry close gates on open questions and abandon skips the gate", async () =
     );
     const refused = await runCli(["close", openRun.path], dir);
     expect(refused.code).toBe(4);
-    expect(refused.stderr).toContain("40-cross-review/01.json");
+    expect(refused.stderr).toBe("open: latest review has open questions\n");
     const acked = await runCli([
       "close",
       "--ack-open",
@@ -131,7 +131,7 @@ test("atry close reads the review whose completed event is newest", async () => 
     );
     const stale = await runCli(["close", run.path], dir);
     expect(stale.code).toBe(4);
-    expect(stale.stderr).toContain("40-cross-review/01.json");
+    expect(stale.stderr).toBe("open: latest review has open questions\n");
     await runCli(["stage", "done", run.path, "self-review", "--tool", "cursor"], dir);
     const closed = await runCli(["close", run.path], dir);
     expect(closed.code).toBe(0);
@@ -230,7 +230,7 @@ test("close --preview names open items, delta, a tree mismatch, and failed tests
     expect(preview.code).toBe(0);
     expect(JSON.parse(preview.stdout)).toMatchObject({
       recommend: "n",
-      reasons: ["tree mismatch", "reviewer changes after latest review", "failed tests"],
+      reasons: ["tree mismatch", "changes made during the latest review", "failed tests"],
     });
   });
 });
@@ -292,12 +292,15 @@ test("non-strict close lets the developer continue and records integrity warning
     expect(unconfirmed.code).toBe(4);
     const unacked = await runCli(["close", run.path, "--via", "arg"], dir);
     expect(unacked.code).toBe(4);
-    expect(unacked.stderr).toContain(
-      "ack-warnings: soft close has warnings: missing cross review, open items; "
-        + "pass --ack-warnings to accept them",
+    expect(unacked.stderr).toBe("open: latest review has open questions\n");
+    const unopened = await runCli(
+      ["close", run.path, "--via", "arg", "--ack-warnings"],
+      dir,
     );
+    expect(unopened.code).toBe(4);
+    expect(unopened.stderr).toBe("open: latest review has open questions\n");
     const closed = await runCli(
-      ["close", run.path, "--via", "arg", "--ack-warnings", "--json"],
+      ["close", run.path, "--via", "arg", "--ack-open", "--ack-warnings", "--json"],
       dir,
     );
     expect(closed.code).toBe(0);
@@ -305,7 +308,7 @@ test("non-strict close lets the developer continue and records integrity warning
       .map((line) => JSON.parse(line) as { action: string; reason?: string; via?: string });
     expect(events.find((event) => event.action === "closed")).toMatchObject({
       via: "arg",
-      reason: "non-strict review-integrity warnings: missing cross review, open items",
+      reason: "non-strict review-integrity warnings: missing cross review",
     });
   });
 });
@@ -419,7 +422,7 @@ test("strict close refuses a cross-review delta until a later self-review", asyn
   });
 });
 
-test("soft close lists a cross-review delta without a later self-review", async () => {
+test("a cross-review delta needs a self-review before close", async () => {
   await withTempGitRepo(async (dir) => {
     await gitCommit(dir);
     const created = await runCli(
@@ -429,18 +432,35 @@ test("soft close lists a cross-review delta without a later self-review", async 
     const run = JSON.parse(created.stdout) as { path: string };
     await crossReviewWithDelta(dir, run.path);
 
+    const next = JSON.parse((await runCli(["next", run.path, "--json"], dir)).stdout) as {
+      recommendation: string;
+    };
+    expect(next.recommendation).toMatch(/^atry review new \S+ self$/);
+
     const preview = await runCli(["close", run.path, "--preview", "--json"], dir);
     expect(JSON.parse(preview.stdout)).toEqual({
       schema: 1,
       recommend: "n",
       reasons: [
-        "reviewer changes after latest review",
+        "changes made during the latest review",
         "cross-review changes have no later self-review",
       ],
     });
-    const refused = await runCli(["close", run.path, "--via", "arg"], dir);
-    expect(refused.code).toBe(4);
-    expect(refused.stderr).toContain("cross-review changes have no later self-review");
+    const refused = "review.self: cross-review changed code and no later self-review covers it\n";
+    const unacked = await runCli(["close", run.path, "--via", "arg"], dir);
+    expect(unacked.code).toBe(4);
+    expect(unacked.stderr).toBe(refused);
+    const acked = await runCli(
+      ["close", run.path, "--via", "arg", "--ack-warnings"],
+      dir,
+    );
+    expect(acked.code).toBe(4);
+    expect(acked.stderr).toBe(refused);
+
+    await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+    expect((await runCli(["review", "done", run.path, "self"], dir)).code).toBe(0);
+    const after = await runCli(["close", run.path, "--preview", "--json"], dir);
+    expect(JSON.parse(after.stdout)).toEqual({ schema: 1, recommend: "y", reasons: [] });
     const closed = await runCli(
       ["close", run.path, "--via", "arg", "--ack-warnings", "--json"],
       dir,
