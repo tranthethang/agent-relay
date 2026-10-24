@@ -404,7 +404,7 @@ test("strict close refuses a cross-review delta until a later self-review", asyn
       recommendation: string;
       actions: { command: string }[];
     };
-    expect(next.recommendation).toMatch(/^atry review new \S+ self$/);
+    expect(next.recommendation).toMatch(/^atry review new \S+ self --tool <tool>$/);
     expect(next.actions.map((action) => action.command)).toEqual([
       next.recommendation,
       expect.stringContaining("--preview"),
@@ -435,7 +435,7 @@ test("a cross-review delta needs a self-review before close", async () => {
     const next = JSON.parse((await runCli(["next", run.path, "--json"], dir)).stdout) as {
       recommendation: string;
     };
-    expect(next.recommendation).toMatch(/^atry review new \S+ self$/);
+    expect(next.recommendation).toMatch(/^atry review new \S+ self --tool <tool>$/);
 
     const preview = await runCli(["close", run.path, "--preview", "--json"], dir);
     expect(JSON.parse(preview.stdout)).toEqual({
@@ -468,4 +468,40 @@ test("a cross-review delta needs a self-review before close", async () => {
     expect(closed.code).toBe(0);
     expect(JSON.parse(closed.stdout)).toMatchObject({ lifecycle: "closed" });
   });
+});
+
+test("next marks review done as a developer decision only when testCommand is set", async () => {
+  for (const testCommand of [undefined, "npm test"]) {
+    await withTempGitRepo(async (dir) => {
+      if (testCommand !== undefined) {
+        await writeFile(
+          join(dir, ".agent-relay.json"),
+          JSON.stringify({ schema: 1, requireReviews: ["self"], smallChange: 100, testCommand }),
+        );
+        await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+      }
+      await gitCommit(dir);
+      const created = await runCli(
+        ["run", "new", "--slug", "next-tests", "--title", "Next tests", "--json"],
+        dir,
+      );
+      const run = JSON.parse(created.stdout) as { path: string };
+      await reachReview(run.path, dir);
+      await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+      const next = JSON.parse((await runCli(["next", run.path, "--json"], dir)).stdout) as {
+        actions: { kind: string; command: string; needsHuman: boolean; question?: string }[];
+      };
+      const action = next.actions[0];
+      expect(action?.kind).toBe("review-done");
+      if (testCommand === undefined) {
+        expect(action?.command).not.toContain("--run-tests");
+        expect(action?.needsHuman).toBe(false);
+        expect(action).not.toHaveProperty("question");
+      } else {
+        expect(action?.command).toMatch(/ --run-tests$/);
+        expect(action?.needsHuman).toBe(true);
+        expect(action?.question).toBe("Run npm test and record the result?");
+      }
+    });
+  }
 });

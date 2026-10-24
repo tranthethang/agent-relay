@@ -398,6 +398,12 @@ test("approvePreview counts tasks from a missing, unreadable, invalid, and valid
       taskFiles: [],
       ready: false,
       missing: ["10-plan/overview.md", "10-plan/index.json"],
+      decision: {
+        question: "The plan is not ready. Missing: 10-plan/overview.md; 10-plan/index.json.",
+        onYes: null,
+        onYesArg: null,
+        onNo: null,
+      },
     });
     const index = join(runDir, "10-plan", "index.json");
     await mkdir(index, { recursive: true });
