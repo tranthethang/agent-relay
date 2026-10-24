@@ -63,6 +63,11 @@ jobs:
           set -euo pipefail
           node --experimental-strip-types scripts/maint/next-version.ts --check-requires "${{ steps.version.outputs.version }}"
 
+      # The tests expect the dev build and `package.json` at 0.0.0. Run them
+      # before the version is set; `npm test` builds first.
+      - name: Test
+        run: npm test
+
       # The build reads the version from `package.json`. Set it first, so the
       # bundle and `dist/package.json` report the release version.
       - name: Set the package version
@@ -101,9 +106,6 @@ jobs:
           console.log("tarball holds the six skills");
           '
           rm -f pack.json
-
-      - name: Test
-        run: npm test
 
       - name: Push the tag
         run: |
