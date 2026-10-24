@@ -92,7 +92,17 @@ when the plan is complete.
 `atry approve <run> --preview` prints Goal, Non-goals, Constraints, Decisions,
 each task file, and `ready: yes` or `ready: no` with the missing items.
 `atry close <run> --preview` prints `recommend: y` or `recommend: n` and the reasons.
+Each preview then prints `question: <question>` and `on yes: <command or none>`.
+With `--json`, each preview adds `decision`: `{ question: string, onYes: string | null,
+onYesArg: string | null, onNo: null }`. `onYes` is the command with `--via confirm`,
+and `onYesArg` is the same command with `--via arg`. Both are `null` when the run
+must not go on, and `question` says why.
 Neither preview records an event.
+In `next --json`, an action adds `question` (string, only when `needsHuman` is true).
+Its `approve` and `close` commands end in `--preview`. `stage start`, `stage done`, and
+`review new` carry `--tool <tool>`. A cross-review start also carries `--model <model>`.
+A `review-done` action adds `--run-tests` and sets `needsHuman` when the base policy
+sets `testCommand`.
 
 ### Plan and approval gates
 
