@@ -1,0 +1,42 @@
+name: smoke
+description: Check that the `atry` on PATH and its six skill bundles work together.
+
+inputs:
+  version:
+    description: The version `atry version` must report
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Smoke the CLI and skills
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        installed="$(atry version | head -n 1)"
+        if [ "$installed" != "$VERSION" ]; then
+          echo "atry version is ${installed}, expected ${VERSION}" >&2
+          exit 1
+        fi
+        atry preflight --requires ">=0.10.7"
+        skills="$(mktemp -d "${RUNNER_TEMP}/atry-smoke-skills.XXXXXX")"
+        atry skills install --tool claude-code --dir "$skills" --json > "${RUNNER_TEMP}/install.json"
+        atry skills status --dir "$skills" --json > "${RUNNER_TEMP}/status.json"
+        node -e '
+        const { readFileSync } = require("node:fs");
+        const read = (name) => JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/${name}`, "utf8"));
+        const install = read("install.json");
+        if (install.bundles.length !== 6) {
+          console.error(`installed ${install.bundles.length} bundles, expected 6`);
+          process.exit(1);
+        }
+        const status = read("status.json");
+        if (status.ok !== true) {
+          console.error("skills status is not ok");
+          process.exit(1);
+        }
+        console.log("the CLI and the six skills work together");
+        '
+        rm -f "${RUNNER_TEMP}/install.json" "${RUNNER_TEMP}/status.json"

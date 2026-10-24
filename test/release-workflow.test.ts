@@ -35,14 +35,15 @@ test("release workflow computes X.M.Z and publishes from main", () => {
     "npm version",
     "npm run check",
     "npm run build",
+    "npm pack --pack-destination",
+    "uses: ./.github/actions/smoke",
     "git push origin",
     "npm install -g npm@11.15.0",
     "npm publish --provenance --access public --tag latest",
+    "needs: publish",
+    "npm install --prefer-online --prefix",
+    "uses: ./.github/actions/smoke",
     "gh release create",
-    "atry version",
-    "atry preflight --requires \">=0.10.7\"",
-    "atry skills install --tool claude-code",
-    "atry skills status --dir",
   ];
   let cursor = -1;
   for (const step of order) {
@@ -57,7 +58,27 @@ test("release workflow computes X.M.Z and publishes from main", () => {
   expect(yaml).toContain("outputs:");
   expect(yaml).toContain("version: ${{ steps.version.outputs.version }}");
   expect(yaml).toContain("needs: publish");
-  expect(yaml).toContain("npm install --prefix");
-  expect(yaml).toContain("install.bundles.length !== 6");
-  expect(yaml).toContain("status.ok !== true");
+  expect(yaml).toContain("--prefer-online 2>/dev/null");
+});
+
+test("smoke action checks the CLI version, preflight, and the six bundles", () => {
+  const yaml = readFileSync(
+    new URL("../.github/actions/smoke/action.yml", import.meta.url),
+    "utf8",
+  );
+  expect(yaml).toContain("using: composite");
+  const order = [
+    "atry version",
+    "atry preflight --requires \">=0.10.7\"",
+    "atry skills install --tool claude-code",
+    "atry skills status --dir",
+    "install.bundles.length !== 6",
+    "status.ok !== true",
+  ];
+  let cursor = -1;
+  for (const step of order) {
+    const index = yaml.indexOf(step, cursor + 1);
+    expect(index).toBeGreaterThan(cursor);
+    cursor = index;
+  }
 });

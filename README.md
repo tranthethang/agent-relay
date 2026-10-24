@@ -8,7 +8,7 @@ Markdown skills plus a TypeScript CLI (`atry`) for one piece of work in stages:
 plan, implement, self-review, and cross-review. You run each stage yourself, in
 whatever tool you open.
 
-![agent-relay banner](assets/agent-relay-banner-3d.png)
+![agent-relay banner](agent-relay-banner-voxel-bw.png)
 
 ## Scope
 
