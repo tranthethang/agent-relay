@@ -34,7 +34,7 @@ whatever tool you open.
 Node.js 22 or newer. This release is `0.10.7`.
 
 ```bash
-npm i -g @tranthethang/agent-relay@0.10.7
+npm i -g @tranthethang/agent-relay@latest
 atry skills install --tool claude-code
 atry skills status --tool claude-code
 ```
