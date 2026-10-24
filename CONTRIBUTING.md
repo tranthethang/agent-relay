@@ -103,6 +103,13 @@ make fmt-check
 under `specs/70-storage-and-git/00-directory-conventions/`, then run `make fmt`
 and `npm run sync`, so the skill copies match.
 
+## Dogfood policy
+
+- This repo commits `.agent-relay.json` with `testCommand: "npm test"` and `strict.scope: true`.
+- The Claude Code hook denies an edit outside the task files during implement.
+- Record each friction in the implement report or the review file, on one line that starts with `friction:`.
+- Do not turn off a strict group to finish a run. Record the friction and use `--allow-extra <reason>` when the user agrees.
+
 ## Where things live
 
 - Skill bundles: `skills/<name>/`
