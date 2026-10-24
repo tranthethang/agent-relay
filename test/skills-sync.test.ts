@@ -322,6 +322,10 @@ test("sync errors on missing convention parts, writing, preflight, or empty skil
       join(root, "specs/80-skills-integration/00-skill-bridge/preflight.md"),
       "preflight source\n",
     );
+    writeFileSync(
+      join(root, "specs/80-skills-integration/00-skill-bridge/loop.md"),
+      "loop source\n",
+    );
 
     // Check review template drift
     const crossConduct = join(

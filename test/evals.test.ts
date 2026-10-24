@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
@@ -24,6 +24,11 @@ type Collection = {
   maxSteps: number;
   scenarios: { name: string; skill: string; steps: { argv: string[]; exit: number }[] }[];
 };
+
+function copyBundles(dir: string): void {
+  cpSync(join(repoRoot, "skills"), join(dir, "skills"), { recursive: true });
+  cpSync(join(repoRoot, "scripts/maint"), join(dir, "scripts/maint"), { recursive: true });
+}
 
 function readCollection(): Collection {
   return JSON.parse(readFileSync(scenariosPath, "utf8")) as Collection;
@@ -109,4 +114,32 @@ test("CI runs the eval layers on the three operating systems", () => {
   const yaml = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
   expect(yaml).toContain("os: [ubuntu-latest, macos-latest, windows-latest]");
   expect(yaml).toContain("npm run evals");
+});
+
+test("a skill without the LOOP block fails a step whose verb comes from next", async () => {
+  await withTempDir(async (dir) => {
+    copyBundles(dir);
+    const skill = join(dir, "skills/atry-self-review/SKILL.md");
+    const text = readFileSync(skill, "utf8")
+      .replace(/<!-- BEGIN LOOP -->[\s\S]*<!-- END LOOP -->/, "");
+    writeFileSync(skill, text);
+    const result = runEvals(["--layer", "fake", "--scenario", "close-warning", "--root", dir]);
+    const crossText = readFileSync(join(dir, "skills/atry-cross-review/SKILL.md"), "utf8");
+    expect(crossText).toContain("<!-- BEGIN LOOP -->");
+    const own = runEvals(["--layer", "fake", "--scenario", "open-question", "--root", dir]);
+    expect(own.status).toBe(1);
+    expect(own.stderr).toContain("SKILL.md has no LOOP block for \"atry review new\"");
+    expect(result.stderr).not.toContain("LOOP block");
+  });
+});
+
+test("a skill that lacks a verb outside the next list still fails", async () => {
+  await withTempDir(async (dir) => {
+    copyBundles(dir);
+    const skill = join(dir, "skills/atry-plan/SKILL.md");
+    writeFileSync(skill, readFileSync(skill, "utf8").replaceAll("atry plan done", "atry plan"));
+    const result = runEvals(["--layer", "fake", "--scenario", "normal-plan", "--root", dir]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("SKILL.md does not declare \"atry plan done\"");
+  });
 });

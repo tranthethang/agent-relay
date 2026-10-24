@@ -54,7 +54,10 @@ including a missing `dist/atry.js` or `--drift` without the real layer.
 
 1. **Command sequence.** Each step runs through the fake. The fake refuses an
    argv that differs from the recorded step. The skill bundle must also name
-   the command, as `atry <verb>`, in `SKILL.md`.
+   the command, as `atry <verb>`, in `SKILL.md`. A verb that `next` or a preview
+   `decision` hands out (`approve`, `close`, `review new`, `review done`,
+   `stage start`, `stage done`, `task start`, `integrate`) is exempt. For those
+   verbs the skill must hold the synced `<!-- BEGIN LOOP -->` block instead.
 2. **JSON schema.** An object response must set `schema` to `1`. It must also
    hold the keys that its command returns, for example `next` needs `actions`
    and `command`.
