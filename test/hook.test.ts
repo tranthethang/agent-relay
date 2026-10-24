@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { promisify } from "node:util";
@@ -189,6 +189,40 @@ test("hook check denies other paths when strict scope is on", async () => {
     });
     const allowed = await runHookCli(hookInput(dir, { file_path: join(dir, "src/own.ts") }), dir);
     expect(allowed).toEqual({ stdout: "", code: 0 });
+  });
+});
+
+test("hook check ignores a path outside the git root of an implementing run", async () => {
+  await withTempGitRepo(async (dir) => {
+    await implementingRun(dir, "hook-outside", {
+      schema: 1,
+      requireReviews: ["self"],
+      smallChange: 20,
+      strict: { scope: true, plan: false, reviewIntegrity: false },
+    });
+    await withTempDir(async (other) => {
+      const outside = await runHookCli(hookInput(dir, { file_path: join(other, "a.ts") }), dir);
+      expect(outside).toEqual({ stdout: "", code: 0 });
+    });
+    expect(await hookCheck(hookInput(dir, { file_path: dir }))).toBeNull();
+    const inside = await runHookCli(hookInput(dir, { file_path: join(dir, "README.md") }), dir);
+    expect(JSON.parse(inside.stdout)).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "deny" },
+    });
+  });
+});
+
+test("hook check still checks a new file in a missing dir and a symlinked prefix", async () => {
+  await withTempGitRepo(async (dir) => {
+    await implementingRun(dir, "hook-new");
+    const fresh = await hookCheck(hookInput(dir, { file_path: join(dir, "new", "deep", "a.ts") }));
+    expect(fresh?.hookSpecificOutput.permissionDecision).toBe("ask");
+    await withTempDir(async (other) => {
+      const link = join(other, "link");
+      await symlink(dir, link, "dir");
+      const linked = await hookCheck(hookInput(dir, { file_path: join(link, "README.md") }));
+      expect(linked?.hookSpecificOutput.permissionDecision).toBe("ask");
+    });
   });
 });
 
