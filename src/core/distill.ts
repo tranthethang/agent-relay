@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { z } from "zod";
 import { fromZod, RelayError } from "./error.js";
-import { atomicWrite, isEnoent, joinUnder, readJson } from "./files.js";
-import { schemaVersion } from "./vocab.js";
+import { parseEventLine } from "./event.js";
+import { atomicWrite, isEnoent, joinUnder, readJson, readJsonl } from "./files.js";
+import { gitHead } from "./git.js";
+import { parseRunJson, type RunJson } from "./run.js";
+import { lifecycleSchema, schemaVersion, stageSchema } from "./vocab.js";
 
 const manifestRel = "90-distill/manifest.json";
 
@@ -14,8 +17,28 @@ export const distillFileSchema = z.object({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 }).strict();
 
+export const distillRunSchema = z.object({
+  name: z.string().min(1),
+  id: z.string().min(1),
+  slug: z.string().min(1),
+  title: z.string().min(1),
+  base: z.string().min(1),
+  head: z.string().min(1).nullable(),
+  lifecycle: lifecycleSchema,
+  stage: stageSchema,
+  closedAt: z.string().min(1).nullable(),
+  stages: z.array(
+    z.object({
+      stage: stageSchema,
+      tool: z.string().min(1).nullable(),
+      model: z.string().min(1).nullable(),
+    }).strict(),
+  ),
+}).strict();
+
 export const distillManifestSchema = z.object({
   schema: z.literal(schemaVersion),
+  run: distillRunSchema.optional(),
   files: z.array(distillFileSchema),
 }).strict();
 
@@ -133,11 +156,42 @@ export async function distillRun(
     });
   }
   files.sort((left, right) => comparePath(left.path, right.path));
-  const manifest = distillManifestSchema.parse({ schema: schemaVersion, files });
+  const run = await runHeader(runDir);
+  const manifest = distillManifestSchema.parse({ schema: schemaVersion, run, files });
   const path = join(runDir, manifestRel);
   await mkdir(join(runDir, "90-distill"), { recursive: true });
   await atomicWrite(path, `${JSON.stringify(manifest)}\n`);
   return { schema: schemaVersion, path, files: files.length };
+}
+
+async function runHeader(runDir: string): Promise<z.infer<typeof distillRunSchema>> {
+  const runJson: RunJson = parseRunJson(await readJson(join(runDir, "run.json")));
+  const events = (await readJsonl(join(runDir, "events.jsonl"))).map(parseEventLine);
+  const repoRoot = dirname(dirname(runDir));
+  let head: string | null;
+  try {
+    head = await gitHead(runJson.worktree?.path ?? repoRoot);
+  } catch {
+    head = null;
+  }
+  return {
+    name: basename(runDir),
+    id: runJson.id,
+    slug: runJson.slug,
+    title: runJson.title,
+    base: runJson.base,
+    head,
+    lifecycle: runJson.state.lifecycle,
+    stage: runJson.state.stage,
+    closedAt: events.find((event) => event.action === "closed")?.ts ?? null,
+    stages: events
+      .filter((event) => event.action === "started")
+      .map((event) => ({
+        stage: event.stage,
+        tool: event.tool ?? null,
+        model: event.model ?? null,
+      })),
+  };
 }
 
 function comparePath(left: string, right: string): number {
