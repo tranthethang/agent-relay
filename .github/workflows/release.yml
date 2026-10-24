@@ -107,6 +107,21 @@ jobs:
           '
           rm -f pack.json
 
+      # Install the packed tarball and smoke it before anything leaves the
+      # runner. A failure here pushes no tag and publishes nothing.
+      - name: Install the packed tarball into a temporary prefix
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --pack-destination "$RUNNER_TEMP" | tail -n 1)"
+          prefix="${RUNNER_TEMP}/atry-prepublish"
+          npm install --prefix "$prefix" "${RUNNER_TEMP}/${tarball}"
+          echo "${prefix}/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Smoke the packed tarball
+        uses: ./.github/actions/smoke
+        with:
+          version: ${{ steps.version.outputs.version }}
+
       - name: Push the tag
         run: |
           set -euo pipefail
@@ -120,17 +135,15 @@ jobs:
       - name: Publish to npm
         run: npm publish --provenance --access public --tag latest
 
-      - name: Create the GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "v${{ steps.version.outputs.version }}" --generate-notes
-
-  # This job installs the published tarball. It proves that the CLI and the six
-  # bundles in the registry work together, not only the local build.
+  # This job installs the published tarball. It proves that the registry serves
+  # the same working package that `publish` smoked before it was published.
   smoke:
     needs: publish
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -143,46 +156,30 @@ jobs:
         run: |
           set -euo pipefail
           prefix="${RUNNER_TEMP}/atry-smoke"
-          # The registry can lag a few seconds behind `npm publish`.
-          for attempt in 1 2 3 4 5 6; do
-            if npm install --prefix "$prefix" "@tranthethang/agent-relay@${VERSION}"; then
+          # The registry can lag minutes behind `npm publish`, and its metadata
+          # is cached. Poll with `--prefer-online` for up to ten minutes.
+          attempts=30
+          for attempt in $(seq 1 "$attempts"); do
+            seen="$(npm view "@tranthethang/agent-relay@${VERSION}" version --prefer-online 2>/dev/null || true)"
+            if [ "$seen" = "$VERSION" ]; then
               break
             fi
-            if [ "$attempt" = "6" ]; then
-              echo "${VERSION} is not installable after ${attempt} attempts" >&2
+            if [ "$attempt" = "$attempts" ]; then
+              echo "${VERSION} is not visible after ${attempt} attempts" >&2
               exit 1
             fi
             sleep 20
           done
+          npm install --prefer-online --prefix "$prefix" "@tranthethang/agent-relay@${VERSION}"
           echo "${prefix}/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Smoke the published CLI and skills
+        uses: ./.github/actions/smoke
+        with:
+          version: ${{ needs.publish.outputs.version }}
+
+      # The GitHub Release marks a finished release, so it waits for the smoke.
+      - name: Create the GitHub Release
         env:
-          VERSION: ${{ needs.publish.outputs.version }}
-        run: |
-          set -euo pipefail
-          installed="$(atry version | head -n 1)"
-          if [ "$installed" != "$VERSION" ]; then
-            echo "atry version is ${installed}, expected ${VERSION}" >&2
-            exit 1
-          fi
-          atry preflight --requires ">=0.10.7"
-          skills="${RUNNER_TEMP}/atry-smoke-skills"
-          atry skills install --tool claude-code --dir "$skills" --json > "${RUNNER_TEMP}/install.json"
-          atry skills status --dir "$skills" --json > "${RUNNER_TEMP}/status.json"
-          node -e '
-          const { readFileSync } = require("node:fs");
-          const read = (name) => JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/${name}`, "utf8"));
-          const install = read("install.json");
-          if (install.bundles.length !== 6) {
-            console.error(`installed ${install.bundles.length} bundles, expected 6`);
-            process.exit(1);
-          }
-          const status = read("status.json");
-          if (status.ok !== true) {
-            console.error("skills status is not ok");
-            process.exit(1);
-          }
-          console.log("the published CLI and the six skills work together");
-          '
-          rm -f "${RUNNER_TEMP}/install.json" "${RUNNER_TEMP}/status.json"
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "v${{ needs.publish.outputs.version }}" --repo "${{ github.repository }}" --generate-notes
