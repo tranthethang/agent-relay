@@ -16,6 +16,11 @@ root [`README.md`](../../../README.md). Agent constraints for editing the repo a
 | [task-claim.md](../60-task-claim/task-claim.md)                                               | Maintain claim, release, and file-overlap checks     |
 | [testing.md](../20-testing/testing.md)                                                        | Run or extend the tests, evals, and coverage bars    |
 | [release.md](../30-release/release.md)                                                        | Cut an `X.M.Z` release and record the evidence       |
+| [commands.md](../../10-cli-runtime/40-command-reference/commands.md)                          | Look up every verb, flag, and close gate             |
+| [review-policy.md](../../60-policy-governance/00-policy-spec/review-policy.md)                | See how policy drives reviews and `testCommand`      |
+| [worktree-isolation.md](../../70-storage-and-git/40-worktree-isolation/worktree-isolation.md) | Maintain per-run worktrees                           |
+| [parallel-tasks.md](../../40-concurrency-control/40-parallel-tasks/parallel-tasks.md)         | Use claim, release, and integrate                    |
+| [known-limits.md](../../60-policy-governance/10-trust-boundaries/known-limits.md)             | Check what `atry` does not prove or enforce          |
 | [security.md](../40-security/security.md)                                                     | Understand trust boundaries                          |
 | [next-features.md](../90-next-features/next-features.md)                                      | Read planned gaps, intent, and fix direction         |
 | [troubleshooting.md](../80-troubleshooting/troubleshooting.md)                                | Triage install, gate, lock, and stale-skill failures |

@@ -31,10 +31,10 @@ test("release workflow computes X.M.Z and publishes from main", () => {
     "npm ci",
     "scripts/maint/next-version.ts",
     "--check-requires",
+    "npm test",
     "npm version",
     "npm run check",
     "npm run build",
-    "npm test",
     "git push origin",
     "npm install -g npm@11.15.0",
     "npm publish --provenance --access public --tag latest",
@@ -51,8 +51,9 @@ test("release workflow computes X.M.Z and publishes from main", () => {
     cursor = index;
   }
 
+  expect(yaml.indexOf("npm test")).toBeLessThan(yaml.indexOf("npm version"));
   expect(yaml.indexOf("npm version")).toBeLessThan(yaml.indexOf("npm run build"));
-  expect(yaml.indexOf("npm version")).toBeLessThan(yaml.indexOf("npm test"));
+  expect(yaml).toContain("attempt");
   expect(yaml).toContain("outputs:");
   expect(yaml).toContain("version: ${{ steps.version.outputs.version }}");
   expect(yaml).toContain("needs: publish");
