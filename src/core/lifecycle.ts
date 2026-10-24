@@ -140,6 +140,7 @@ export type ClosePreview = {
   recommend: "y" | "n";
   reasons: string[];
   worktree?: { remove: boolean; reason?: string };
+  decision: Decision;
 };
 
 export function approvePreviewText(result: ApprovePreview): string {
@@ -170,7 +171,10 @@ export function closePreviewText(result: ClosePreview): string {
   if (result.worktree?.reason !== undefined) {
     worktree = `worktree: close will keep it (${result.worktree.reason})\n`;
   }
-  return `recommend: ${result.recommend}\n${reasons}${worktree}`;
+  const decision = `question: ${result.decision.question}\non yes: ${
+    result.decision.onYes ?? "none"
+  }\n`;
+  return `recommend: ${result.recommend}\n${reasons}${worktree}${decision}`;
 }
 
 export { sectionText } from "./plan.js";
@@ -208,20 +212,69 @@ export async function approvePreview(runDir: string): Promise<ApprovePreview> {
 export async function closePreview(runDir: string): Promise<ClosePreview> {
   const loaded = await rebuildRun(runDir);
   const reasons = await closeReasons(runDir, loaded.run.base, loaded.events, "preview");
-  const preview: ClosePreview = {
-    schema: schemaVersion,
-    recommend: reasons.length === 0 ? "y" : "n",
-    reasons,
-  };
+  const recommend = reasons.length === 0 ? "y" : "n";
+  let worktree: ClosePreview["worktree"];
   if (loaded.run.worktree !== undefined) {
     const reason = await keepReason(
       await mainRoot(runDir),
       basename(runDir),
       loaded.run.worktree,
     );
-    preview.worktree = reason === null ? { remove: true } : { remove: false, reason };
+    worktree = reason === null ? { remove: true } : { remove: false, reason };
   }
+  const policy = await readPolicy(await gitCwd(runDir), loaded.run.base);
+  const preview: ClosePreview = {
+    schema: schemaVersion,
+    recommend,
+    reasons,
+    decision: closeDecision(basename(runDir), recommend, reasons, worktree, policy.strict),
+  };
+  if (worktree !== undefined) preview.worktree = worktree;
   return preview;
+}
+
+// The decision names only flags that `closeRun` accepts. `--ack-fixes` and
+// `--waive-review` stay a person's choice and never appear here.
+function closeDecision(
+  run: string,
+  recommend: "y" | "n",
+  reasons: readonly string[],
+  worktree: ClosePreview["worktree"],
+  strict: { reviewIntegrity: boolean },
+): Decision {
+  const detail = [
+    ...reasons,
+    ...(worktree === undefined
+      ? []
+      : [
+        worktree.remove
+          ? "worktree: close will remove it"
+          : `worktree: close will keep it (${worktree.reason})`,
+      ]),
+  ].join("; ");
+  const blocked = (why: string): Decision => ({
+    question: `${why} ${detail}.`,
+    onYes: null,
+    onYesArg: null,
+    onNo: null,
+  });
+  if (reasons.includes("cross-review changes have no later self-review")) {
+    return blocked("Close is not possible. Run self-review again first.");
+  }
+  if (recommend === "n" && strict.reviewIntegrity) {
+    return blocked("Close is not possible while strict.reviewIntegrity is true.");
+  }
+  const command = `atry close ${run}`;
+  const flags = `${recommend === "n" ? " --ack-warnings" : ""}${
+    reasons.includes("open items") ? " --ack-open" : ""
+  }`;
+  const question = detail === "" ? `Close ${run}?` : `${detail}. Close ${run}?`;
+  return {
+    question,
+    onYes: `${command} --via confirm${flags}`,
+    onYesArg: `${command} --via arg${flags}`,
+    onNo: null,
+  };
 }
 
 async function closeReasons(
