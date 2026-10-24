@@ -84,17 +84,17 @@ Every verb, flag, and gate is in the
 
 ## Going deeper
 
-| Topic                          | Read                                                                                                       |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| All verbs, flags, close gates  | [commands.md](specs/10-cli-runtime/40-command-reference/commands.md)                                       |
-| Review policy and `testCommand`| [review-policy.md](specs/60-policy-governance/00-policy-spec/review-policy.md)                             |
-| Every policy option            | [configuration.md](specs/60-policy-governance/00-policy-spec/configuration.md)                             |
-| One git worktree per run       | [worktree-isolation.md](specs/70-storage-and-git/40-worktree-isolation/worktree-isolation.md)              |
-| Parallel tasks and claims      | [parallel-tasks.md](specs/40-concurrency-control/40-parallel-tasks/parallel-tasks.md)                      |
-| Claude Code edit hook          | [claude-code-hook.md](specs/80-skills-integration/10-tool-adapters/claude-code-hook.md)                    |
-| What `atry` does not prove     | [known-limits.md](specs/60-policy-governance/10-trust-boundaries/known-limits.md)                          |
-| Trust boundaries               | [security.md](specs/90-maintainer/40-security/security.md), [`SECURITY.md`](SECURITY.md)                   |
-| All specifications             | [`specs/`](specs/)                                                                                         |
+| Topic                           | Read                                                                                          |
+| ------------------------------- | --------------------------------------------------------------------------------------------- |
+| All verbs, flags, close gates   | [commands.md](specs/10-cli-runtime/40-command-reference/commands.md)                          |
+| Review policy and `testCommand` | [review-policy.md](specs/60-policy-governance/00-policy-spec/review-policy.md)                |
+| Every policy option             | [configuration.md](specs/60-policy-governance/00-policy-spec/configuration.md)                |
+| One git worktree per run        | [worktree-isolation.md](specs/70-storage-and-git/40-worktree-isolation/worktree-isolation.md) |
+| Parallel tasks and claims       | [parallel-tasks.md](specs/40-concurrency-control/40-parallel-tasks/parallel-tasks.md)         |
+| Claude Code edit hook           | [claude-code-hook.md](specs/80-skills-integration/10-tool-adapters/claude-code-hook.md)       |
+| What `atry` does not prove      | [known-limits.md](specs/60-policy-governance/10-trust-boundaries/known-limits.md)             |
+| Trust boundaries                | [security.md](specs/90-maintainer/40-security/security.md), [`SECURITY.md`](SECURITY.md)      |
+| All specifications              | [`specs/`](specs/)                                                                            |
 
 ## Development
 
