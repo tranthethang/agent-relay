@@ -612,6 +612,48 @@ async function closeAck(check: Check, ctx: Context): Promise<void> {
   );
 }
 
+// The decision command runs exactly as the CLI printed it. The same command
+// without its ack flags is refused, so the flags in `onYes` are required.
+async function decisionClose(check: Check, ctx: Context): Promise<void> {
+  await write(
+    join(ctx.repo, ".agent-relay.json"),
+    `${JSON.stringify({ schema: 1, requireReviews: ["self"], smallChange: 0 })}\n`,
+  );
+  await commitAll(ctx, "policy");
+  const run = await newRun(check, ctx, "real-decision-close");
+  await reachReview(check, ctx, run);
+  const selfNew = await cli(check, ctx, [
+    "review",
+    "new",
+    run,
+    "self",
+    "--tool",
+    "cursor",
+    "--json",
+  ]);
+  expectExit(check, selfNew, 0, "review new self");
+  await writeReviewPair(check, parseJson(check, selfNew, "review new self"), "self", "Continue?");
+  expectExit(check, await cli(check, ctx, ["review", "done", run, "self"]), 0, "review done self");
+
+  const preview = await cli(check, ctx, ["close", run, "--preview", "--json"]);
+  expectExit(check, preview, 0, "close preview");
+  const decision = parseJson(check, preview, "close preview").decision as
+    | { onYes?: string | null }
+    | undefined;
+  const onYes = decision?.onYes;
+  if (typeof onYes !== "string") {
+    check.failures.push("close preview: decision.onYes is not a command");
+    return;
+  }
+  const args = onYes.split(" ").slice(1);
+  const stripped = args.filter((arg) => arg !== "--ack-open" && arg !== "--ack-warnings");
+  const refused = await cli(check, ctx, stripped);
+  expectExit(check, refused, 4, "decision command without its ack flags");
+  const closed = await cli(check, ctx, [...args, "--json"]);
+  expectExit(check, closed, 0, "decision.onYes as given");
+  expectField(check, parseJson(check, closed, "decision close"), "lifecycle", "closed", "decision");
+}
+
 const scenarios: Scenario[] = [
   {
     name: "real-plan-gate",
@@ -632,6 +674,11 @@ const scenarios: Scenario[] = [
     name: "real-close-ack",
     summary: "A soft close needs --ack-open and a self-review after a cross delta.",
     run: closeAck,
+  },
+  {
+    name: "real-decision-close",
+    summary: "The close preview onYes command closes the run as printed.",
+    run: decisionClose,
   },
 ];
 

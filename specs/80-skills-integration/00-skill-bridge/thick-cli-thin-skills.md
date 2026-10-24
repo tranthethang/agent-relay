@@ -18,3 +18,6 @@ All lifecycle state validation, dependency checking, gate verification, and vers
 - State and available actions are computed by `atry next`, which marks one option as its recommendation.
 - Skills present multiple actions to the developer and follow the selected action.
 - The agent reads the selected action's paths before running its command.
+- The approve and close decisions live in the CLI. `atry approve --preview` and `atry close --preview` return a `decision` object with the question and the exact `onYes` command, so a skill never builds a command string or reads `strict.reviewIntegrity`.
+- `atry next` fills identity placeholders `<tool>` and `<model>`. A skill replaces only those two tokens.
+- The Loop text is one shared partial, `loop.md`. `npm run sync` copies it into the implement and review skills.

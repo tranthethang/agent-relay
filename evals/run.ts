@@ -239,8 +239,27 @@ function checkJson(verb: string, value: Record<string, unknown>): string[] {
   return failures;
 }
 
+// The CLI hands these commands out through `next` or a preview `decision`.
+// A skill holds the synced Loop block instead of the command text.
+const nextEmittedVerbs = new Set([
+  "approve",
+  "close",
+  "review new",
+  "review done",
+  "stage start",
+  "stage done",
+  "task start",
+  "integrate",
+]);
+
 function checkSkillDeclares(skillText: string, verb: string): string | undefined {
   if (verb === "") return "step has an empty command";
+  if (nextEmittedVerbs.has(verb) && !skillText.includes(`atry ${verb}`)) {
+    if (skillText.includes("<!-- BEGIN LOOP -->") && skillText.includes("<!-- END LOOP -->")) {
+      return undefined;
+    }
+    return `SKILL.md has no LOOP block for "atry ${verb}"`;
+  }
   if (!skillText.includes(`atry ${verb}`)) {
     return `SKILL.md does not declare "atry ${verb}"`;
   }

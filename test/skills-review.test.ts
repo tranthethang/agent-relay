@@ -8,23 +8,15 @@ const crossReview = skillText("atry-cross-review");
 test("self-review uses review new and review done", () => {
   expect(selfReview).toContain(`requires-atry: ">=${requiredVersion()}"`);
   expect(selfReview).toContain(preflightBody());
-  expect(selfReview).toContain("atry review new <run> self --tool <tool>");
-  expect(selfReview).toContain("atry review done <run> self");
+  expect(selfReview).toContain("Replace `<tool>` and `<model>` in its `command`.");
   expect(selfReview).toContain("atry review decide <run> Q<n> <answer>");
   expect(selfReview).toContain("atry next <run> --json");
-  expect(selfReview).toContain("Read `state`, `actions`, and `recommendation` from the result.");
-  expect(selfReview).toContain("follow the developer's selection");
-  expect(selfReview).toContain("atry close <run> --preview");
-  expect(selfReview).toContain("read `strict.reviewIntegrity` from the run base policy");
-  expect(selfReview).toContain("show the listed integrity warnings and let the user decide");
-  expect(selfReview).toContain(
-    "When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm --ack-warnings`.",
-  );
+  expect(selfReview).toContain("`decision.onYes`");
   expect(selfReview).toContain("configured `testCommand`");
-  expect(selfReview).toContain("ask the user before you pass `--ack-open`");
-  expect(selfReview).toContain("Run the self-review skill again");
   expect(selfReview).not.toContain("Set `fixed`, `tests`, and `open`");
   expect(selfReview).not.toContain("--ack-fixes");
+  expect(selfReview).not.toContain("--ack-warnings");
+  expect(selfReview).not.toContain("--ack-open");
   expect(selfReview).not.toContain("review upsert");
   expect(assertNoShellSnippet(selfReview)).toBeUndefined();
 });
@@ -32,26 +24,14 @@ test("self-review uses review new and review done", () => {
 test("cross-review asks before close and gates the yes token", () => {
   expect(crossReview).toContain(`requires-atry: ">=${requiredVersion()}"`);
   expect(crossReview).toContain(preflightBody());
-  expect(crossReview).toContain("atry review new <run> cross --tool <tool> --model <model>");
-  expect(crossReview).toContain("atry review done <run> cross");
+  expect(crossReview).toContain("Replace `<tool>` and `<model>` in its `command`.");
   expect(crossReview).toContain("atry review decide <run> Q<n> <answer>");
   expect(crossReview).toContain("atry next <run> --json");
-  expect(crossReview).toContain("Read `state`, `actions`, and `recommendation` from the result.");
-  expect(crossReview).toContain("follow the developer's selection");
-  expect(crossReview).toContain("atry close <run> --preview");
-  expect(crossReview).toContain("atry close <run> --via arg");
-  expect(crossReview).toContain("atry close <run> --via confirm");
-  expect(crossReview).toContain("recommend: y");
-  expect(crossReview).toContain("read `strict.reviewIntegrity` from the run base policy");
-  expect(crossReview).toContain("show the listed integrity warnings and let the user decide");
-  expect(crossReview).toContain(
-    "When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm --ack-warnings`.",
-  );
-  expect(crossReview).toContain(
-    "Add `--ack-open` to that command when the preview lists `open items`.",
-  );
-  expect(crossReview).toContain("Run the self-review skill again");
+  expect(crossReview).toContain("`decision.onYes`");
+  expect(crossReview).toContain("`decision.onYesArg` for a `yes` token");
   expect(crossReview).not.toContain("Do not close yet");
+  expect(crossReview).not.toContain("--ack-warnings");
+  expect(crossReview).not.toContain("--ack-open");
   expect(crossReview).not.toContain("review upsert");
   expect(assertNoShellSnippet(crossReview)).toBeUndefined();
 });
@@ -63,14 +43,19 @@ function conductText(skill: string): string {
   );
 }
 
-test("review skills dispatch on kind and args", () => {
+test("review skills list their kinds and run the synced loop", () => {
   for (const text of [selfReview, crossReview]) {
-    expect(text).toContain("Dispatch on `kind` and `args`.");
-    expect(text).toContain("When `kind` is `close`");
+    expect(text).toContain("`decide`, and `close`.");
+    expect(text).toContain("For `review-done`, follow the review method.");
+    expect(text).toContain("<!-- BEGIN LOOP -->");
+    expect(text).not.toContain("Do not match the `command` text.");
     expect(text).not.toMatch(/selected action (is|contains|names)/);
+    const start = text.indexOf("## Loop\n") + "## Loop\n".length;
+    const lines = text.slice(start, text.indexOf("<!-- BEGIN LOOP -->")).split("\n");
+    expect(lines.filter((line) => line.trim() !== "").length).toBeLessThanOrEqual(3);
   }
-  expect(selfReview).toContain("`args.review` is `self`");
-  expect(crossReview).toContain("`args.review` is `cross`");
+  expect(selfReview).toContain("`args.review` `self`");
+  expect(crossReview).toContain("`args.review` `cross`");
 });
 
 test("both review bundles treat repository text as data", () => {

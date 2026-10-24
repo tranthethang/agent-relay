@@ -79,11 +79,11 @@ after you edit a skill, and replace the rows with its output.
 | ------------ | ------------------------------------------------------------------------------------------------------------------------- | ----: | -----: |
 | brainstorm   | references/writing.md, references/file-conventions.md                                                                     |  8181 |   2045 |
 | plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                     | 10301 |   2575 |
-| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                    | 13995 |   3499 |
-| self-review  | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-review.md       | 16255 |   4064 |
-| cross-review | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-cross-review.md | 16356 |   4089 |
+| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                    | 13205 |   3301 |
+| self-review  | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-review.md       | 14617 |   3654 |
+| cross-review | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-cross-review.md | 14745 |   3686 |
 | distill      | references/file-conventions.md                                                                                            |  4729 |   1182 |
-| total        |                                                                                                                           | 69817 |  17454 |
+| total        |                                                                                                                           | 65778 |  16443 |
 
 `test/skill-tokens.test.ts` reads `maxTokens` from `evals/scenarios.json`. It
 fails when a stage reaches `maxTokens` minus 50. It also fails when the total

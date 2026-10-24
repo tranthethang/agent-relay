@@ -92,7 +92,17 @@ when the plan is complete.
 `atry approve <run> --preview` prints Goal, Non-goals, Constraints, Decisions,
 each task file, and `ready: yes` or `ready: no` with the missing items.
 `atry close <run> --preview` prints `recommend: y` or `recommend: n` and the reasons.
+Each preview then prints `question: <question>` and `on yes: <command or none>`.
+With `--json`, each preview adds `decision`: `{ question: string, onYes: string | null,
+onYesArg: string | null, onNo: null }`. `onYes` is the command with `--via confirm`,
+and `onYesArg` is the same command with `--via arg`. Both are `null` when the run
+must not go on, and `question` says why.
 Neither preview records an event.
+In `next --json`, an action adds `question` (string, only when `needsHuman` is true).
+Its `approve` and `close` commands end in `--preview`. `stage start`, `stage done`, and
+`review new` carry `--tool <tool>`. A cross-review start also carries `--model <model>`.
+A `review-done` action adds `--run-tests` and sets `needsHuman` when the base policy
+sets `testCommand`.
 
 ### Plan and approval gates
 
@@ -124,3 +134,11 @@ does not skip that self-review.
 and skips the required-review and tree checks. It does not skip the
 open-question check, the cross-delta rule, or the warning gate.
 `atry close --abandon <reason>` stops a run from any open state.
+
+### Distill and verify
+
+`atry distill <run>` writes `90-distill/manifest.json` with a run header, a label on each file, and an `atEvent` anchor.
+`atry distill verify <run>` reports a manifest that is older than the event log as `stale: yes` with `new events: <n>`.
+It lists `events.jsonl` and `run.json` as `stale: <path>`, not as `mismatched`, and exits 1.
+The `--json` result adds `stale` and `newEvents` and keeps `schema` 1.
+See `specs/70-storage-and-git/30-distill-manifest/manifest-export.md`.

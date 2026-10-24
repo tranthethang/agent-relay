@@ -176,7 +176,7 @@ test("plan amend after approval returns the run to planned", async () => {
     const ready = JSON.parse((await runCli(["next", run, "--json"], dir)).stdout) as {
       command: string;
     };
-    expect(ready.command.endsWith(" --preview")).toBe(false);
+    expect(ready.command).toMatch(/^atry approve \d+ --preview$/);
     expect((await runCli(["approve", run, "--via", "arg"], dir)).code).toBe(0);
   });
 });

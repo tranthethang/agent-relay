@@ -5,7 +5,7 @@ import { type EventLine } from "../src/core/event.js";
 import { explainNext, formatAge, nextActions, nextStep } from "../src/core/next.js";
 import { reduceEvents } from "../src/core/reduce.js";
 import { type PlanIndex } from "../src/core/tasks.js";
-import { gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
+import { gitCommit, reachReview, runCli, withTempDir, withTempGitRepo } from "./helper.js";
 import { plannedState, runCache, seedRelay, seedRun } from "./seed.js";
 
 const start = Date.parse("2026-10-17T00:00:00.000Z");
@@ -283,7 +283,10 @@ test("next walks the plan states before approve", async () => {
       "# T1: One\n\n## Detail\n\nDo it.\n\n## Acceptance\n\n- It works.\n",
     );
     const ready = await runCli(["next", run.id, "--json"], dir);
-    expect(JSON.parse(ready.stdout)).toMatchObject({ command: `atry approve ${run.id}` });
+    expect(JSON.parse(ready.stdout)).toMatchObject({
+      command: `atry approve ${run.id} --preview`,
+      reason: "The plan is waiting for approval.",
+    });
   });
 });
 
@@ -305,7 +308,7 @@ test("atry next covers each lifecycle", async () => {
     {
       lifecycle: "approved",
       events: [ev("run", "created"), ev("plan", "approved")],
-      command: "atry stage start 1792208725 implement",
+      command: "atry stage start 1792208725 implement --tool <tool>",
       kind: "stage-start",
       needsHuman: false,
     },
@@ -329,7 +332,7 @@ test("atry next covers each lifecycle", async () => {
         ev("implement", "started"),
         ev("implement", "completed"),
       ],
-      command: "atry review new 1792208725 self",
+      command: "atry review new 1792208725 self --tool <tool>",
       kind: "review-new",
       needsHuman: false,
     },
@@ -413,5 +416,34 @@ test("next recommends integrate for a done task that still has a worktree", () =
     args: { run: "1792208725", task: "T1" },
     read: ["10-plan/overview.md", "10-plan/T1.md"],
     reason: "A done task still has a worktree.",
+  });
+});
+
+test("next commands run after only <tool> and <model> are replaced", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const created = await runCli(
+      ["run", "new", "--slug", "placeholders", "--title", "Placeholders", "--json"],
+      dir,
+    );
+    const run = JSON.parse(created.stdout) as { path: string; id: string };
+    await reachReview(run.path, dir);
+    const next = JSON.parse((await runCli(["next", run.id, "--json"], dir)).stdout) as {
+      actions: { kind: string; command: string; requiresModel?: true }[];
+    };
+    const action = next.actions[0];
+    expect(action?.kind).toBe("review-new");
+    expect(action?.command).toBe(`atry review new ${run.id} self --tool <tool>`);
+    const filled = (action?.command ?? "").replace("<tool>", "cursor").replace("<model>", "m");
+    const result = await runCli(filled.split(" ").slice(1), dir);
+    expect(result.code, result.stderr).toBe(0);
+
+    const cross = explainNext(`atry review new ${run.id} cross`).actions[0];
+    expect(cross).toMatchObject({
+      kind: "review-new",
+      requiresModel: true,
+      command: `atry review new ${run.id} cross --tool <tool> --model <model>`,
+      args: { review: "cross" },
+    });
   });
 });

@@ -30,40 +30,29 @@ Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigr
 
 ## Loop
 
-Run `atry next <run> --json`.
-Read `state`, `actions`, and `recommendation` from the result.
-Dispatch on `kind` and `args`. Do not match the `command` text.
-Follow the recommendation when only one action is available.
-When several actions are available, show them and ask the developer to select one.
-Then follow the developer's selection.
-Read the selected action's paths before you run its command.
-Stop when the state is closed or abandoned and no action is available.
-When `kind` is `approve`, run `atry approve <run> --preview`.
-Show that preview and ask the user to answer `y` or `n`.
-When the preview prints `ready: no`, stop and show the missing items. A plan
-amend after approval returns the run to `planned`, so the plan needs work again.
-When `kind` is `plan-new` or `plan-done`, stop. The plan is not ready; switch to
-the plan skill.
-When the skill call includes a `yes` token, use that token as `y`.
-When the user answers `n`, stop and do not record an event.
-When the user answers `y` for approve, run `atry approve <run> --via confirm`.
-When the `yes` token is that answer, run `atry approve <run> --via arg`.
-When `kind` is `review-new`, `review-done`, `close`, or `decide`, stop.
-A review skill runs `atry close <run> --preview` before it closes.
-It asks the user before a soft close passes `--ack-warnings` or `--ack-open`.
-A cross-review delta needs a self-review first.
-A strict close stops for the person, who can pass `--ack-fixes`.
-When `kind` is `stage-start`, run `atry stage start <run> implement --tool <tool>`.
-When `kind` is `integrate`, run `atry integrate <run> <task>`.
-When that command prints `worktree: kept`, stop and show the reason.
-When `kind` is `stage-done`, run `atry stage done <run> implement --tool <tool>`.
+This skill handles `approve`, `stage-start`, `task-start`, `integrate`, and `stage-done`. For `task-start`, follow One task.
+
+<!-- BEGIN LOOP -->
+
+1. Run `atry next <run> --json`.
+2. Stop when `actions` is empty, or when the `kind` of the recommended action is not one this skill handles.
+3. Replace `<tool>` and `<model>` in its `command`. Change no other token.
+4. When `needsHuman` is false, run the command. Then go to step 1.
+5. When `needsHuman` is true and the command ends in `--preview`, run it with `--json` and read `decision`.
+6. Show `decision.question`, or the action `question` when the command has no preview. Ask the developer to answer `y` or `n`. A `yes` token in the skill call counts as `y`.
+7. On `y`, run `decision.onYes`. Run `decision.onYesArg` for a `yes` token. Run the action `command` when it has no preview. Stop when the field is `null`. Then go to step 1.
+8. On `n`, stop and record no event.
+
+<!-- END LOOP -->
+
+## Stage commands
+
+When `integrate` prints `worktree: kept`, stop and show the reason.
 When `stage done` refuses, read the paths in the message.
 When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.
 When `strict.scope` is false, continue after the warning and check that the
 accepted paths appear in the task completion event.
-Add `--model <model>` when you know the model.
-When `kind` is `task-start`, follow One task.
-Repeat from the first step in this section.
+Add `--model <model>` to a `stage` command when you know the model.
 
 ## One task
 

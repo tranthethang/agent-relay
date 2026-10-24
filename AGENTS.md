@@ -39,6 +39,8 @@ install.
   `npm test` on macOS, Linux, and Windows, `npm run sync:check`, and both eval
   layers.
 - Sole-maintainer repo: do not add migration for v1 runs or the old bash tree.
+- This repo runs under a strict-scope policy. See the "Dogfood policy" section in
+  [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Layout
 

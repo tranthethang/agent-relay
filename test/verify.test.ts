@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { appendChained } from "../src/core/cache.js";
 import { distillVerifyText, verifyDistill } from "../src/core/distill.js";
 import { gitCommit, runCli, withTempGitRepo } from "./helper.js";
 import { createRun } from "./plan-helper.js";
@@ -142,5 +143,106 @@ test("verify skips an unnamed test log and checks a named one", async () => {
     expect(changed.ok).toBe(false);
     expect(changed.mismatched).toEqual(["30-self-review/01.test.log"]);
     expect(changed.extra).toEqual([]);
+  });
+});
+
+type Anchor = { atEvent: { count: number } };
+
+test("verify reports a stale manifest apart from a changed event line", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "distill-verify-stale");
+    expect((await runCli(["distill", run], dir)).code).toBe(0);
+    const manifestPath = join(run, "90-distill", "manifest.json");
+    const manifestText = await readFile(manifestPath, "utf8");
+    const fresh = await verifyDistill(run);
+    expect(fresh.ok).toBe(true);
+    expect(fresh.stale).toEqual([]);
+    expect(fresh.newEvents).toBe(0);
+
+    expect((await runCli(["close", run, "--abandon", "stop"], dir)).code).toBe(0);
+    const stale = await verifyDistill(run);
+    expect(stale.ok).toBe(false);
+    expect(stale.newEvents).toBe(1);
+    expect(stale.stale).toEqual(["events.jsonl", "run.json"]);
+    expect(stale.mismatched).toEqual([]);
+    const cli = await runCli(["distill", "verify", run], dir);
+    expect(cli.code).toBe(1);
+    expect(cli.stdout).toContain("stale: yes\nnew events: 1\nstale: events.jsonl\nstale: run.json");
+    const json = JSON.parse((await runCli(["distill", "verify", run, "--json"], dir)).stdout);
+    expect(json).toMatchObject({ schema: 1, ok: false, newEvents: 1, mismatched: [] });
+    expect(await readFile(manifestPath, "utf8")).toBe(manifestText);
+
+    const { atEvent } = JSON.parse(manifestText) as Anchor;
+    const lines = (await readFile(join(run, "events.jsonl"), "utf8")).split("\n");
+    lines[atEvent.count - 1] = `${lines[atEvent.count - 1]} `;
+    await writeFile(join(run, "events.jsonl"), lines.join("\n"));
+    const tampered = await verifyDistill(run);
+    expect(tampered.stale).toEqual([]);
+    expect(tampered.newEvents).toBe(0);
+    expect(tampered.mismatched).toContain("events.jsonl");
+
+    await writeFile(join(run, "events.jsonl"), "");
+    const shorter = await verifyDistill(run);
+    expect(shorter.stale).toEqual([]);
+    expect(shorter.mismatched).toContain("events.jsonl");
+
+    await rm(join(run, "events.jsonl"));
+    const gone = await verifyDistill(run);
+    expect(gone.missing).toContain("events.jsonl");
+    expect(gone.stale).toEqual([]);
+  });
+});
+
+test("verify accepts a manifest without atEvent as before", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "distill-verify-old");
+    expect((await runCli(["distill", run], dir)).code).toBe(0);
+    const manifestPath = join(run, "90-distill", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+    delete manifest.atEvent;
+    await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
+    expect((await verifyDistill(run)).ok).toBe(true);
+    expect((await runCli(["close", run, "--abandon", "stop"], dir)).code).toBe(0);
+    const after = await verifyDistill(run);
+    expect(after.stale).toEqual([]);
+    expect(after.mismatched).toContain("events.jsonl");
+  });
+});
+
+test("verify reports an edited old event line plus a new event as mismatched", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "distill-verify-edit");
+    await appendChained(run, {
+      schema: 1,
+      ts: "2026-10-24T01:00:00Z",
+      stage: "plan",
+      action: "started",
+      tool: "claude-code",
+    });
+    expect((await runCli(["distill", run], dir)).code).toBe(0);
+    const manifestPath = join(run, "90-distill", "manifest.json");
+    const manifestText = await readFile(manifestPath, "utf8");
+    expect((JSON.parse(manifestText) as Anchor).atEvent.count).toBeGreaterThan(1);
+    expect((await runCli(["close", run, "--abandon", "stop"], dir)).code).toBe(0);
+    const logPath = join(run, "events.jsonl");
+    const lines = (await readFile(logPath, "utf8")).split("\n");
+    lines[0] = lines[0].replace("\"schema\":1", "\"schema\":1 ");
+    await writeFile(logPath, lines.join("\n"));
+    const edited = await verifyDistill(run);
+    expect(edited.stale).toEqual([]);
+    expect(edited.newEvents).toBe(0);
+    expect(edited.mismatched).toEqual(["events.jsonl", "run.json"]);
+
+    // A manifest without an events.jsonl entry falls back to the anchor line alone.
+    const manifest = JSON.parse(manifestText) as { files: { path: string }[] };
+    manifest.files = manifest.files.filter((file) => file.path !== "events.jsonl");
+    await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
+    const unlisted = await verifyDistill(run);
+    expect(unlisted.newEvents).toBe(1);
+    expect(unlisted.stale).toEqual(["run.json"]);
+    expect(unlisted.extra).toEqual(["events.jsonl"]);
   });
 });

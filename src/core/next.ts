@@ -36,6 +36,7 @@ export type NextAction = {
   requiresSession?: true;
   reason: string;
   needsHuman: boolean;
+  question?: string;
   read: string[];
 };
 
@@ -243,15 +244,16 @@ export function explainNextWithChoices(
   command: string,
   state?: RunState,
   choices: readonly string[] = [command],
+  testCommand?: string,
 ): NextResult {
-  const actions = choices.map((item) => actionFor(item));
+  const actions = choices.map((item) => actionFor(item, testCommand));
   const recommendation = actions[0]?.command ?? command;
   const result: NextResult = {
     schema: schemaVersion,
     command: recommendation,
     recommendation,
     actions,
-    reason: reasonFor(recommendation),
+    reason: actions[0]?.reason ?? reasonFor(recommendation),
     needsHuman: actions.length > 1 || (actions[0]?.needsHuman ?? false),
     read: actions[0]?.read ?? [],
   };
@@ -350,19 +352,55 @@ function actionNeedsHuman(kind: ActionKind): boolean {
   return kind === "approve" || kind === "close" || kind === "decide";
 }
 
-function actionFor(command: string): NextAction {
-  const kind = actionKind(command);
-  const args = actionArgs(kind, command);
+// The skill replaces only these two tokens before it runs a command.
+const toolPlaceholder = "<tool>";
+const modelPlaceholder = "<model>";
+
+function actionFor(plain: string, testCommand?: string): NextAction {
+  const kind = actionKind(plain);
+  const args = actionArgs(kind, plain);
+  const runTests = kind === "review-done" && testCommand !== undefined;
   const action: NextAction = {
     kind,
-    command,
+    command: plain,
     args,
-    reason: reasonFor(command),
-    needsHuman: actionNeedsHuman(kind),
+    reason: reasonFor(plain),
+    needsHuman: actionNeedsHuman(kind) || runTests,
     read: actionReadPaths(kind, args),
   };
   if (kind === "review-new" && args.review === "cross") action.requiresModel = true;
+  action.command = decorate(plain, kind, action.requiresModel === true, runTests);
+  const question = questionFor(kind, testCommand);
+  if (action.needsHuman && question !== undefined) action.question = question;
   return action;
+}
+
+function decorate(
+  plain: string,
+  kind: ActionKind,
+  requiresModel: boolean,
+  runTests: boolean,
+): string {
+  const tool = ` --tool ${toolPlaceholder}`;
+  const model = ` --model ${modelPlaceholder}`;
+  if (kind === "approve" || kind === "close") {
+    return plain.endsWith(" --preview") ? plain : `${plain} --preview`;
+  }
+  if (kind === "stage-start" || kind === "stage-done") return `${plain}${tool}`;
+  if (kind === "review-new") return `${plain}${tool}${requiresModel ? model : ""}`;
+  if (runTests) return `${plain} --run-tests`;
+  return plain;
+}
+
+function questionFor(kind: ActionKind, testCommand: string | undefined): string | undefined {
+  if (kind === "approve" || kind === "close") {
+    return "Read the decision in the preview. Ask the developer to answer y or n.";
+  }
+  if (kind === "decide") return "Ask the developer to answer the open review questions.";
+  if (kind === "review-done" && testCommand !== undefined) {
+    return `Run ${testCommand} and record the result?`;
+  }
+  return undefined;
 }
 
 function reasonFor(command: string): string {

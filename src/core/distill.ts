@@ -1,10 +1,15 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { z } from "zod";
+import { lineHash } from "./cache.js";
+import { distillKinds, labelPath } from "./distill-label.js";
 import { fromZod, RelayError } from "./error.js";
-import { atomicWrite, isEnoent, joinUnder, readJson } from "./files.js";
-import { schemaVersion } from "./vocab.js";
+import { parseEventLine } from "./event.js";
+import { atomicWrite, isEnoent, joinUnder, readJson, readJsonl } from "./files.js";
+import { gitHead } from "./git.js";
+import { parseRunJson, type RunJson } from "./run.js";
+import { lifecycleSchema, schemaVersion, stageSchema, taskIdSchema } from "./vocab.js";
 
 const manifestRel = "90-distill/manifest.json";
 
@@ -12,10 +17,39 @@ export const distillFileSchema = z.object({
   path: z.string().min(1),
   size: z.number().int().nonnegative(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  kind: z.enum(distillKinds).optional(),
+  stage: stageSchema.optional(),
+  task: taskIdSchema.optional(),
+}).strict();
+
+export const distillAtEventSchema = z.object({
+  count: z.number().int().nonnegative(),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+}).strict();
+
+export const distillRunSchema = z.object({
+  name: z.string().min(1),
+  id: z.string().min(1),
+  slug: z.string().min(1),
+  title: z.string().min(1),
+  base: z.string().min(1),
+  head: z.string().min(1).nullable(),
+  lifecycle: lifecycleSchema,
+  stage: stageSchema,
+  closedAt: z.string().min(1).nullable(),
+  stages: z.array(
+    z.object({
+      stage: stageSchema,
+      tool: z.string().min(1).nullable(),
+      model: z.string().min(1).nullable(),
+    }).strict(),
+  ),
 }).strict();
 
 export const distillManifestSchema = z.object({
   schema: z.literal(schemaVersion),
+  run: distillRunSchema.optional(),
+  atEvent: distillAtEventSchema.optional(),
   files: z.array(distillFileSchema),
 }).strict();
 
@@ -38,6 +72,8 @@ export type DistillVerifyResult = {
   missing: string[];
   mismatched: string[];
   extra: string[];
+  stale: string[];
+  newEvents: number;
 };
 
 export function distillText(result: DistillResult): string {
@@ -46,6 +82,10 @@ export function distillText(result: DistillResult): string {
 
 export function distillVerifyText(result: DistillVerifyResult): string {
   const lines = [`ok: ${result.ok ? "yes" : "no"}`, `files: ${result.files}`];
+  if (result.stale.length > 0) {
+    lines.push("stale: yes", `new events: ${result.newEvents}`);
+    for (const path of result.stale) lines.push(`stale: ${path}`);
+  }
   for (const path of result.missing) lines.push(`missing: ${path}`);
   for (const path of result.mismatched) lines.push(`mismatched: ${path}`);
   for (const path of result.extra) lines.push(`extra: ${path}`);
@@ -72,14 +112,67 @@ export async function verifyDistill(runDir: string): Promise<DistillVerifyResult
     if (data.byteLength !== file.size || sha256 !== file.sha256) mismatched.push(file.path);
   }
   const extra = await extraFiles(runDir, new Set(manifest.files.map((file) => file.path)));
+  const logged = manifest.files.find((file) => file.path === "events.jsonl");
+  const newEvents = await newEventCount(runDir, manifest.atEvent, logged);
+  const stale = newEvents > 0 ? mismatched.filter((path) => staleFiles.has(path)) : [];
+  const changed = mismatched.filter((path) => !stale.includes(path));
   return {
     schema: schemaVersion,
-    ok: missing.length === 0 && mismatched.length === 0 && extra.length === 0,
+    ok: missing.length === 0 && changed.length === 0 && extra.length === 0 && stale.length === 0,
     files: manifest.files.length,
     missing,
-    mismatched,
+    mismatched: changed,
     extra,
+    stale,
+    newEvents,
   };
+}
+
+// The two files that move with every event. A manifest older than the log reports them as stale.
+const staleFiles = new Set(["events.jsonl", "run.json"]);
+
+// Number of event lines after the anchor, or 0 when there is no anchor or the old lines differ.
+// The recorded `events.jsonl` bytes must still be a prefix of the log, so an edit to any
+// earlier line plus a new event reads as a change, not as a stale manifest.
+async function newEventCount(
+  runDir: string,
+  anchor: DistillManifest["atEvent"],
+  logged: DistillManifest["files"][number] | undefined,
+): Promise<number> {
+  if (anchor === undefined) return 0;
+  let data: Buffer;
+  try {
+    data = await readFile(join(runDir, "events.jsonl"));
+  } catch (error) {
+    if (isEnoent(error)) return 0;
+    throw error;
+  }
+  if (logged !== undefined && !sameBytes(data.subarray(0, logged.size), logged)) return 0;
+  const lines = splitLines(data.toString("utf8"));
+  if (lines.length <= anchor.count) return 0;
+  return anchorHash(lines, anchor.count) === anchor.sha256 ? lines.length - anchor.count : 0;
+}
+
+function sameBytes(data: Buffer, file: { size: number; sha256: string }): boolean {
+  if (data.byteLength !== file.size) return false;
+  return createHash("sha256").update(data).digest("hex") === file.sha256;
+}
+
+async function eventLines(runDir: string): Promise<string[]> {
+  return splitLines((await readFile(join(runDir, "events.jsonl"))).toString("utf8"));
+}
+
+function splitLines(raw: string): string[] {
+  const text = raw.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+  if (text.length === 0) return [];
+  const lines = text.split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  return lines;
+}
+
+// Hash of the raw line at `count`, the same value the next event stores as `prev`.
+function anchorHash(lines: readonly string[], count: number): string {
+  return lineHash(count === 0 ? "" : lines[count - 1]);
 }
 
 // Files under the run directory that the manifest does not name. The manifest
@@ -130,14 +223,48 @@ export async function distillRun(
       path,
       size: data.byteLength,
       sha256: createHash("sha256").update(data).digest("hex"),
+      ...labelPath(path),
     });
   }
   files.sort((left, right) => comparePath(left.path, right.path));
-  const manifest = distillManifestSchema.parse({ schema: schemaVersion, files });
+  const run = await runHeader(runDir);
+  const events = await eventLines(runDir);
+  const atEvent = { count: events.length, sha256: anchorHash(events, events.length) };
+  const manifest = distillManifestSchema.parse({ schema: schemaVersion, run, atEvent, files });
   const path = join(runDir, manifestRel);
   await mkdir(join(runDir, "90-distill"), { recursive: true });
   await atomicWrite(path, `${JSON.stringify(manifest)}\n`);
   return { schema: schemaVersion, path, files: files.length };
+}
+
+async function runHeader(runDir: string): Promise<z.infer<typeof distillRunSchema>> {
+  const runJson: RunJson = parseRunJson(await readJson(join(runDir, "run.json")));
+  const events = (await readJsonl(join(runDir, "events.jsonl"))).map(parseEventLine);
+  const repoRoot = dirname(dirname(runDir));
+  let head: string | null;
+  try {
+    head = await gitHead(runJson.worktree?.path ?? repoRoot);
+  } catch {
+    head = null;
+  }
+  return {
+    name: basename(runDir),
+    id: runJson.id,
+    slug: runJson.slug,
+    title: runJson.title,
+    base: runJson.base,
+    head,
+    lifecycle: runJson.state.lifecycle,
+    stage: runJson.state.stage,
+    closedAt: events.find((event) => event.action === "closed")?.ts ?? null,
+    stages: events
+      .filter((event) => event.action === "started")
+      .map((event) => ({
+        stage: event.stage,
+        tool: event.tool ?? null,
+        model: event.model ?? null,
+      })),
+  };
 }
 
 function comparePath(left: string, right: string): number {

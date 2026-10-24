@@ -225,12 +225,22 @@
       "summary": "A soft close shows the warning, then records the acknowledged close.",
       "steps": [
         {
-          "argv": ["close", "1792660551", "--preview"],
+          "argv": ["close", "1792660551", "--preview", "--json"],
           "exit": 0,
-          "stdout": "recommend: n\nopen items\n"
+          "stdout": {
+            "schema": 1,
+            "recommend": "n",
+            "reasons": ["open items"],
+            "decision": {
+              "question": "open items. Close 1792660551?",
+              "onYes": "atry close 1792660551 --via confirm --ack-warnings --ack-open",
+              "onYesArg": "atry close 1792660551 --via arg --ack-warnings --ack-open",
+              "onNo": null
+            }
+          }
         },
         {
-          "argv": ["close", "1792660551", "--via", "confirm", "--ack-warnings"],
+          "argv": ["close", "1792660551", "--via", "confirm", "--ack-warnings", "--ack-open"],
           "exit": 0,
           "stdout": "lifecycle: closed\n"
         }

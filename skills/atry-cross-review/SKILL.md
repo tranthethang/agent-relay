@@ -32,40 +32,20 @@ Use a different tool than implement and self-review when you can.
 
 ## Loop
 
-Run `atry next <run> --json`.
-Read `state`, `actions`, and `recommendation` from the result.
-Dispatch on `kind` and `args`. Do not match the `command` text.
-Follow the recommendation when only one action is available.
-When several actions are available, show them and ask the developer to select one.
-Then follow the developer's selection.
-Read the selected action's paths before you run its command.
-Stop when the state is closed or abandoned and no action is available.
-When `kind` is `approve`, stop. This skill does not approve.
-When `kind` is `review-new` or `review-done` and `args.review` is `self`, stop. Use the self-review skill for that stage.
-When `kind` is `close`, run `atry close <run> --preview`.
-Show that preview and ask the user to answer `y` or `n`.
-When the preview lists `cross-review changes have no later self-review`, stop. Run the self-review skill again.
-When it recommends `n`, read `strict.reviewIntegrity` from the run base policy.
-When that setting is `true`, stop without closing.
-When it is `false`, show the listed integrity warnings and let the user decide.
-When the preview lists `open items`, ask the user before you pass `--ack-open`.
-When the user answers `y` and the preview lists a warning, show the warnings again.
-Pass `--ack-warnings` only after the user confirms that answer.
-When the skill call includes a `yes` token, use that token as `y`.
-When the user answers `n`, stop and do not record an event.
-When the preview says `recommend: n` and `strict.reviewIntegrity` is `true`, stop and do not record an event.
-When the user answers `y` and the preview says `recommend: y`, run `atry close <run> --via confirm`.
-When the user answers `y`, the preview says `recommend: n`, and `strict.reviewIntegrity` is `false`, run `atry close <run> --via confirm --ack-warnings`.
-Add `--ack-open` to that command when the preview lists `open items`.
-When the `yes` token is that answer, run `atry close <run> --via arg --ack-warnings`.
-Add `--ack-open` to that command when the preview lists `open items`.
-When `kind` is `review-new` and `args.review` is `cross`, run `atry review new <run> cross --tool <tool> --model <model>`.
-When `kind` is `review-done` and `args.review` is `cross`, follow the review method.
-When the base policy sets `testCommand`, show `test command: <command>` and wait for the user.
-When the user agrees to that command, run `atry review done <run> cross --run-tests`.
-When the user refuses that command, stop and do not record an event.
-When the base policy sets no `testCommand`, run `atry review done <run> cross`.
-Repeat from the first step in this section.
+This skill handles `review-new` and `review-done` with `args.review` `cross`, `decide`, and `close`. For `review-done`, follow the review method. Use the self-review skill for a self review.
+
+<!-- BEGIN LOOP -->
+
+1. Run `atry next <run> --json`.
+2. Stop when `actions` is empty, or when the `kind` of the recommended action is not one this skill handles.
+3. Replace `<tool>` and `<model>` in its `command`. Change no other token.
+4. When `needsHuman` is false, run the command. Then go to step 1.
+5. When `needsHuman` is true and the command ends in `--preview`, run it with `--json` and read `decision`.
+6. Show `decision.question`, or the action `question` when the command has no preview. Ask the developer to answer `y` or `n`. A `yes` token in the skill call counts as `y`.
+7. On `y`, run `decision.onYes`. Run `decision.onYesArg` for a `yes` token. Run the action `command` when it has no preview. Stop when the field is `null`. Then go to step 1.
+8. On `n`, stop and record no event.
+
+<!-- END LOOP -->
 
 ## Review method
 
