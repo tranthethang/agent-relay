@@ -141,11 +141,36 @@ test("distillRun sorts entries from any readdir order and skips non-files", asyn
     for (const name of ["a.md", "b.md", "c.md", "d.md", ".keep", ".x.tmp"]) {
       await writeFile(join(dir, name), name);
     }
+    // The manifest header reads a real run.json and events.jsonl.
+    await writeFile(
+      join(dir, "run.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          id: "1792849354",
+          ymd: "20261024",
+          slug: "sorted-run",
+          title: "Sorted run",
+          base: "abc",
+          state: { lifecycle: "planned", stage: "plan", approved: false, tasks: [] },
+        })
+      }\n`,
+    );
+    await writeFile(join(dir, "events.jsonl"), "");
     await mkdir(join(dir, "locks"));
     await writeFile(join(dir, "locks", "run.lock"), "lock");
     await mkdir(join(dir, "sub", "locks"), { recursive: true });
     await writeFile(join(dir, "sub", "locks", "e.md"), "e");
-    const expected = [".keep", "a.md", "b.md", "c.md", "d.md", "sub/locks/e.md"];
+    const expected = [
+      ".keep",
+      "a.md",
+      "b.md",
+      "c.md",
+      "d.md",
+      "events.jsonl",
+      "run.json",
+      "sub/locks/e.md",
+    ];
     fsHooks.reverse = true;
     fsHooks.fake = true;
     try {
