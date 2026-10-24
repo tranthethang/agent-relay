@@ -67,9 +67,13 @@ atry distill verify <run>
 - Walk the run directory with the same filter as `atry distill`. Skip `90-distill/manifest.json`.
 - Report each remaining path that the manifest does not name as `extra: <path>`.
 - Skip a `*.test.log` that the manifest does not name. Verify a `*.test.log` that the manifest names.
-- When the manifest has `atEvent`, read the raw event lines. The manifest is stale when more than `atEvent.count` lines exist and line `count` hashes to `atEvent.sha256`.
+- When the manifest has `atEvent`, read the raw event lines. The manifest is stale when three checks pass:
+  - The first bytes of `events.jsonl` still match the size and hash of its manifest record.
+  - More than `atEvent.count` lines exist.
+  - Line `count` hashes to `atEvent.sha256`.
 - On a stale manifest, report `events.jsonl` and `run.json` under `stale` instead of `mismatched`. Report `newEvents`, the number of lines after `count`.
-- When line `count` does not hash to `atEvent.sha256`, or the log has fewer lines, keep `events.jsonl` under `mismatched`.
+- When an earlier line changed, line `count` does not hash to `atEvent.sha256`, or the log has fewer lines, keep `events.jsonl` under `mismatched`.
+- A missing `events.jsonl` stays under `missing`, and `newEvents` is 0.
 - A manifest without `atEvent` never reports `stale`.
 - Exit 0 when every file matches and no extra file exists.
 - Exit 1 when a file is missing, the size or hash differs, an extra file exists, or the manifest is stale. Name each path.
@@ -93,7 +97,7 @@ atry distill verify <run>
 | `head`      | `git rev-parse HEAD` in `run.worktree.path` when set, else the repo root. `null` when git fails.    |
 | `lifecycle` | `run.json` `state.lifecycle`.                                                                       |
 | `stage`     | `run.json` `state.stage`.                                                                           |
-| `closedAt`  | The `ts` of the `closed` event. `null` while the run is open.                                       |
+| `closedAt`  | The `ts` of the `closed` event. `null` when no `closed` event exists, also for an abandoned run.   |
 | `stages`    | One `{ stage, tool, model }` for each `started` event, in file order. `model` is `null` when absent. |
 
 `stages` keeps every review round, so two self-review rounds give two `self-review` entries.

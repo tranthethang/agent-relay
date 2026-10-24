@@ -6,7 +6,7 @@ import { lineHash } from "./cache.js";
 import { distillKinds, labelPath } from "./distill-label.js";
 import { fromZod, RelayError } from "./error.js";
 import { parseEventLine } from "./event.js";
-import { atomicWrite, isEnoent, joinUnder, readJson, readJsonl, readText } from "./files.js";
+import { atomicWrite, isEnoent, joinUnder, readJson, readJsonl } from "./files.js";
 import { gitHead } from "./git.js";
 import { parseRunJson, type RunJson } from "./run.js";
 import { lifecycleSchema, schemaVersion, stageSchema, taskIdSchema } from "./vocab.js";
@@ -112,7 +112,8 @@ export async function verifyDistill(runDir: string): Promise<DistillVerifyResult
     if (data.byteLength !== file.size || sha256 !== file.sha256) mismatched.push(file.path);
   }
   const extra = await extraFiles(runDir, new Set(manifest.files.map((file) => file.path)));
-  const newEvents = await newEventCount(runDir, manifest.atEvent);
+  const logged = manifest.files.find((file) => file.path === "events.jsonl");
+  const newEvents = await newEventCount(runDir, manifest.atEvent, logged);
   const stale = newEvents > 0 ? mismatched.filter((path) => staleFiles.has(path)) : [];
   const changed = mismatched.filter((path) => !stale.includes(path));
   return {
@@ -130,22 +131,39 @@ export async function verifyDistill(runDir: string): Promise<DistillVerifyResult
 // The two files that move with every event. A manifest older than the log reports them as stale.
 const staleFiles = new Set(["events.jsonl", "run.json"]);
 
-// Number of event lines after the anchor, or 0 when there is no anchor or the anchor line differs.
-async function newEventCount(runDir: string, anchor: DistillManifest["atEvent"]): Promise<number> {
+// Number of event lines after the anchor, or 0 when there is no anchor or the old lines differ.
+// The recorded `events.jsonl` bytes must still be a prefix of the log, so an edit to any
+// earlier line plus a new event reads as a change, not as a stale manifest.
+async function newEventCount(
+  runDir: string,
+  anchor: DistillManifest["atEvent"],
+  logged: DistillManifest["files"][number] | undefined,
+): Promise<number> {
   if (anchor === undefined) return 0;
-  let lines: string[];
+  let data: Buffer;
   try {
-    lines = await eventLines(runDir);
+    data = await readFile(join(runDir, "events.jsonl"));
   } catch (error) {
     if (isEnoent(error)) return 0;
     throw error;
   }
+  if (logged !== undefined && !sameBytes(data.subarray(0, logged.size), logged)) return 0;
+  const lines = splitLines(data.toString("utf8"));
   if (lines.length <= anchor.count) return 0;
   return anchorHash(lines, anchor.count) === anchor.sha256 ? lines.length - anchor.count : 0;
 }
 
+function sameBytes(data: Buffer, file: { size: number; sha256: string }): boolean {
+  if (data.byteLength !== file.size) return false;
+  return createHash("sha256").update(data).digest("hex") === file.sha256;
+}
+
 async function eventLines(runDir: string): Promise<string[]> {
-  const text = await readText(join(runDir, "events.jsonl"));
+  return splitLines((await readFile(join(runDir, "events.jsonl"))).toString("utf8"));
+}
+
+function splitLines(raw: string): string[] {
+  const text = raw.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
   if (text.length === 0) return [];
   const lines = text.split("\n");
   if (lines.at(-1) === "") lines.pop();
