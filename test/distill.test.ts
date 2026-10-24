@@ -4,6 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { takeRun } from "../src/cli/distill.js";
+import { lineHash } from "../src/core/cache.js";
+import { labelPath } from "../src/core/distill-label.js";
 import { distillRun, verifyDistill } from "../src/core/distill.js";
 import { gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
 import { createRun } from "./plan-helper.js";
@@ -30,6 +32,7 @@ test("atry distill writes sha256 entries and appends no event", async () => {
       path: "events.jsonl",
       size: raw.byteLength,
       sha256: createHash("sha256").update(raw).digest("hex"),
+      kind: "events",
     });
     const paths = manifest.files.map((file) => file.path);
     expect(paths).toEqual([...paths].sort());
@@ -235,5 +238,52 @@ test("atry distill reads head from run.worktree.path when it is set", async () =
       await distillRun(run);
       expect((await readHeader(run)).head).toMatch(/^[0-9a-f]{40,64}$/);
     });
+  });
+});
+
+test("atry distill labels each file and anchors the manifest to the last event", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "distill-anchor");
+    await distillRun(run);
+    const manifest = JSON.parse(
+      await readFile(join(run, "90-distill", "manifest.json"), "utf8"),
+    ) as {
+      atEvent: { count: number; sha256: string };
+      files: { path: string; kind: string; stage?: string; task?: string }[];
+    };
+    for (const file of manifest.files) {
+      const { path, kind, stage, task } = file;
+      expect({ kind, stage, task }).toEqual({
+        stage: undefined,
+        task: undefined,
+        ...labelPath(path),
+      });
+    }
+    expect(manifest.files.some((file) => file.kind === "events")).toBe(true);
+    const lines = (await readFile(join(run, "events.jsonl"), "utf8")).trimEnd().split("\n");
+    expect(manifest.atEvent).toEqual({ count: lines.length, sha256: lineHash(lines.at(-1) ?? "") });
+  });
+});
+
+test("atry distill anchors an empty event log to the hash of the empty line", async () => {
+  await withTempDir(async (dir) => {
+    const run = await syntheticRun(dir, [], false);
+    await writeFile(join(run, "events.jsonl"), "");
+    await distillRun(run);
+    const manifest = JSON.parse(
+      await readFile(join(run, "90-distill", "manifest.json"), "utf8"),
+    ) as { atEvent: { count: number; sha256: string } };
+    expect(manifest.atEvent).toEqual({ count: 0, sha256: lineHash("") });
+    expect((await verifyDistill(run)).stale).toEqual([]);
+    await writeFile(
+      join(run, "events.jsonl"),
+      `${
+        JSON.stringify({ schema: 1, ts: "2026-10-24T01:00:00Z", stage: "plan", action: "started" })
+      }\n`,
+    );
+    const stale = await verifyDistill(run);
+    expect(stale.stale).toEqual(["events.jsonl"]);
+    expect(stale.newEvents).toBe(1);
   });
 });
