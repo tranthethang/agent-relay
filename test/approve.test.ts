@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { expect, test } from "vitest";
 import { gitCommit, runCli, withTempGitRepo, writeReadyPlan } from "./helper.js";
 import { createRun } from "./plan-helper.js";
@@ -105,7 +105,18 @@ test("approve --preview shows every plan section and each task file", async () =
       ],
       ready: true,
       missing: [],
+      decision: {
+        question: `Approve the plan for ${basename(run)} with 1 tasks?`,
+        onYes: `atry approve ${basename(run)} --via confirm`,
+        onYesArg: `atry approve ${basename(run)} --via arg`,
+        onNo: null,
+      },
     });
+    expect(text.stdout).toContain(
+      `ready: yes\nquestion: Approve the plan for ${
+        basename(run)
+      } with 1 tasks?\non yes: atry approve ${basename(run)} --via confirm\n`,
+    );
     expect(await events(run)).toBe(before);
   });
 });
@@ -132,13 +143,38 @@ test("approve --preview reports gaps without throwing", async () => {
     const body = JSON.parse(preview.stdout) as {
       ready: boolean;
       missing: string[];
+      decision: { question: string; onYes: string | null; onYesArg: string | null };
       taskFiles: { detailOk: boolean; acceptanceOk: boolean }[];
     };
     expect(body.ready).toBe(false);
+    expect(body.decision.onYes).toBeNull();
+    expect(body.decision.onYesArg).toBeNull();
+    expect(body.decision.question).toContain("10-plan/T1.md: Acceptance");
+    const text = await runCli(["approve", run, "--preview"], dir);
+    expect(text.stdout).toContain("on yes: none\n");
     expect(body.missing).toEqual([
       "10-plan/overview.md",
       "10-plan/T1.md: Acceptance",
     ]);
     expect(body.taskFiles[0]).toMatchObject({ detailOk: true, acceptanceOk: false });
   });
+});
+
+test("approve --preview onYes and onYesArg approve the run when run as given", async () => {
+  for (const field of ["onYes", "onYesArg"] as const) {
+    await withTempGitRepo(async (dir) => {
+      await gitCommit(dir);
+      const run = await createRun(dir, `decision-${field.toLowerCase()}`);
+      await writeReadyPlan(run);
+      const preview = await runCli(["approve", run, "--preview", "--json"], dir);
+      const decision = (JSON.parse(preview.stdout) as { decision: Record<string, string | null> })
+        .decision;
+      const command = decision[field];
+      expect(command).toContain(`atry approve ${basename(run)} --via`);
+      const [, ...args] = (command ?? "").split(" ");
+      const approved = await runCli(args, dir);
+      expect(approved.code, approved.stderr).toBe(0);
+      expect(approved.stdout).toContain("approved: yes");
+    });
+  }
 });

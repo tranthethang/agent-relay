@@ -115,6 +115,13 @@ export function closeText(result: CloseResult): string {
   return `${lines.join("\n")}\n`;
 }
 
+export type Decision = {
+  question: string;
+  onYes: string | null;
+  onYesArg: string | null;
+  onNo: null;
+};
+
 export type ApprovePreview = {
   schema: 1;
   goal: string;
@@ -125,6 +132,7 @@ export type ApprovePreview = {
   taskFiles: PlanTaskPreview[];
   ready: boolean;
   missing: string[];
+  decision: Decision;
 };
 
 export type ClosePreview = {
@@ -150,6 +158,8 @@ export function approvePreviewText(result: ApprovePreview): string {
     `ready: ${ready}\n`,
   ];
   if (result.missing.length > 0) sections.push(`missing:\n${missingLines}`);
+  sections.push(`question: ${result.decision.question}\n`);
+  sections.push(`on yes: ${result.decision.onYes ?? "none"}\n`);
   return sections.join("");
 }
 
@@ -167,6 +177,20 @@ export { sectionText } from "./plan.js";
 
 export async function approvePreview(runDir: string): Promise<ApprovePreview> {
   const readiness = await planReadiness(runDir);
+  const run = basename(runDir);
+  const decision: Decision = readiness.ready
+    ? {
+      question: `Approve the plan for ${run} with ${readiness.tasks} tasks?`,
+      onYes: `atry approve ${run} --via confirm`,
+      onYesArg: `atry approve ${run} --via arg`,
+      onNo: null,
+    }
+    : {
+      question: `The plan is not ready. Missing: ${readiness.missing.join("; ")}.`,
+      onYes: null,
+      onYesArg: null,
+      onNo: null,
+    };
   return {
     schema: schemaVersion,
     goal: readiness.goal,
@@ -177,6 +201,7 @@ export async function approvePreview(runDir: string): Promise<ApprovePreview> {
     taskFiles: readiness.taskFiles,
     ready: readiness.ready,
     missing: readiness.missing,
+    decision,
   };
 }
 
