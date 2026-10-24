@@ -51,16 +51,16 @@ The `atry next <run> --json` command serves as an executable prompt contract bet
 
 ## Action Fields
 
-| Field           | Type                   | Meaning                                                                    |
-| --------------- | ---------------------- | -------------------------------------------------------------------------- |
-| `kind`          | string                 | The action kind. See the table below.                                      |
-| `command`       | string                 | The command to run after the caller replaces the placeholders.             |
-| `args`          | object                 | The run id, task, review kind, or stage.                                   |
-| `requiresModel` | `true`, optional       | Set on a cross-review start.                                               |
-| `reason`        | string                 | Why the CLI chose this action.                                             |
-| `needsHuman`    | boolean                | True when a developer decides.                                             |
-| `question`      | string, optional       | Set only when `needsHuman` is true. The question the caller asks.          |
-| `read`          | array of string        | Paths to read before the command.                                          |
+| Field           | Type             | Meaning                                                           |
+| --------------- | ---------------- | ----------------------------------------------------------------- |
+| `kind`          | string           | The action kind. See the table below.                             |
+| `command`       | string           | The command to run after the caller replaces the placeholders.    |
+| `args`          | object           | The run id, task, review kind, or stage.                          |
+| `requiresModel` | `true`, optional | Set on a cross-review start.                                      |
+| `reason`        | string           | Why the CLI chose this action.                                    |
+| `needsHuman`    | boolean          | True when a developer decides.                                    |
+| `question`      | string, optional | Set only when `needsHuman` is true. The question the caller asks. |
+| `read`          | array of string  | Paths to read before the command.                                 |
 
 `question` and the placeholders are additive. `schema` stays `1`.
 
@@ -102,24 +102,24 @@ A `review-done` action sets `needsHuman`, adds `--run-tests`, and asks
 Each action holds a `kind`. A skill stops on a `kind` it does not handle and
 runs the `command` of one it does, after it replaces the placeholders.
 
-| `kind`        | Command shape                            | `args`           | `reason`                                         | `needsHuman` | Flags           |
-| ------------- | ---------------------------------------- | ---------------- | ------------------------------------------------ | ------------ | --------------- |
-| `plan-new`    | `atry plan new <run>`                    | `run`            | The plan has no overview or task input.          | `false`      |                 |
-| `plan-done`   | `atry plan done <run>`                   | `run`            | The plan has no task index.                      | `false`      |                 |
-| `approve`     | `atry approve <run> --preview`           | `run`            | The plan is incomplete.                          | `true`       |                 |
-| `approve`     | `atry approve <run> --preview`           | `run`            | The plan is waiting for approval.                | `true`       |                 |
-| `stage-start` | `atry stage start <run> implement --tool <tool>` | `run`, `stage`   | Implement has not started.                       | `false`      |                 |
-| `task-start`  | `atry task start <run> <task>`           | `run`, `task`    | An implement task is still open.                 | `false`      |                 |
-| `integrate`   | `atry integrate <run> <task>`            | `run`, `task`    | A done task still has a worktree.                | `false`      |                 |
-| `stage-done`  | `atry stage done <run> implement --tool <tool>` | `run`, `stage`   | Every implement task is done or skipped.         | `false`      |                 |
-| `review-new`  | `atry review new <run> self --tool <tool>` | `run`, `review`  | No self-review covers the current tree.          | `false`      |                 |
-| `review-done` | `atry review done <run> self`            | `run`, `review`  | Self-review has started.                         | `false`      |                 |
+| `kind`        | Command shape                                               | `args`           | `reason`                                         | `needsHuman` | Flags           |
+| ------------- | ----------------------------------------------------------- | ---------------- | ------------------------------------------------ | ------------ | --------------- |
+| `plan-new`    | `atry plan new <run>`                                       | `run`            | The plan has no overview or task input.          | `false`      |                 |
+| `plan-done`   | `atry plan done <run>`                                      | `run`            | The plan has no task index.                      | `false`      |                 |
+| `approve`     | `atry approve <run> --preview`                              | `run`            | The plan is incomplete.                          | `true`       |                 |
+| `approve`     | `atry approve <run> --preview`                              | `run`            | The plan is waiting for approval.                | `true`       |                 |
+| `stage-start` | `atry stage start <run> implement --tool <tool>`            | `run`, `stage`   | Implement has not started.                       | `false`      |                 |
+| `task-start`  | `atry task start <run> <task>`                              | `run`, `task`    | An implement task is still open.                 | `false`      |                 |
+| `integrate`   | `atry integrate <run> <task>`                               | `run`, `task`    | A done task still has a worktree.                | `false`      |                 |
+| `stage-done`  | `atry stage done <run> implement --tool <tool>`             | `run`, `stage`   | Every implement task is done or skipped.         | `false`      |                 |
+| `review-new`  | `atry review new <run> self --tool <tool>`                  | `run`, `review`  | No self-review covers the current tree.          | `false`      |                 |
+| `review-done` | `atry review done <run> self`                               | `run`, `review`  | Self-review has started.                         | `false`      |                 |
 | `review-new`  | `atry review new <run> cross --tool <tool> --model <model>` | `run`, `review`  | Cross-review has not started.                    | `false`      | `requiresModel` |
-| `review-done` | `atry review done <run> cross`           | `run`, `review`  | Cross-review has started.                        | `false`      |                 |
-| `close`       | `atry close <run> --preview`             | `run`            | The run is ready for a developer close decision. | `true`       |                 |
-| `decide`      | `atry review decide <run> Q<n> <answer>` | `run`            | A review question is still open.                 | `true`       |                 |
-| `none`        | `none`                                   |                  | The run is closed or abandoned.                  | `false`      |                 |
-| `none`        | `atry list <run>`                        | `run` for a list | No pending task is ready to start.               | `false`      |                 |
+| `review-done` | `atry review done <run> cross`                              | `run`, `review`  | Cross-review has started.                        | `false`      |                 |
+| `close`       | `atry close <run> --preview`                                | `run`            | The run is ready for a developer close decision. | `true`       |                 |
+| `decide`      | `atry review decide <run> Q<n> <answer>`                    | `run`            | A review question is still open.                 | `true`       |                 |
+| `none`        | `none`                                                      |                  | The run is closed or abandoned.                  | `false`      |                 |
+| `none`        | `atry list <run>`                                           | `run` for a list | No pending task is ready to start.               | `false`      |                 |
 
 `args.run` is the run id. `args.task` is a task id such as `T1`. `args.review`
 is `self` or `cross`. `args.stage` is `implement`.

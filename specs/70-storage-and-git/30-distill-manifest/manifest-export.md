@@ -87,17 +87,17 @@ atry distill verify <run>
 
 ### Run header
 
-| Key         | Source                                                                                              |
-| ----------- | --------------------------------------------------------------------------------------------------- |
-| `name`      | The run directory name.                                                                             |
-| `id`        | `run.json` `id`.                                                                                    |
-| `slug`      | `run.json` `slug`.                                                                                  |
-| `title`     | `run.json` `title`.                                                                                 |
-| `base`      | `run.json` `base`.                                                                                  |
-| `head`      | `git rev-parse HEAD` in `run.worktree.path` when set, else the repo root. `null` when git fails.    |
-| `lifecycle` | `run.json` `state.lifecycle`.                                                                       |
-| `stage`     | `run.json` `state.stage`.                                                                           |
-| `closedAt`  | The `ts` of the `closed` event. `null` when no `closed` event exists, also for an abandoned run.   |
+| Key         | Source                                                                                               |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| `name`      | The run directory name.                                                                              |
+| `id`        | `run.json` `id`.                                                                                     |
+| `slug`      | `run.json` `slug`.                                                                                   |
+| `title`     | `run.json` `title`.                                                                                  |
+| `base`      | `run.json` `base`.                                                                                   |
+| `head`      | `git rev-parse HEAD` in `run.worktree.path` when set, else the repo root. `null` when git fails.     |
+| `lifecycle` | `run.json` `state.lifecycle`.                                                                        |
+| `stage`     | `run.json` `state.stage`.                                                                            |
+| `closedAt`  | The `ts` of the `closed` event. `null` when no `closed` event exists, also for an abandoned run.     |
 | `stages`    | One `{ stage, tool, model }` for each `started` event, in file order. `model` is `null` when absent. |
 
 `stages` keeps every review round, so two self-review rounds give two `self-review` entries.
@@ -110,17 +110,17 @@ atry distill verify <run>
 
 Each file record has `kind`. It has `stage` and `task` when they apply. The first matching row wins. A path that matches no row gets `kind: "other"`.
 
-| Path                           | `kind`             | `stage`                   | `task` |
-| ------------------------------ | ------------------ | ------------------------- | ------ |
-| `events.jsonl`                 | `events`           | none                      | none   |
-| `run.json`                     | `run-cache`        | none                      | none   |
-| `10-plan/overview.md`          | `plan-overview`    | `plan`                    | none   |
-| `10-plan/tasks.input.json`     | `plan-tasks-input` | `plan`                    | none   |
-| `10-plan/index.json`           | `plan-index`       | `plan`                    | none   |
-| `10-plan/T<n>.md`              | `plan-task`        | `plan`                    | `T<n>` |
-| `20-implement/T<n>.md`         | `implement-report` | `implement`               | `T<n>` |
-| `30-self-review/<NN>.md`       | `review-notes`     | `self-review`             | none   |
-| `30-self-review/<NN>.json`     | `review-result`    | `self-review`             | none   |
-| `30-self-review/<NN>.test.log` | `test-log`         | `self-review`             | none   |
-| `40-cross-review/` same shapes | same kinds         | `cross-review`            | none   |
-| any other path                 | `other`            | none                      | none   |
+| Path                           | `kind`             | `stage`        | `task` |
+| ------------------------------ | ------------------ | -------------- | ------ |
+| `events.jsonl`                 | `events`           | none           | none   |
+| `run.json`                     | `run-cache`        | none           | none   |
+| `10-plan/overview.md`          | `plan-overview`    | `plan`         | none   |
+| `10-plan/tasks.input.json`     | `plan-tasks-input` | `plan`         | none   |
+| `10-plan/index.json`           | `plan-index`       | `plan`         | none   |
+| `10-plan/T<n>.md`              | `plan-task`        | `plan`         | `T<n>` |
+| `20-implement/T<n>.md`         | `implement-report` | `implement`    | `T<n>` |
+| `30-self-review/<NN>.md`       | `review-notes`     | `self-review`  | none   |
+| `30-self-review/<NN>.json`     | `review-result`    | `self-review`  | none   |
+| `30-self-review/<NN>.test.log` | `test-log`         | `self-review`  | none   |
+| `40-cross-review/` same shapes | same kinds         | `cross-review` | none   |
+| any other path                 | `other`            | none           | none   |
