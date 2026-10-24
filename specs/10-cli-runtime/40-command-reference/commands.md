@@ -124,3 +124,11 @@ does not skip that self-review.
 and skips the required-review and tree checks. It does not skip the
 open-question check, the cross-delta rule, or the warning gate.
 `atry close --abandon <reason>` stops a run from any open state.
+
+### Distill and verify
+
+`atry distill <run>` writes `90-distill/manifest.json` with a run header, a label on each file, and an `atEvent` anchor.
+`atry distill verify <run>` reports a manifest that is older than the event log as `stale: yes` with `new events: <n>`.
+It lists `events.jsonl` and `run.json` as `stale: <path>`, not as `mismatched`, and exits 1.
+The `--json` result adds `stale` and `newEvents` and keeps `schema` 1.
+See `specs/70-storage-and-git/30-distill-manifest/manifest-export.md`.
