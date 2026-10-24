@@ -345,3 +345,91 @@ test("sync errors on missing convention parts, writing, preflight, or empty skil
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function copyRoot(prefix: string): string {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  cpSync(
+    new URL("../specs/70-storage-and-git/00-directory-conventions", import.meta.url),
+    join(root, "specs/70-storage-and-git/00-directory-conventions"),
+    { recursive: true },
+  );
+  cpSync(
+    new URL("../specs/80-skills-integration/00-skill-bridge", import.meta.url),
+    join(root, "specs/80-skills-integration/00-skill-bridge"),
+    { recursive: true },
+  );
+  cpSync(new URL("../skills", import.meta.url), join(root, "skills"), { recursive: true });
+  return root;
+}
+
+test("sync writes the loop block into a skill with markers and checks drift", () => {
+  const root = copyRoot("sync-loop-");
+  try {
+    const loop = join(root, "specs/80-skills-integration/00-skill-bridge/loop.md");
+    const body = readFileSync(loop, "utf8");
+    const skillMd = join(root, "skills/atry-implement/SKILL.md");
+    const source = readFileSync(skillMd, "utf8");
+    const withMarkers = source.includes("<!-- BEGIN LOOP -->")
+      ? source.replace(/(<!-- BEGIN LOOP -->)[\s\S]*(<!-- END LOOP -->)/, "$1\nold\n$2")
+      : `${source}\n<!-- BEGIN LOOP -->\nold\n<!-- END LOOP -->\n`;
+    writeFileSync(skillMd, withMarkers);
+
+    const stale = runSync(["--check", "--root", root], repo);
+    expect(stale.status).not.toBe(0);
+    expect(stale.stderr).toContain("loop block differs from sync source");
+
+    const written = runSync(["--root", root], repo);
+    expect(written.status, written.stderr).toBe(0);
+    expect(written.stdout).toContain(`synced loop into ${skillMd}`);
+    const synced = readFileSync(skillMd, "utf8");
+    expect(synced).toContain(`<!-- BEGIN LOOP -->\n\n${body.trimEnd()}\n\n<!-- END LOOP -->`);
+    expect(runSync(["--check", "--root", root], repo).status).toBe(0);
+
+    writeFileSync(loop, `${body}9. Extra step.\n`);
+    const drift = runSync(["--check", "--root", root], repo);
+    expect(drift.status).not.toBe(0);
+    expect(drift.stderr).toContain("loop block differs from sync source");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sync skips a skill without loop markers and rejects one marker", () => {
+  const root = copyRoot("sync-loop-edge-");
+  try {
+    const loop = join(root, "specs/80-skills-integration/00-skill-bridge/loop.md");
+    const skillMd = join(root, "skills/atry-self-review/SKILL.md");
+    const source = readFileSync(skillMd, "utf8")
+      .replace(/<!-- BEGIN LOOP -->[\s\S]*<!-- END LOOP -->/, "")
+      .replace("<!-- BEGIN LOOP -->", "")
+      .replace("<!-- END LOOP -->", "");
+    for (const name of ["atry-implement", "atry-cross-review"]) {
+      const other = join(root, `skills/${name}/SKILL.md`);
+      writeFileSync(
+        other,
+        readFileSync(other, "utf8").replace(/<!-- BEGIN LOOP -->[\s\S]*<!-- END LOOP -->/, ""),
+      );
+    }
+    rmSync(loop);
+    writeFileSync(skillMd, source);
+    const skipped = runSync(["--check", "--root", root], repo);
+    expect(skipped.status, skipped.stderr).toBe(0);
+
+    writeFileSync(skillMd, `${source}\n<!-- BEGIN LOOP -->\n`);
+    const half = runSync(["--check", "--root", root], repo);
+    expect(half.status).not.toBe(0);
+    expect(half.stderr).toContain("Missing <!-- BEGIN LOOP --> / <!-- END LOOP -->");
+
+    writeFileSync(skillMd, `${source}\n<!-- END LOOP -->\n`);
+    expect(runSync(["--check", "--root", root], repo).stderr).toContain(
+      "Missing <!-- BEGIN LOOP --> / <!-- END LOOP -->",
+    );
+
+    writeFileSync(skillMd, `${source}\n<!-- BEGIN LOOP -->\n<!-- END LOOP -->\n`);
+    const noSource = runSync(["--check", "--root", root], repo);
+    expect(noSource.status).not.toBe(0);
+    expect(noSource.stderr).toContain("loop.md not found");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
