@@ -35,8 +35,11 @@
 | `tool_input.notebook_path` | Edited notebook when `file_path` is absent |
 
 1. No path, no `.agent-relay` folder, or no run in `implementing`: print nothing.
-2. `guardPath` allows the path for any implementing run: print nothing.
-3. Otherwise print a `hookSpecificOutput` object with `hookEventName: "PreToolUse"`.
+2. For each implementing run, find its git root: `run.worktree.path` for a worktree run, the repo root otherwise.
+   Skip the run when the path is not under that root, or equals it.
+   A path outside every such root prints nothing.
+3. `guardPath` allows the path for any remaining run: print nothing.
+4. Otherwise print a `hookSpecificOutput` object with `hookEventName: "PreToolUse"`.
    `permissionDecision` is `deny` when any implementing run has `strict.scope: true` in its base policy. Otherwise it is `ask`.
    `permissionDecisionReason` names the path and the runs.
 
@@ -44,5 +47,7 @@ The command always exits 0. Any error prints nothing and allows the edit, so a b
 
 ## Limits
 
-- Paths are compared as given. A path through a symlinked folder can look outside the repo, as with `atry guard`.
+- The root and the path are compared by real path. The path uses its nearest existing ancestor, so a new file in a missing folder is still checked.
+- A worktree run does not guard edits in the main tree.
+- `guardPath` matches task files by path as given. A task file reached through a symlinked folder is asked about, as with `atry guard`.
 - Shell commands that write files do not pass through the hook.

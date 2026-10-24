@@ -38,7 +38,10 @@ What `atry` does not prove or enforce. Trust levels are in
 - `claim` checks recorded file paths before work starts. It does not stop an
   edit while the task is in progress. `atry guard` can check one path. The
   Claude Code hook checks edits only after you install it, and only in Claude
-  Code. Other tools and shell commands that write files are not checked.
+  Code. Other tools and shell commands that write files are not checked. The
+  hook ignores a path outside the git root of every implementing run, so a
+  worktree run does not guard edits in the main tree. `atry guard` still
+  reports a path outside the repo as not allowed.
 - There is no migration from the bash CLI or from v1 run files.
 - CI runs `npm test` on macOS, Linux, and Windows. It does not show that an
   agent follows a skill.
