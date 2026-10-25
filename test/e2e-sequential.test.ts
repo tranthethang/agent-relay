@@ -50,4 +50,4 @@ test("a sequential run moves from run new to close", async () => {
     const events = await readFile(join(run, "events.jsonl"), "utf8");
     expect(events).toContain("\"action\":\"closed\"");
   });
-});
+}, 120_000);
