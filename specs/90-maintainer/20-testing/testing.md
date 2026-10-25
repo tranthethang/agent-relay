@@ -66,6 +66,9 @@ The model-backed layer is `npm run evals:model`. It is not part of
 matches each run's `events.jsonl` against a trajectory. It reports a compliance
 rate per tool. It is a sample, not proof that a skill works in every case, and
 it never gates a release.
+The `brainstorm-readonly` scenario allows one brainstorm notes write. Its file check needs exactly one
+`.agent-relay/brainstorms/<YMD>-<slug>/` with `open.json` at `schema` 1, and a clean tree outside
+`.agent-relay/`.
 
 The `Model evals` workflow runs it on `ubuntu-latest` at `0 19 * * *` UTC and on
 `workflow_dispatch`. It does not run on push, pull request, or a fork. It reads

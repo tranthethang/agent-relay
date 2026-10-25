@@ -4,11 +4,11 @@
     {
       "name": "brainstorm-readonly",
       "skill": "atry-brainstorm",
-      "prompt": "Use the atry-brainstorm skill. Discuss whether this repository's greeting message should be configurable. Do not edit any file and do not create a run.",
+      "prompt": "Use the atry-brainstorm skill. Discuss whether this repository's greeting message should be configurable. Write the discussion to brainstorm notes once. Do not edit any other file and do not create a run.",
       "fixture": "clean",
       "required": [],
       "forbidden": [{ "stage": "*", "action": "created" }],
-      "fileCheck": "clean-tree"
+      "fileCheck": "brainstorm-notes"
     },
     {
       "name": "plan-small",

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import {
@@ -90,7 +90,6 @@ test("implemented reaches implement completed with no review", async () => {
 
 test("a dirty tree fails the clean-tree check and none always passes", async () => {
   const fixture = await build("clean");
-  const { writeFile } = await import("node:fs/promises");
   await writeFile(join(fixture.repo, "README.md"), "changed\n");
   expect((await fileCheckFailures(fixture, "clean-tree"))[0]).toContain("not clean");
   expect(await fileCheckFailures(fixture, "none")).toEqual([]);
@@ -100,4 +99,52 @@ test("scenarioPrompt fills the run path", async () => {
   const scenario = (await loadScenarios()).find((s) => s.name === "self-review")!;
   expect(scenarioPrompt(scenario, "/r/run")).toContain("/r/run");
   expect(scenarioPrompt(scenario, "/r/run")).not.toContain("{run}");
+});
+
+async function writeNotes(repo: string, name: string, open: string): Promise<void> {
+  const dir = join(repo, ".agent-relay", "brainstorms", name);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "notes.md"), "# notes\n");
+  await writeFile(join(dir, "open.json"), open);
+}
+
+const validOpen = `${JSON.stringify({ schema: 1, open: [] })}\n`;
+
+test("brainstorm-notes passes with one valid notes directory", async () => {
+  const fixture = await build("clean");
+  await writeNotes(fixture.repo, "20261025-greeting", validOpen);
+  expect(await fileCheckFailures(fixture, "brainstorm-notes")).toEqual([]);
+});
+
+test("brainstorm-notes fails with no notes directory", async () => {
+  const fixture = await build("clean");
+  expect((await fileCheckFailures(fixture, "brainstorm-notes"))[0]).toContain("found 0");
+});
+
+test("brainstorm-notes fails with two notes directories", async () => {
+  const fixture = await build("clean");
+  await writeNotes(fixture.repo, "20261025-greeting", validOpen);
+  await writeNotes(fixture.repo, "20261025-other", validOpen);
+  expect((await fileCheckFailures(fixture, "brainstorm-notes"))[0]).toContain("found 2");
+});
+
+test("brainstorm-notes fails on an invalid open.json", async () => {
+  const fixture = await build("clean");
+  await writeNotes(
+    fixture.repo,
+    "20261025-greeting",
+    `${JSON.stringify({ schema: 2, open: [] })}\n`,
+  );
+  expect((await fileCheckFailures(fixture, "brainstorm-notes"))[0]).toContain("open.json");
+  await writeNotes(fixture.repo, "20261025-greeting", "not json\n");
+  expect((await fileCheckFailures(fixture, "brainstorm-notes"))[0]).toContain("open.json");
+});
+
+test("brainstorm-notes fails on an edit outside .agent-relay", async () => {
+  const fixture = await build("clean");
+  await writeNotes(fixture.repo, "20261025-greeting", validOpen);
+  await writeFile(join(fixture.repo, "README.md"), "changed\n");
+  const failures = await fileCheckFailures(fixture, "brainstorm-notes");
+  expect(failures).toHaveLength(1);
+  expect(failures[0]).toContain("outside .agent-relay");
 });
