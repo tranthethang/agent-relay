@@ -19,6 +19,7 @@ import {
   cliPath,
   createFixture,
   fileCheckFailures,
+  type Fixture,
   loadScenarios,
   type Scenario,
   scenarioPrompt,
@@ -75,8 +76,9 @@ async function runOnce(
     ms: 0,
     reason: "",
   };
-  const fixture = await createFixture(scenario.fixture);
+  let fixture: Fixture | null = null;
   try {
+    fixture = await createFixture(scenario.fixture);
     const result = await runner.run(
       scenarioPrompt(scenario, fixture.runPath),
       fixture.repo,
@@ -103,7 +105,7 @@ async function runOnce(
   } catch (error) {
     row.reason = error instanceof Error ? error.message : String(error);
   } finally {
-    await fixture.cleanup();
+    await fixture?.cleanup();
   }
   return row;
 }
