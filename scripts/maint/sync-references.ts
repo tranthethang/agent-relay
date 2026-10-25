@@ -11,7 +11,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ALL_PARTS = ["core", "review-headings", "parallel", "manifest", "notes"];
-const REVIEW_TEMPLATES = ["reviewer-conduct.md"];
+const REVIEW_TEMPLATES = ["reviewer-conduct.md", "review-checklist.md"];
 const WRITING_SKILLS = [
   "atry-brainstorm",
   "atry-plan",

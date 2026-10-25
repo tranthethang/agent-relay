@@ -55,6 +55,17 @@ test("sync:check passes on a clean tree", () => {
     ),
   ).toBe(conduct);
   expect(
+    readFileSync(
+      new URL("../skills/atry-cross-review/references/review-checklist.md", import.meta.url),
+      "utf8",
+    ),
+  ).toBe(
+    readFileSync(
+      new URL("../skills/atry-self-review/references/review-checklist.md", import.meta.url),
+      "utf8",
+    ),
+  );
+  expect(
     readFileSync(new URL("../scripts/maint/sync-references.ts", import.meta.url), "utf8"),
   ).not.toContain("review-walkthrough-template.md");
 });
@@ -116,6 +127,44 @@ test("sync:check fails after one edit to a bundle copy", () => {
     expect(run.stderr).toContain("Drift:");
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sync:check fails when the review checklist copies differ", () => {
+  const root = mkdtempSync(join(tmpdir(), "sync-checklist-"));
+  try {
+    cpSync(
+      new URL("../specs/70-storage-and-git/00-directory-conventions", import.meta.url),
+      join(root, "specs/70-storage-and-git/00-directory-conventions"),
+      { recursive: true },
+    );
+    cpSync(
+      new URL("../specs/80-skills-integration/00-skill-bridge", import.meta.url),
+      join(root, "specs/80-skills-integration/00-skill-bridge"),
+      { recursive: true },
+    );
+    cpSync(new URL("../skills", import.meta.url), join(root, "skills"), { recursive: true });
+    const copy = join(root, "skills/atry-cross-review/references/review-checklist.md");
+    writeFileSync(copy, `${readFileSync(copy, "utf8")}drift\n`);
+    const run = runSync(["--check", "--root", root], repo);
+    expect(run.status, `${run.stdout}\n${run.stderr}`).not.toBe(0);
+    expect(run.stderr).toContain(`Drift: ${copy}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the review checklist has seven one-line items", () => {
+  const checklist = readFileSync(
+    new URL("../skills/atry-self-review/references/review-checklist.md", import.meta.url),
+    "utf8",
+  );
+  const items = checklist.split("\n").filter((line) => /^\d+\. /.test(line));
+  expect(items.map((line) => line.split(".")[0])).toEqual(["1", "2", "3", "4", "5", "6", "7"]);
+  for (const line of checklist.split("\n")) {
+    if (line === "" || line.startsWith("#") || /^\d+\. /.test(line)) continue;
+    if (line.startsWith("Shared checklist")) continue;
+    expect(line, "only a Why line may follow an item").toMatch(/^ {3}Why: /);
   }
 });
 
