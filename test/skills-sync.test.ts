@@ -486,3 +486,79 @@ test("sync skips a skill without loop markers and rejects one marker", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+function floorRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), "sync-floor-"));
+  for (
+    const dir of [
+      "specs/70-storage-and-git/00-directory-conventions",
+      "specs/80-skills-integration/00-skill-bridge",
+      "skills",
+      "evals",
+      ".github/actions/smoke",
+    ]
+  ) {
+    cpSync(new URL(`../${dir}`, import.meta.url), join(root, dir), { recursive: true });
+  }
+  mkdirSync(join(root, "scripts/maint"), { recursive: true });
+  cpSync(
+    new URL("../scripts/maint/next-version.ts", import.meta.url),
+    join(root, "scripts/maint/next-version.ts"),
+  );
+  return root;
+}
+
+function setFloor(root: string, version: string): void {
+  const file = join(root, "scripts/maint/next-version.ts");
+  writeFileSync(
+    file,
+    readFileSync(file, "utf8").replace(
+      /(skillMinimumVersion = ")[\d.]+(")/,
+      `$1${version}$2`,
+    ),
+  );
+}
+
+test("sync writes a new floor into skills, the smoke action, and scenarios", () => {
+  const root = floorRoot();
+  try {
+    setFloor(root, "9.9.9");
+    const check = runSync(["--check", "--root", root], repo);
+    expect(check.status, check.stderr).toBe(1);
+    const targets = [
+      ...skillNames.map((name) => join(root, "skills", name, "SKILL.md")),
+      join(root, ".github/actions/smoke/action.yml"),
+      join(root, "evals/scenarios.json"),
+    ];
+    for (const file of targets) expect(check.stderr).toContain(`Drift: ${file}`);
+
+    const write = runSync(["--root", root], repo);
+    expect(write.status, write.stderr).toBe(0);
+    for (const name of skillNames) {
+      expect(readFileSync(join(root, "skills", name, "SKILL.md"), "utf8")).toContain(
+        "requires-atry: \">=9.9.9\"",
+      );
+    }
+    expect(readFileSync(join(root, ".github/actions/smoke/action.yml"), "utf8")).toContain(
+      "atry preflight --requires \">=9.9.9\"",
+    );
+    const scenarios = readFileSync(join(root, "evals/scenarios.json"), "utf8");
+    expect(scenarios).toContain("\"installed\": \"9.9.9\"");
+    expect(scenarios).not.toContain("0.10.7");
+    expect(runSync(["--check", "--root", root], repo).status).toBe(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sync reports a floor source without skillMinimumVersion", () => {
+  const root = floorRoot();
+  try {
+    writeFileSync(join(root, "scripts/maint/next-version.ts"), "export const other = 1;\n");
+    const run = runSync(["--check", "--root", root], repo);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("no skillMinimumVersion in");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

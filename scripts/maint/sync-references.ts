@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { skillMinimumVersion } from "./next-version.ts";
 
 const ALL_PARTS = ["core", "review-headings", "parallel", "manifest", "notes"];
 const REVIEW_TEMPLATES = ["reviewer-conduct.md", "review-checklist.md"];
@@ -314,6 +315,59 @@ function syncSkillBlock(
   return true;
 }
 
+const FLOOR_SOURCE = "scripts/maint/next-version.ts";
+const FLOOR_PATTERN = /export const skillMinimumVersion = "(\d+\.\d+\.\d+)";/;
+
+// The root's own next-version.ts wins, so a test root can change the floor.
+function readFloor(root: string): string {
+  const source = join(root, FLOOR_SOURCE);
+  if (!existsSync(source)) return skillMinimumVersion;
+  const match = FLOOR_PATTERN.exec(readFileSync(source, "utf8"));
+  if (match?.[1] === undefined) fail(`Error: no skillMinimumVersion in ${source}`);
+  return match[1];
+}
+
+function floorTargets(root: string, dirs: readonly string[], floor: string) {
+  const range = `>=${floor}`;
+  const targets: { file: string; rewrite: (text: string) => string }[] = dirs.map((dir) => ({
+    file: join(dir, "SKILL.md"),
+    rewrite: (text) => text.replace(/^requires-atry: ".*"$/m, `requires-atry: "${range}"`),
+  }));
+  targets.push(
+    {
+      file: join(root, ".github/actions/smoke/action.yml"),
+      rewrite: (text) => text.replace(/(atry preflight --requires ")[^"]*(")/g, `$1${range}$2`),
+    },
+    {
+      file: join(root, "evals/scenarios.json"),
+      rewrite: (text) =>
+        text
+          .replace(/">=\d+\.\d+\.\d+"/g, `"${range}"`)
+          .replace(/("installed": ")\d+\.\d+\.\d+(")/g, `$1${floor}$2`),
+    },
+  );
+  return targets;
+}
+
+// A target file that does not exist is skipped; a test root holds only some of them.
+function syncFloor(root: string, dirs: readonly string[], checkOnly: boolean): boolean {
+  let drift = false;
+  for (const { file, rewrite } of floorTargets(root, dirs, readFloor(root))) {
+    if (!existsSync(file)) continue;
+    const current = readFileSync(file, "utf8");
+    const next = rewrite(current);
+    if (next === current) continue;
+    if (checkOnly) {
+      process.stderr.write(`Drift: ${file} differs from skillMinimumVersion\n`);
+      drift = true;
+      continue;
+    }
+    writeFileSync(file, next);
+    process.stdout.write(`synced floor into ${file}\n`);
+  }
+  return drift;
+}
+
 function main(): void {
   const { checkOnly, root } = parseArgs(process.argv.slice(2));
   const convDir = join(root, "specs/70-storage-and-git/00-directory-conventions");
@@ -327,6 +381,7 @@ function main(): void {
   if (syncReviewTemplates(root, checkOnly)) drift = true;
   if (syncPreflight(root, dirs, checkOnly)) drift = true;
   if (syncLoop(root, dirs, checkOnly)) drift = true;
+  if (syncFloor(root, dirs, checkOnly)) drift = true;
 
   if (!checkOnly) return;
   if (drift) {
