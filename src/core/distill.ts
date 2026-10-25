@@ -241,12 +241,7 @@ async function runHeader(runDir: string): Promise<z.infer<typeof distillRunSchem
   const runJson: RunJson = parseRunJson(await readJson(join(runDir, "run.json")));
   const events = (await readJsonl(join(runDir, "events.jsonl"))).map(parseEventLine);
   const repoRoot = dirname(dirname(runDir));
-  let head: string | null;
-  try {
-    head = await gitHead(runJson.worktree?.path ?? repoRoot);
-  } catch {
-    head = null;
-  }
+  const head = await runHead(runJson, repoRoot);
   return {
     name: basename(runDir),
     id: runJson.id,
@@ -256,7 +251,8 @@ async function runHeader(runDir: string): Promise<z.infer<typeof distillRunSchem
     head,
     lifecycle: runJson.state.lifecycle,
     stage: runJson.state.stage,
-    closedAt: events.find((event) => event.action === "closed")?.ts ?? null,
+    closedAt: (events.find((event) => event.action === "closed")
+      ?? events.find((event) => event.action === "abandoned"))?.ts ?? null,
     stages: events
       .filter((event) => event.action === "started")
       .map((event) => ({
@@ -265,6 +261,22 @@ async function runHeader(runDir: string): Promise<z.infer<typeof distillRunSchem
         model: event.model ?? null,
       })),
   };
+}
+
+// A worktree run reads HEAD in its worktree. When that directory is gone, the branch in the repo
+// root still names the last commit. A run without a worktree reads HEAD in the repo root.
+async function runHead(runJson: RunJson, repoRoot: string): Promise<string | null> {
+  const worktree = runJson.worktree;
+  try {
+    return await gitHead(worktree?.path ?? repoRoot);
+  } catch {
+    if (worktree === undefined) return null;
+  }
+  try {
+    return await gitHead(repoRoot, worktree.branch);
+  } catch {
+    return null;
+  }
 }
 
 function comparePath(left: string, right: string): number {

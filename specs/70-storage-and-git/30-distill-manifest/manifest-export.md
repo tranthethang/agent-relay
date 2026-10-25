@@ -87,18 +87,18 @@ atry distill verify <run>
 
 ### Run header
 
-| Key         | Source                                                                                               |
-| ----------- | ---------------------------------------------------------------------------------------------------- |
-| `name`      | The run directory name.                                                                              |
-| `id`        | `run.json` `id`.                                                                                     |
-| `slug`      | `run.json` `slug`.                                                                                   |
-| `title`     | `run.json` `title`.                                                                                  |
-| `base`      | `run.json` `base`.                                                                                   |
-| `head`      | `git rev-parse HEAD` in `run.worktree.path` when set, else the repo root. `null` when git fails.     |
-| `lifecycle` | `run.json` `state.lifecycle`.                                                                        |
-| `stage`     | `run.json` `state.stage`.                                                                            |
-| `closedAt`  | The `ts` of the `closed` event. `null` when no `closed` event exists, also for an abandoned run.     |
-| `stages`    | One `{ stage, tool, model }` for each `started` event, in file order. `model` is `null` when absent. |
+| Key         | Source                                                                                                                                                                                   |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`      | The run directory name.                                                                                                                                                                  |
+| `id`        | `run.json` `id`.                                                                                                                                                                         |
+| `slug`      | `run.json` `slug`.                                                                                                                                                                       |
+| `title`     | `run.json` `title`.                                                                                                                                                                      |
+| `base`      | `run.json` `base`.                                                                                                                                                                       |
+| `head`      | `git rev-parse HEAD` in `run.worktree.path` when set, else the repo root. When that fails for a worktree run, `git rev-parse <worktree.branch>` in the repo root. `null` when both fail. |
+| `lifecycle` | `run.json` `state.lifecycle`.                                                                                                                                                            |
+| `stage`     | `run.json` `state.stage`.                                                                                                                                                                |
+| `closedAt`  | The `ts` of the `closed` event, else of the `abandoned` event. `null` when neither exists.                                                                                               |
+| `stages`    | One `{ stage, tool, model }` for each `started` event, in file order. `model` is `null` when absent.                                                                                     |
 
 `stages` keeps every review round, so two self-review rounds give two `self-review` entries.
 
