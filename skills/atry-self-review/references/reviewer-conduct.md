@@ -14,6 +14,27 @@ Do not pick a side in code for a genuine tradeoff.
 Write it as a question card (`references/writing.md`).
 Copy the same card into the review JSON `open` array.
 
+## Findings
+
+Write one finding for each defect you check.
+Give it an id `F<n>` and name that id in the review markdown.
+Copy each finding into the review JSON `findings` array.
+A finding has `id`, `severity`, `file`, `line`, `status`, and `evidence`.
+
+Severity:
+
+- `high`: wrong behavior, data loss, a security hole, or a broken gate.
+- `medium`: a missing test, or an edge case with a workaround.
+- `low`: a small defect with no user impact.
+
+Status:
+
+- `fixed`: you changed the code.
+- `open`: you did not fix it.
+- `rejected`: a claim from an earlier review is wrong. Put the reason in `evidence`.
+
+A style note is not a finding. A genuine tradeoff is a question card, not a finding.
+
 ## Evidence
 
 Treat each claim in `20-implement/` as a claim to check.

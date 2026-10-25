@@ -7,7 +7,7 @@ not rewrite an earlier pair.
 
 The markdown file is prose under `# self` or `# cross`. Each question starts
 at column zero as `- Q<n>: `. The JSON file has `schema`, `kind`, `tool`,
-`model`, `fixed`, and `open`. Each `open` item is either `q`, `a`, and `b`, or
+`model`, `findings`, and `open`. Each `open` item is either `q`, `a`, and `b`, or
 `q` and `need`. Review JSON does not contain a test result.
 
 `atry review done` validates the latest JSON for that kind and appends a

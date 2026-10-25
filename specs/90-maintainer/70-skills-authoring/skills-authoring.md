@@ -80,10 +80,10 @@ after you edit a skill, and replace the rows with its output.
 | brainstorm   | references/writing.md, references/file-conventions.md                                                                     |  8181 |   2045 |
 | plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                     | 10301 |   2575 |
 | implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                    | 13205 |   3301 |
-| self-review  | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-review.md       | 14617 |   3654 |
-| cross-review | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-cross-review.md | 14745 |   3686 |
+| self-review  | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-review.md       | 15779 |   3945 |
+| cross-review | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-cross-review.md | 15906 |   3977 |
 | distill      | references/file-conventions.md                                                                                            |  4729 |   1182 |
-| total        |                                                                                                                           | 65778 |  16443 |
+| total        |                                                                                                                           | 68101 |  17025 |
 
 `test/skill-tokens.test.ts` reads `maxTokens` from `evals/scenarios.json`. It
 fails when a stage reaches `maxTokens` minus 50. It also fails when the total

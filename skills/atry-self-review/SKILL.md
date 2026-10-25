@@ -56,7 +56,8 @@ After the user answers an open question, record the answer with
 Use the user's text for a `Need:` card.
 `review done` prints `test command: <command>`. Run the configured `testCommand` from the base policy only with `--run-tests`.
 Fill the printed markdown file with the edit tool. Read `references/example-review.md` before you write that file.
-Set `fixed` and `open` in the printed JSON.
+Fill `findings` and `open` in the printed JSON.
+`close` refuses while a `high` finding is `open`.
 `review done` stores the test command's exit code, duration, and tree.
 It prints no test output. It writes the last 200 lines to `.test.log`.
 The close preview names a delta when present.

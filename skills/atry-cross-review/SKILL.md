@@ -59,7 +59,8 @@ This skill handles `review-new` and `review-done` with `args.review` `cross`, `d
 Use `a` or `b` for a choice card and the user's text for a `Need:` card.
 `review done` prints `test command: <command>`. Run the configured `testCommand` from the base policy only with `--run-tests`.
 Fill the printed markdown file with the edit tool. Read `references/example-cross-review.md` before you write that file.
-Set `fixed` and `open` in the printed JSON file.
+Fill `findings` and `open` in the printed JSON file.
+`close` refuses while a `high` finding is `open`.
 `review done` stores the test exit code, duration, and tree.
 It writes the last 200 output lines to `.test.log` and prints none.
 
