@@ -1,0 +1,58 @@
+name: Model evals
+
+# A nightly report, not a gate. It never runs on push or pull request.
+on:
+  schedule:
+    - cron: "0 19 * * *" # 02:00 Asia/Ho_Chi_Minh
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: Runs per scenario
+        required: false
+        default: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  model:
+    if: github.repository == 'tranthethang/agent-relay'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install agent CLIs
+        run: npm install -g @anthropic-ai/claude-code@2.1.308 @openai/codex@0.164.0
+
+      - name: Run model evals
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          REPEAT: ${{ inputs.repeat || '1' }}
+        run: npm run evals:model -- --repeat "$REPEAT" --out model-report
+
+      - name: Write summary
+        if: always()
+        run: cat model-report/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: model-report
+          path: model-report/
+          if-no-files-found: ignore
