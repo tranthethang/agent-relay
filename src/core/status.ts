@@ -8,7 +8,7 @@ import { isEnoent, readJson } from "./files.js";
 import { type ReviewIntegrity, reviewIntegrity, reviewProgress } from "./lifecycle.js";
 import { formatAge, nextActions, nextStep } from "./next.js";
 import { type RunState } from "./reduce.js";
-import { reviewJsonSchema } from "./review.js";
+import { listReviewPaths, readReviewDocument, reviewJsonSchema, reviewKinds } from "./review.js";
 import { type RunJson } from "./run.js";
 import { indexForImplement, type PlanIndex } from "./tasks.js";
 import { schemaVersion } from "./vocab.js";
@@ -51,6 +51,7 @@ export type StatusDetail = {
   reviews: StatusReviews;
   actors: RunActors;
   drift: number;
+  findings: { open: number; highOpen: number };
   warnings?: string[];
 };
 
@@ -186,10 +187,34 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
     reviews,
     actors: runActors(loaded.events),
     drift: driftCount(loaded.events),
+    findings: await latestFindingCounts(runDir),
   };
   if (run.from !== undefined) detail.from = run.from;
   if (warnings.length > 0) detail.warnings = warnings;
   return detail;
+}
+
+// Counts come from the latest review of each kind. An unreadable review counts as zero;
+// `statusReviews` already reports it.
+async function latestFindingCounts(runDir: string): Promise<{ open: number; highOpen: number }> {
+  const counts = { open: 0, highOpen: 0 };
+  for (const kind of reviewKinds) {
+    const latest = (await listReviewPaths(runDir, kind)).at(-1);
+    if (latest === undefined) continue;
+    let review;
+    try {
+      review = await readReviewDocument(runDir, latest);
+    } catch (error) {
+      if (error instanceof RelayError) continue;
+      throw error;
+    }
+    for (const finding of review.findings) {
+      if (finding.status !== "open") continue;
+      counts.open += 1;
+      if (finding.severity === "high") counts.highOpen += 1;
+    }
+  }
+  return counts;
 }
 
 async function safeReviewIntegrity(
@@ -275,6 +300,7 @@ export function statusDetailText(result: StatusDetail): string {
     reviewsLine(result.reviews),
     actorsLine(result.actors),
     `drift: ${result.drift}`,
+    `findings: ${result.findings.open} open, ${result.findings.highOpen} high open`,
   ];
   return `${lines.join("\n")}\n`;
 }

@@ -525,6 +525,21 @@ async function readLatestReview(
   return { rel, value };
 }
 
+// Review JSON paths of one kind, oldest first. A missing folder has none.
+export async function listReviewPaths(runDir: string, kind: ReviewKind): Promise<string[]> {
+  const dirName = reviewPlaces[kind].dir;
+  let names: string[];
+  try {
+    names = await readdir(join(runDir, dirName));
+  } catch (error) {
+    if (isEnoent(error)) return [];
+    throw error;
+  }
+  return names.filter((name) => /^\d+\.json$/.test(name))
+    .sort((left, right) => reviewNumber(left) - reviewNumber(right))
+    .map((name) => `${dirName}/${name}`);
+}
+
 export async function readReviewDocument(runDir: string, rel: string): Promise<ReviewJson> {
   let value: unknown;
   try {

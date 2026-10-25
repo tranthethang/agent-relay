@@ -5,6 +5,37 @@ import { statusDetail, statusDetailText, statusList, statusListText } from "../s
 import { runCli, withTempDir } from "./helper.js";
 import { createdEvent, plannedState, runCache, runName, seedRelay, seedRun } from "./seed.js";
 
+function reviewJson(kind: string, findings: unknown[] | undefined): string {
+  return `${
+    JSON.stringify({
+      schema: 1,
+      kind,
+      tool: "cursor",
+      model: "unknown",
+      ...(findings === undefined ? { fixed: 2 } : { findings }),
+      open: [],
+    })
+  }\n`;
+}
+
+function finding(id: string, severity: string, status: string): Record<string, unknown> {
+  return { id, severity, status, file: null, line: null, evidence: "e" };
+}
+
+async function seedReviews(runDir: string): Promise<void> {
+  await mkdir(join(runDir, "30-self-review"), { recursive: true });
+  await mkdir(join(runDir, "40-cross-review"), { recursive: true });
+  await writeFile(
+    join(runDir, "30-self-review", "01.json"),
+    reviewJson("self", [finding("F1", "high", "open"), finding("F2", "low", "fixed")]),
+  );
+  await writeFile(join(runDir, "30-self-review", "02.json"), reviewJson("self", undefined));
+  await writeFile(
+    join(runDir, "40-cross-review", "01.json"),
+    reviewJson("cross", [finding("F1", "medium", "open")]),
+  );
+}
+
 const now = Date.parse("2026-10-17T02:00:00.000Z");
 
 test("statusList skips a directory that has no run.json", async () => {
@@ -326,5 +357,32 @@ test("status does not recommend implement completion without a valid index", asy
     const detail = await statusDetail(runDir, now);
     expect(detail.next).toBe("atry task start 1792208800");
     expect(detail.lifecycle).toBe("implementing");
+  });
+});
+
+test("statusDetail counts findings from the latest review of each kind", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const runDir = await seedRun(relay, runName, runCache(plannedState), [createdEvent]);
+    await seedReviews(runDir);
+    const detail = await statusDetail(runDir, now);
+    expect(detail.findings).toEqual({ open: 1, highOpen: 0 });
+    expect(statusDetailText(detail)).toContain("\nfindings: 1 open, 0 high open\n");
+    await writeFile(
+      join(runDir, "30-self-review", "03.json"),
+      reviewJson("self", [finding("F1", "high", "open")]),
+    );
+    expect((await statusDetail(runDir, now)).findings).toEqual({ open: 2, highOpen: 1 });
+  });
+});
+
+test("statusDetail counts an unreadable latest review as zero findings", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const runDir = await seedRun(relay, runName, runCache(plannedState), [createdEvent]);
+    await mkdir(join(runDir, "30-self-review"), { recursive: true });
+    await writeFile(join(runDir, "30-self-review", "01.json"), "not json\n");
+    const detail = await statusDetail(runDir, now);
+    expect(detail.findings).toEqual({ open: 0, highOpen: 0 });
   });
 });

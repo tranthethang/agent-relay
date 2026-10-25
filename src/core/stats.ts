@@ -3,6 +3,7 @@ import { findRelayDir, listRunNames, runIdFromName } from "./discover.js";
 import { RelayError } from "./error.js";
 import { type EventLine, eventLineSchema } from "./event.js";
 import { isEnoent, readJsonlLines } from "./files.js";
+import { listReviewPaths, readReviewDocument, reviewKinds } from "./review.js";
 import { driftCount } from "./status.js";
 import { schemaVersion, stages } from "./vocab.js";
 
@@ -16,6 +17,18 @@ export type StatsRow = {
   waivers: number;
   failedTests: number;
   drift: number;
+  findings: FindingCounts;
+};
+
+export type FindingCounts = {
+  high: number;
+  medium: number;
+  low: number;
+  open: number;
+  fixed: number;
+  rejected: number;
+  // Not in the plan's key list; the text row needs it.
+  highOpen: number;
 };
 
 export type StatsResult = {
@@ -89,7 +102,31 @@ async function statsRow(runDir: string, filter: StatsFilter): Promise<StatsRow |
     waivers: events.filter((event) => event.action === "waived").length,
     failedTests: events.filter((event) => failedTest(event)).length,
     drift: driftCount(events),
+    findings: await findingCounts(runDir),
   };
+}
+
+// Sums every review of the run. An old review with no findings counts as zero.
+async function findingCounts(runDir: string): Promise<FindingCounts> {
+  const counts: FindingCounts = {
+    high: 0,
+    medium: 0,
+    low: 0,
+    open: 0,
+    fixed: 0,
+    rejected: 0,
+    highOpen: 0,
+  };
+  for (const kind of reviewKinds) {
+    for (const rel of await listReviewPaths(runDir, kind)) {
+      for (const finding of (await readReviewDocument(runDir, rel)).findings) {
+        counts[finding.severity] += 1;
+        counts[finding.status] += 1;
+        if (finding.severity === "high" && finding.status === "open") counts.highOpen += 1;
+      }
+    }
+  }
+  return counts;
 }
 
 function failedTest(event: EventLine): boolean {
@@ -141,5 +178,7 @@ function rowText(row: StatsRow): string {
     return ms === undefined ? [] : [`${stage}=${ms}ms`];
   });
   const stagePart = times.length === 0 ? "stages=none" : times.join(" ");
-  return `${row.name} ${stagePart} rounds=${row.rounds} waivers=${row.waivers} failed-tests=${row.failedTests} drift=${row.drift}`;
+  return `${row.name} ${stagePart} rounds=${row.rounds} waivers=${row.waivers} failed-tests=${row.failedTests} drift=${row.drift} findings=${
+    row.findings.high + row.findings.medium + row.findings.low
+  } high-open=${row.findings.highOpen} fixed=${row.findings.fixed}`;
 }
