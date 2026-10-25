@@ -32,6 +32,10 @@ ${body}
   return { bin, log };
 }
 
+// The model eval runs on Linux only: its fake agents and the `atry` shim are shebang scripts,
+// which Windows cannot spawn.
+const spawnTest = test.skipIf(process.platform === "win32");
+
 function envWith(bin: string, extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
     PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
@@ -47,42 +51,51 @@ function runner(tool: string, env: NodeJS.ProcessEnv) {
   return found;
 }
 
-test("claude-code runs claude -p with the turn cap, allowed tools, cwd, and skills installed", async () => {
-  const { bin, log } = await fakeBin("claude");
-  await withTempGitRepo(async (repo) => {
-    const result = await runner("claude-code", envWith(bin)).run("do it", repo, 20_000);
-    expect(result).toMatchObject({ exit: 0, timedOut: false });
-    const seen = JSON.parse(await readFile(log, "utf8"));
-    expect(seen.argv.slice(0, 4)).toEqual(["-p", "do it", "--max-turns", "7"]);
-    expect(seen.argv).toContain("--allowedTools");
-    expect(seen.argv).toContain("Bash(atry:*)");
-    expect(seen.cwd).toBe(await (await import("node:fs/promises")).realpath(repo));
-    expect(seen.atry).not.toMatch(/^ERR/);
-    const skill = await readFile(join(repo, ".claude", "skills", "atry-plan", "SKILL.md"), "utf8");
-    expect(skill).toContain("atry");
-    expect(await readFile(join(repo, ".git", "info", "exclude"), "utf8")).toContain(
-      "/.claude/skills/",
-    );
-  });
-});
+spawnTest(
+  "claude-code runs claude -p with the turn cap, allowed tools, cwd, and skills installed",
+  async () => {
+    const { bin, log } = await fakeBin("claude");
+    await withTempGitRepo(async (repo) => {
+      const result = await runner("claude-code", envWith(bin)).run("do it", repo, 20_000);
+      expect(result).toMatchObject({ exit: 0, timedOut: false });
+      const seen = JSON.parse(await readFile(log, "utf8"));
+      expect(seen.argv.slice(0, 4)).toEqual(["-p", "do it", "--max-turns", "7"]);
+      expect(seen.argv).toContain("--allowedTools");
+      expect(seen.argv).toContain("Bash(atry:*)");
+      expect(seen.cwd).toBe(await (await import("node:fs/promises")).realpath(repo));
+      expect(seen.atry).not.toMatch(/^ERR/);
+      const skill = await readFile(
+        join(repo, ".claude", "skills", "atry-plan", "SKILL.md"),
+        "utf8",
+      );
+      expect(skill).toContain("atry");
+      expect(await readFile(join(repo, ".git", "info", "exclude"), "utf8")).toContain(
+        "/.claude/skills/",
+      );
+    });
+  },
+);
 
-test("codex runs codex exec in the workspace-write sandbox with skills under .agents", async () => {
-  const { bin, log } = await fakeBin("codex");
-  await withTempGitRepo(async (repo) => {
-    await runner("codex", envWith(bin)).run("go", repo, 20_000);
-    const seen = JSON.parse(await readFile(log, "utf8"));
-    expect(seen.argv).toEqual([
-      "exec",
-      "--sandbox",
-      "workspace-write",
-      "--skip-git-repo-check",
-      "go",
-    ]);
-    await readFile(join(repo, ".agents", "skills", "atry-plan", "SKILL.md"), "utf8");
-  });
-});
+spawnTest(
+  "codex runs codex exec in the workspace-write sandbox with skills under .agents",
+  async () => {
+    const { bin, log } = await fakeBin("codex");
+    await withTempGitRepo(async (repo) => {
+      await runner("codex", envWith(bin)).run("go", repo, 20_000);
+      const seen = JSON.parse(await readFile(log, "utf8"));
+      expect(seen.argv).toEqual([
+        "exec",
+        "--sandbox",
+        "workspace-write",
+        "--skip-git-repo-check",
+        "go",
+      ]);
+      await readFile(join(repo, ".agents", "skills", "atry-plan", "SKILL.md"), "utf8");
+    });
+  },
+);
 
-test("a child that outlives the timeout is killed and reported", async () => {
+spawnTest("a child that outlives the timeout is killed and reported", async () => {
   const { bin } = await fakeBin("claude", "setTimeout(() => {}, 60000);");
   await withTempGitRepo(async (repo) => {
     const result = await runner("claude-code", envWith(bin)).run("slow", repo, 1500);
@@ -92,7 +105,7 @@ test("a child that outlives the timeout is killed and reported", async () => {
   });
 });
 
-test("a non-zero exit is reported", async () => {
+spawnTest("a non-zero exit is reported", async () => {
   const { bin } = await fakeBin("codex", "process.exit(3);");
   await withTempGitRepo(async (repo) => {
     const result = await runner("codex", envWith(bin)).run("x", repo, 20_000);

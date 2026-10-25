@@ -10,7 +10,8 @@ test("CI runs check, build, and test on ubuntu, macos, and windows", () => {
 });
 
 const modelYaml = () =>
-  readFileSync(new URL("../.github/workflows/model-evals.yml", import.meta.url), "utf8");
+  readFileSync(new URL("../.github/workflows/model-evals.yml", import.meta.url), "utf8")
+    .replaceAll("\r\n", "\n");
 
 test("the model eval workflow runs only on a nightly schedule and by hand", () => {
   const yaml = modelYaml();
