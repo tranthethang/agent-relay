@@ -304,7 +304,7 @@ test("closePreview scans review folders and refuses an invalid review ref", asyn
     await toReviewing(runDir);
     await startStage({ runDir, stage: "self-review", tool: "cursor" });
     await doneStage({ runDir, stage: "self-review", tool: "cursor" });
-    const review = { schema: 1, kind: "self", tool: "cursor", model: "unknown", fixed: 0 };
+    const review = { schema: 1, kind: "self", tool: "cursor", model: "unknown", findings: [] };
     const selfDir = join(runDir, "30-self-review");
     await mkdir(selfDir, { recursive: true });
     await writeFile(join(selfDir, "notes.md"), "notes\n");
@@ -345,7 +345,7 @@ async function commitPolicy(dir: string, strict: Record<string, boolean>): Promi
   await gitCommit(dir, "policy");
 }
 
-const review = { schema: 1, kind: "self", tool: "cursor", model: "unknown", fixed: 0 };
+const review = { schema: 1, kind: "self", tool: "cursor", model: "unknown", findings: [] };
 
 test("text helpers print optional lines only when present", () => {
   const base = {
@@ -369,19 +369,38 @@ test("text helpers print optional lines only when present", () => {
       worktree: { removed: false, reason: "x" },
     }),
   ).toContain("worktree: kept (x)");
-  expect(closePreviewText({ schema: 1, recommend: "y", reasons: [] })).toBe("recommend: y\n");
   expect(
-    closePreviewText({ schema: 1, recommend: "n", reasons: ["a"], worktree: { remove: true } }),
+    closePreviewText({
+      schema: 1,
+      recommend: "y",
+      reasons: [],
+      decision: {
+        question: "Close it?",
+        onYes: "atry close r --via confirm",
+        onYesArg: "atry close r --via arg",
+        onNo: null,
+      },
+    }),
+  ).toBe("recommend: y\nquestion: Close it?\non yes: atry close r --via confirm\n");
+  expect(
+    closePreviewText({
+      schema: 1,
+      recommend: "n",
+      reasons: ["a"],
+      worktree: { remove: true },
+      decision: { question: "q", onYes: null, onYesArg: null, onNo: null },
+    }),
   )
-    .toBe("recommend: n\na\nworktree: close will remove it\n");
+    .toBe("recommend: n\na\nworktree: close will remove it\nquestion: q\non yes: none\n");
   expect(
     closePreviewText({
       schema: 1,
       recommend: "y",
       reasons: [],
       worktree: { remove: false, reason: "r" },
+      decision: { question: "q", onYes: null, onYesArg: null, onNo: null },
     }),
-  ).toBe("recommend: y\nworktree: close will keep it (r)\n");
+  ).toBe("recommend: y\nworktree: close will keep it (r)\nquestion: q\non yes: none\n");
   expect(sectionText("# T\n", "Goal")).toBe("");
   expect(sectionText("## Goal\nship\n## Next\nno\n", "Goal")).toBe("ship");
 });
@@ -398,6 +417,12 @@ test("approvePreview counts tasks from a missing, unreadable, invalid, and valid
       taskFiles: [],
       ready: false,
       missing: ["10-plan/overview.md", "10-plan/index.json"],
+      decision: {
+        question: "The plan is not ready. Missing: 10-plan/overview.md; 10-plan/index.json.",
+        onYes: null,
+        onYesArg: null,
+        onNo: null,
+      },
     });
     const index = join(runDir, "10-plan", "index.json");
     await mkdir(index, { recursive: true });

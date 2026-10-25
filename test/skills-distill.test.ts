@@ -30,3 +30,8 @@ test("v1 templates that no skill uses are gone", () => {
     expect(existsSync(new URL(path, import.meta.url)), path).toBe(false);
   }
 });
+
+test("distill rules that are not obvious carry a Why line", () => {
+  expect(text).toMatch(/Do not edit the manifest by hand\.\nWhy: /);
+  expect(text).toMatch(/makes the manifest stale\.\n {3}Why: A manifest from an open run/);
+});

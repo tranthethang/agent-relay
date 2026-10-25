@@ -40,6 +40,27 @@ The skill text calls `atry` verbs. It does not tell the agent to run files under
 After you edit a skill, install it again with `npx skills add` if you dogfood
 from a global skill directory.
 
+## Rationale lines
+
+Follow a rule whose purpose is not obvious with one line that starts with
+`Why:`. The line names the failure that the rule prevents, in 25 words or
+fewer. Do not add a `Why:` line to a plain procedure step. Under a numbered
+step, indent the line three spaces so it stays in that item.
+`test/skills-writing.test.ts` checks the word count of each `Why:` line in a
+`SKILL.md`. When a stage passes the token budget, shorten other text, not the
+rationale.
+
+## Review checklist
+
+`skills/atry-self-review/references/review-checklist.md` is the canonical
+checklist for both review skills. `npm run sync` copies it to cross-review,
+the same as `reviewer-conduct.md`, through `REVIEW_TEMPLATES` in
+`scripts/maint/sync-references.ts`. Edit the self-review copy only.
+The checklist has seven one-line items: Acceptance, tests, edge cases and
+error paths, input handling and secrets, locks and concurrency, spec and doc
+drift, and scope. Each review skill names it, so it counts toward the token
+budget of both review stages.
+
 ## Examples
 
 Each stage skill that fills a file names one example under `references/`.
@@ -64,7 +85,8 @@ over that line, so check the count after you add one.
 
 `test/skills-examples.test.ts` checks that each skill names its example, that
 the file exists, that the headings are present, and that a review example has
-one card and one `open` item.
+one card and one `open` item. A review example also needs an `## Acceptance`
+section whose lines pass the `review done` format and finding id check.
 
 ## Token snapshot
 
@@ -75,15 +97,15 @@ nearest integer. The total row is the sum of the stage rows.
 The table below is a snapshot. The command is the source. Run the command
 after you edit a skill, and replace the rows with its output.
 
-| stage        | references                                                                                                                | chars | tokens |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md, references/file-conventions.md                                                                     |  8181 |   2045 |
-| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                     | 10301 |   2575 |
-| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                    | 13995 |   3499 |
-| self-review  | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-review.md       | 16255 |   4064 |
-| cross-review | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-cross-review.md | 16356 |   4089 |
-| distill      | references/file-conventions.md                                                                                            |  4729 |   1182 |
-| total        |                                                                                                                           | 69817 |  17454 |
+| stage        | references                                                                                                                                                | chars | tokens |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: | -----: |
+| brainstorm   | references/writing.md, references/file-conventions.md                                                                                                     |  8648 |   2162 |
+| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                                                     | 10887 |   2722 |
+| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                                                    | 13799 |   3450 |
+| self-review  | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-review.md       | 17699 |   4425 |
+| cross-review | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-cross-review.md | 17724 |   4431 |
+| distill      | references/file-conventions.md                                                                                                                            |  4987 |   1247 |
+| total        |                                                                                                                                                           | 73744 |  18437 |
 
 `test/skill-tokens.test.ts` reads `maxTokens` from `evals/scenarios.json`. It
 fails when a stage reaches `maxTokens` minus 50. It also fails when the total

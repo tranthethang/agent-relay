@@ -39,19 +39,21 @@ install.
   `npm test` on macOS, Linux, and Windows, `npm run sync:check`, and both eval
   layers.
 - Sole-maintainer repo: do not add migration for v1 runs or the old bash tree.
+- This repo runs under a strict-scope policy. See the "Dogfood policy" section in
+  [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Layout
 
-| Path                               | Role                                                                                                         |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `src/`                             | CLI and core                                                                                                 |
-| `test/`                            | Vitest                                                                                                       |
-| `evals/`                           | Deterministic skill evals: a fake `atry`, recorded scenarios, and the real CLI layer; no model               |
-| `skills/<name>/`                   | Skill bundles (`SKILL.md` plus `references/`; no `scripts/`)                                                 |
-| `specs/`                           | Technical specifications, detail-design, and diagrams                                                        |
-| `specs/90-maintainer/`             | Maintainer guides. Start at [`specs/90-maintainer/00-index/index.md`](specs/90-maintainer/00-index/index.md) |
-| `scripts/maint/sync-references.ts` | Copies convention parts and partials into skills                                                             |
-| `scripts/maint/next-version.ts`    | Next `X.M.Z` version from tags and the month                                                                 |
+| Path                               | Role                                                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `src/`                             | CLI and core                                                                                                             |
+| `test/`                            | Vitest                                                                                                                   |
+| `evals/`                           | Skill evals: a fake `atry`, recorded scenarios, and the real CLI layer (no model), plus the nightly `evals/model/` layer |
+| `skills/<name>/`                   | Skill bundles (`SKILL.md` plus `references/`; no `scripts/`)                                                             |
+| `specs/`                           | Technical specifications, detail-design, and diagrams                                                                    |
+| `specs/90-maintainer/`             | Maintainer guides. Start at [`specs/90-maintainer/00-index/index.md`](specs/90-maintainer/00-index/index.md)             |
+| `scripts/maint/sync-references.ts` | Copies convention parts and partials into skills                                                                         |
+| `scripts/maint/next-version.ts`    | Next `X.M.Z` version from tags and the month                                                                             |
 
 ## Documentation and specs
 
@@ -97,6 +99,11 @@ file assertions on repos made by that helper.
 command surface and the token budget. The real layer drives the built CLI in a
 temporary repository and is the behavioral check. Neither layer calls a model,
 and neither proves that an agent followed a skill.
+
+The nightly `Model evals` workflow runs `npm run evals:model`. It reports a
+skill compliance rate per tool on four scenarios (see `evals/README.md`). It is
+not part of `npm run evals`, does not run on push or pull request, and does not
+gate a release. A pass does not prove that a skill works in every case.
 
 `npm run coverage:report` exits non-zero when a bar misses. It does not call Sonar.
 `npm run coverage:sonar` runs that report, then checks duplication when `SONAR_HOST_URL` is set.

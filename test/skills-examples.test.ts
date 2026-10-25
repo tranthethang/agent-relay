@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { expect, test } from "vitest";
+import { parseReviewJson } from "../src/core/review.js";
 import { skillText } from "./skill-text.js";
 
 type Example = {
@@ -22,12 +23,12 @@ const examples: Example[] = [
   {
     skill: "atry-self-review",
     file: "references/example-review.md",
-    headings: ["## Findings"],
+    headings: ["## Findings", "## Acceptance"],
   },
   {
     skill: "atry-cross-review",
     file: "references/example-cross-review.md",
-    headings: ["## Findings"],
+    headings: ["## Findings", "## Acceptance"],
   },
 ];
 
@@ -70,5 +71,46 @@ test("examples hold no secret and no real user data", () => {
   for (const example of examples) {
     const text = exampleText(example.skill, example.file);
     for (const pattern of forbidden) expect(text).not.toMatch(pattern);
+  }
+});
+
+test("each review example parses with the findings schema and names each id in the markdown", () => {
+  for (
+    const [skill, file] of [
+      ["atry-self-review", "references/example-review.md"],
+      ["atry-cross-review", "references/example-cross-review.md"],
+    ] as const
+  ) {
+    const text = exampleText(skill, file);
+    const jsonLine = text.split("\n").find((line) => line.startsWith("{ \"schema\""));
+    const review = parseReviewJson(JSON.parse(jsonLine ?? ""));
+    expect(review.findings.map((finding) => finding.status).sort()).toEqual(["fixed", "rejected"]);
+    for (const finding of review.findings) {
+      expect(text).toContain(`- ${finding.id}: `);
+    }
+    // The `review done` Acceptance check: one valid line per task, and known finding ids.
+    const section = text.slice(
+      text.indexOf("## Acceptance\n"),
+      text.indexOf("`", text.indexOf("## Acceptance\n")),
+    );
+    const lines = section.split("\n").filter((line) => line.startsWith("- "));
+    expect(lines.length).toBeGreaterThan(0);
+    const ids = new Set(review.findings.map((finding) => finding.id));
+    for (const line of lines) {
+      const match = /^- (T[1-9]\d*): (met|unmet(?: F[1-9]\d*)+)$/.exec(line);
+      expect(match, line).not.toBeNull();
+      for (const id of match?.[2].split(" ").slice(1) ?? []) expect(ids.has(id), line).toBe(true);
+    }
+  }
+});
+
+test("no review skill file names fixed as a count", () => {
+  for (const skill of ["atry-self-review", "atry-cross-review"]) {
+    for (
+      const file of ["SKILL.md", "references/reviewer-conduct.md", "references/file-conventions.md"]
+    ) {
+      expect(readFileSync(new URL(`../skills/${skill}/${file}`, import.meta.url), "utf8")).not
+        .toMatch(/`fixed`( and|,| count)/);
+    }
   }
 });

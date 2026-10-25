@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { type RebuildResult } from "./cache.js";
-import { exists } from "./claim.js";
+import { exists, loadPlanIndex } from "./claim.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
@@ -29,16 +29,48 @@ const openNeedSchema = z.object({
   need: z.string().min(1),
 }).strict();
 
+export const findingSchema = z.object({
+  id: z.string().regex(/^F[1-9]\d*$/),
+  severity: z.enum(["high", "medium", "low"]),
+  file: z.string().min(1).nullable(),
+  line: z.number().int().positive().nullable(),
+  status: z.enum(["fixed", "open", "rejected"]),
+  evidence: z.string().min(1),
+}).strict();
+
+export type Finding = z.infer<typeof findingSchema>;
+
 export const reviewJsonSchema = z.object({
   schema: z.literal(schemaVersion),
   kind: z.enum(reviewKinds),
   tool: toolSchema,
   model: z.string().min(1),
-  fixed: z.number().int().nonnegative(),
+  // Legacy count. A file with `fixed` and no `findings` parses as no findings.
+  fixed: z.number().int().nonnegative().optional(),
+  findings: z.array(findingSchema).optional(),
   // Removed from new review JSON. A legacy file may still carry it; ignore the value.
   tests: z.unknown().optional(),
   open: z.array(z.union([openChoiceSchema, openNeedSchema])),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.fixed !== undefined && value.findings !== undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "fixed cannot be combined with findings",
+      path: ["fixed"],
+    });
+  }
+  const seen = new Set<string>();
+  value.findings?.forEach((finding, index) => {
+    if (seen.has(finding.id)) {
+      context.addIssue({
+        code: "custom",
+        message: "duplicate finding id",
+        path: ["findings", index, "id"],
+      });
+    }
+    seen.add(finding.id);
+  });
+}).transform(({ fixed: _fixed, findings, ...rest }) => ({ ...rest, findings: findings ?? [] }));
 
 export type ReviewJson = z.infer<typeof reviewJsonSchema>;
 
@@ -112,7 +144,7 @@ export function reviewScaffold(kind: ReviewKind, tool: string, model: string): R
     kind,
     tool,
     model,
-    fixed: 0,
+    findings: [],
     open: [],
   });
   if (!parsed.success) throw new RelayError("validation", "invalid tool", "tool");
@@ -120,7 +152,7 @@ export function reviewScaffold(kind: ReviewKind, tool: string, model: string): R
 }
 
 export function reviewMarkdown(kind: ReviewKind): string {
-  return `# ${kind}\n\n## Findings\n`;
+  return `# ${kind}\n\n## Findings\n\n## Acceptance\n`;
 }
 
 export async function reviewNew(input: {
@@ -240,6 +272,8 @@ async function checkReviewDone(
   const started = lastReviewStart(loaded.events, place.stage);
   assertReviewMatchesStart(review, started);
   await assertQuestionCards(runDir, review);
+  await assertAcceptance(runDir, loaded.run.state, review);
+  await assertFindingIds(runDir, review);
   await assertPriorQuestionsDecided(runDir, loaded.events, review);
   const warnings = kind === "cross"
     ? diversityWarnings(
@@ -347,6 +381,81 @@ async function assertQuestionCards(
       `${review.rel}:open`,
     );
   }
+}
+
+const acceptanceLine = /^- (T[1-9]\d*): (met|unmet(?: F[1-9]\d*)+)$/;
+
+// Each task that is not skipped needs one `- T<n>: met` or `- T<n>: unmet F<k>` line.
+async function assertAcceptance(
+  runDir: string,
+  state: RunState,
+  review: { rel: string; value: ReviewJson },
+): Promise<void> {
+  const markdownRel = review.rel.replace(/\.json$/, ".md");
+  const markdown = await readFile(join(runDir, markdownRel), "utf8");
+  const field = `${review.rel}:## Acceptance`;
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^## Acceptance\s*$/.test(line));
+  if (start === -1) {
+    throw new RelayError("validation", "review Markdown has no ## Acceptance section", field);
+  }
+  const end = lines.findIndex((line, index) => index > start && line.startsWith("## "));
+  const section = lines.slice(start + 1, end === -1 ? undefined : end);
+  const skipped = new Set(
+    state.tasks.filter((task) => task.status === "skipped").map((task) => task.id),
+  );
+  const findingIds = new Set(review.value.findings.map((finding) => finding.id));
+  const index = await loadPlanIndex(runDir);
+  for (const task of index.tasks) {
+    if (skipped.has(task.id)) continue;
+    const matches = section.flatMap((line) => {
+      const match = acceptanceLine.exec(line.trimEnd());
+      return match !== null && match[1] === task.id ? [match] : [];
+    });
+    if (matches.length === 0) {
+      throw new RelayError(
+        "validation",
+        `## Acceptance needs one line for ${task.id}: - ${task.id}: met or - ${task.id}: unmet F<k>`,
+        `${field}:${task.id}`,
+      );
+    }
+    if (matches.length > 1) {
+      throw new RelayError(
+        "validation",
+        `## Acceptance has more than one line for ${task.id}`,
+        `${field}:${task.id}`,
+      );
+    }
+    const named = matches[0][2] === "met" ? [] : matches[0][2].split(" ").slice(1);
+    const unknown = named.filter((id) => !findingIds.has(id));
+    if (unknown.length > 0) {
+      throw new RelayError(
+        "validation",
+        `## Acceptance line for ${task.id} names ${
+          unknown.join(", ")
+        }, which is not in the review JSON findings`,
+        `${field}:${task.id}`,
+      );
+    }
+  }
+}
+
+async function assertFindingIds(
+  runDir: string,
+  review: { rel: string; value: ReviewJson },
+): Promise<void> {
+  const markdownRel = review.rel.replace(/\.json$/, ".md");
+  const markdown = await readFile(join(runDir, markdownRel), "utf8");
+  review.value.findings.forEach((finding, index) => {
+    // `F1` must not match inside `F10`.
+    if (!new RegExp(`\\b${finding.id}(?!\\d)`).test(markdown)) {
+      throw new RelayError(
+        "validation",
+        `finding ${finding.id} is missing from the review Markdown`,
+        `${review.rel}:findings[${index}].id`,
+      );
+    }
+  });
 }
 
 async function assertPriorQuestionsDecided(
@@ -475,6 +584,21 @@ async function readLatestReview(
   return { rel, value };
 }
 
+// Review JSON paths of one kind, oldest first. A missing folder has none.
+export async function listReviewPaths(runDir: string, kind: ReviewKind): Promise<string[]> {
+  const dirName = reviewPlaces[kind].dir;
+  let names: string[];
+  try {
+    names = await readdir(join(runDir, dirName));
+  } catch (error) {
+    if (isEnoent(error)) return [];
+    throw error;
+  }
+  return names.filter((name) => /^\d+\.json$/.test(name))
+    .sort((left, right) => reviewNumber(left) - reviewNumber(right))
+    .map((name) => `${dirName}/${name}`);
+}
+
 export async function readReviewDocument(runDir: string, rel: string): Promise<ReviewJson> {
   let value: unknown;
   try {
@@ -516,7 +640,7 @@ function latestCompletedReview(events: readonly EventLine[]): EventLine | undefi
   return undefined;
 }
 
-async function readReviewAt(
+export async function readReviewAt(
   runDir: string,
   stage: EventLine["stage"],
   rel: string,

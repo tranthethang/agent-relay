@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type CliResult, runCli } from "./helper.js";
 
@@ -21,6 +21,11 @@ export async function completeReview(
   const folder = kind === "self" ? "30-self-review" : "40-cross-review";
   const body = { schema: 1, kind, tool, model, fixed: 0, open: [] };
   await writeFile(join(run, folder, "01.json"), `${JSON.stringify(body)}\n`);
+  const index = JSON.parse(await readFile(join(run, "10-plan", "index.json"), "utf8")) as {
+    tasks: { id: string }[];
+  };
+  const acceptance = index.tasks.map((task) => `- ${task.id}: met\n`).join("");
+  await writeFile(join(run, folder, "01.md"), `# ${kind}\n\n## Acceptance\n\n${acceptance}`);
   await mustCli(["review", "done", run, kind], dir);
 }
 

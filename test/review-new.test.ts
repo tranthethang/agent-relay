@@ -32,7 +32,7 @@ test("atry review new writes the next pair and a full JSON scaffold", async () =
       kind: "self",
       tool: "cursor",
       model: "composer",
-      fixed: 0,
+      findings: [],
       open: [],
     });
     const second = await runCli(["review", "new", run, "self", "--tool", "codex"], dir);

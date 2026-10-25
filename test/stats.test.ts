@@ -7,6 +7,37 @@ import { plannedState, runCache, runName, seedRelay, seedRun } from "./seed.js";
 
 const tree = "a".repeat(40);
 
+function reviewJson(kind: string, findings: unknown[] | undefined): string {
+  return `${
+    JSON.stringify({
+      schema: 1,
+      kind,
+      tool: "cursor",
+      model: "unknown",
+      ...(findings === undefined ? { fixed: 2 } : { findings }),
+      open: [],
+    })
+  }\n`;
+}
+
+function finding(id: string, severity: string, status: string): Record<string, unknown> {
+  return { id, severity, status, file: null, line: null, evidence: "e" };
+}
+
+async function seedReviews(runDir: string): Promise<void> {
+  await mkdir(join(runDir, "30-self-review"), { recursive: true });
+  await mkdir(join(runDir, "40-cross-review"), { recursive: true });
+  await writeFile(
+    join(runDir, "30-self-review", "01.json"),
+    reviewJson("self", [finding("F1", "high", "open"), finding("F2", "low", "fixed")]),
+  );
+  await writeFile(join(runDir, "30-self-review", "02.json"), reviewJson("self", undefined));
+  await writeFile(
+    join(runDir, "40-cross-review", "01.json"),
+    reviewJson("cross", [finding("F1", "medium", "open")]),
+  );
+}
+
 function at(second: number, fields: Record<string, unknown>): Record<string, unknown> {
   const ts = new Date(Date.parse("2026-10-17T00:00:00.000Z") + second * 1000).toISOString();
   return { schema: 1, ts, ...fields };
@@ -182,5 +213,38 @@ test("stats rejects an invalid --since date with exit 2", async () => {
     expect(result.stderr).toContain("invalid --since date: not-a-date");
     expect(() => parseStatsSince("2026-13-01")).toThrow("invalid --since date");
     expect(parseStatsSince("2026-10-01").toISOString()).toBe("2026-10-01T00:00:00.000Z");
+  });
+});
+
+test("stats sums findings over every review of the run", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const runDir = await seedRun(relay, runName, runCache(plannedState), [
+      at(0, { stage: "run", action: "created" }),
+    ]);
+    await seedReviews(runDir);
+    const result = await statsForRun(runDir);
+    expect(result.runs[0]?.findings).toEqual({
+      high: 1,
+      medium: 1,
+      low: 1,
+      open: 2,
+      fixed: 1,
+      rejected: 0,
+      highOpen: 1,
+    });
+    expect(statsText(result)).toMatch(/drift=0 findings=3 high-open=1 fixed=1\n$/);
+    const keys = Object.keys(result.runs[0] ?? {});
+    expect(keys.at(-1)).toBe("findings");
+  });
+});
+
+test("stats counts zero findings when there are no reviews", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const runDir = await seedRun(relay, runName, runCache(plannedState), [
+      at(0, { stage: "run", action: "created" }),
+    ]);
+    expect((await statsForRun(runDir)).runs[0]?.findings).toMatchObject({ open: 0, highOpen: 0 });
   });
 });

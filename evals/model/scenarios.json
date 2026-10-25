@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "scenarios": [
+    {
+      "name": "brainstorm-readonly",
+      "skill": "atry-brainstorm",
+      "prompt": "Use the atry-brainstorm skill. Discuss whether this repository's greeting message should be configurable. Do not edit any file and do not create a run.",
+      "fixture": "clean",
+      "required": [],
+      "forbidden": [{ "stage": "*", "action": "created" }],
+      "fileCheck": "clean-tree"
+    },
+    {
+      "name": "plan-small",
+      "skill": "atry-plan",
+      "prompt": "Use the atry-plan skill. Plan one small change: add a goodbye function next to hello in src/greet.ts. Finish the plan and stop. Do not approve it.",
+      "fixture": "small-file",
+      "required": [
+        { "stage": "run", "action": "created" },
+        { "stage": "plan", "action": "started" },
+        { "stage": "plan", "action": "completed" }
+      ],
+      "forbidden": [{ "stage": "plan", "action": "approved" }],
+      "fileCheck": "none"
+    },
+    {
+      "name": "implement-approved",
+      "skill": "atry-implement",
+      "prompt": "Use the atry-implement skill on the run at {run}. yes. Finish every task, then finish the implement stage. Do not close the run.",
+      "fixture": "approved-two-tasks",
+      "required": [
+        { "stage": "implement", "action": "started" },
+        { "stage": "implement", "action": "task-done" },
+        { "stage": "implement", "action": "task-done" },
+        { "stage": "implement", "action": "completed" }
+      ],
+      "forbidden": [{ "stage": "*", "action": "closed" }],
+      "fileCheck": "none"
+    },
+    {
+      "name": "self-review",
+      "skill": "atry-self-review",
+      "prompt": "Use the atry-self-review skill on the run at {run}. Record one self-review and finish it. Do not close the run.",
+      "fixture": "implemented",
+      "required": [
+        { "stage": "self-review", "action": "started" },
+        { "stage": "self-review", "action": "completed" }
+      ],
+      "forbidden": [{ "stage": "*", "action": "closed" }],
+      "fileCheck": "none"
+    }
+  ]
+}

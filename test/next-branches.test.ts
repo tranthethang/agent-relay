@@ -141,11 +141,36 @@ test("distillRun sorts entries from any readdir order and skips non-files", asyn
     for (const name of ["a.md", "b.md", "c.md", "d.md", ".keep", ".x.tmp"]) {
       await writeFile(join(dir, name), name);
     }
+    // The manifest header reads a real run.json and events.jsonl.
+    await writeFile(
+      join(dir, "run.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          id: "1792849354",
+          ymd: "20261024",
+          slug: "sorted-run",
+          title: "Sorted run",
+          base: "abc",
+          state: { lifecycle: "planned", stage: "plan", approved: false, tasks: [] },
+        })
+      }\n`,
+    );
+    await writeFile(join(dir, "events.jsonl"), "");
     await mkdir(join(dir, "locks"));
     await writeFile(join(dir, "locks", "run.lock"), "lock");
     await mkdir(join(dir, "sub", "locks"), { recursive: true });
     await writeFile(join(dir, "sub", "locks", "e.md"), "e");
-    const expected = [".keep", "a.md", "b.md", "c.md", "d.md", "sub/locks/e.md"];
+    const expected = [
+      ".keep",
+      "a.md",
+      "b.md",
+      "c.md",
+      "d.md",
+      "events.jsonl",
+      "run.json",
+      "sub/locks/e.md",
+    ];
     fsHooks.reverse = true;
     fsHooks.fake = true;
     try {
@@ -243,9 +268,9 @@ test("nextText prints state and marks developer decisions", () => {
   expect(result.actions[1]?.read).toEqual(["10-plan/overview.md", "10-plan/T2.md"]);
   expect(nextText(result)).toBe(
     "state: self-review/reviewing approved=true\n"
-      + `recommendation: atry close ${id}\n`
+      + `recommendation: atry close ${id} --preview\n`
       + "actions:\n"
-      + `- atry close ${id} — The run is ready for a developer close decision. (developer decision)\n`
+      + `- atry close ${id} --preview — The run is ready for a developer close decision. (developer decision)\n`
       + `- atry task start ${id} T2 — An implement task is still open.\n`,
   );
 });
@@ -261,4 +286,67 @@ test("explainNext gives a reason for each lifecycle command", () => {
   expect(explainNext(`atry review decide ${id} 1`).reason).toBe(
     "A review question is still open.",
   );
+});
+
+test("each action kind gets a question only when a person decides", () => {
+  const approve = explainNext(`atry approve ${id}`).actions[0];
+  expect(approve).toMatchObject({
+    kind: "approve",
+    command: `atry approve ${id} --preview`,
+    question: "Read the decision in the preview. Ask the developer to answer y or n.",
+  });
+  expect(explainNext(`atry approve ${id} --preview`).actions[0]?.command).toBe(
+    `atry approve ${id} --preview`,
+  );
+  expect(explainNext(`atry close ${id}`).actions[0]).toMatchObject({
+    kind: "close",
+    command: `atry close ${id} --preview`,
+    question: "Read the decision in the preview. Ask the developer to answer y or n.",
+  });
+  expect(explainNext(`atry review decide ${id} 1`).actions[0]?.question).toBe(
+    "Ask the developer to answer the open review questions.",
+  );
+  const commands: [string, string][] = [
+    [`atry plan new ${id}`, "plan-new"],
+    [`atry plan done ${id}`, "plan-done"],
+    [`atry stage start ${id} implement`, "stage-start"],
+    [`atry stage done ${id} implement`, "stage-done"],
+    [`atry task start ${id} T1`, "task-start"],
+    [`atry integrate ${id} T1`, "integrate"],
+    [`atry review new ${id} self`, "review-new"],
+    [`atry review new ${id} cross`, "review-new"],
+    [`atry review done ${id} self`, "review-done"],
+    [`atry review done ${id} cross`, "review-done"],
+  ];
+  for (const [command, kind] of commands) {
+    const action = explainNext(command).actions[0];
+    expect(action?.kind).toBe(kind);
+    expect(action).not.toHaveProperty("question");
+    expect(action?.needsHuman).toBe(false);
+    if (kind === "stage-start" || kind === "stage-done") {
+      expect(action?.command).toBe(`${command} --tool <tool>`);
+    }
+  }
+  expect(explainNext(`atry review done ${id} cross`).actions[0]?.command).toBe(
+    `atry review done ${id} cross`,
+  );
+});
+
+test("review done asks to run the test command only when one is set", () => {
+  const command = `atry review done ${id} self`;
+  const withTests = explainNextWithChoices(command, reviewing, [command], "npm test");
+  expect(withTests.actions[0]).toMatchObject({
+    kind: "review-done",
+    command: `${command} --run-tests`,
+    needsHuman: true,
+    question: "Run npm test and record the result?",
+    args: { review: "self", run: id },
+  });
+  expect(withTests.needsHuman).toBe(true);
+  const without = explainNextWithChoices(command, reviewing, [command]);
+  expect(without.actions[0]?.command).toBe(command);
+  expect(without.actions[0]?.needsHuman).toBe(false);
+  expect(without.actions[0]).not.toHaveProperty("question");
+  const close = explainNextWithChoices(`atry close ${id}`, reviewing, [`atry close ${id}`], "x");
+  expect(close.actions[0]?.command).toBe(`atry close ${id} --preview`);
 });

@@ -18,6 +18,7 @@
 - Requires option `--via <confirm|arg>`.
 - Reads `10-plan/overview.md` and `10-plan/index.json`. It refuses with exit 4, and records no event, when the index is missing, the index has zero tasks, or a task file has an empty `## Detail` or `## Acceptance` section.
 - Supports `--preview` to print the goal, non-goals, constraints, decisions, each task file, and `ready: yes` or `ready: no` with the missing items. The preview records no event and does not throw for an incomplete plan.
+- The preview adds `decision` (`{ question: string, onYes: string | null, onYesArg: string | null, onNo: null }`) and prints `question:` and `on yes:` lines after the current lines. `onYes` is `atry approve <run> --via confirm` and `onYesArg` is the same command with `--via arg`. Both are `null` when the plan is not ready, and `question` lists the missing items.
 - `atry stage start <run> implement` applies the same readiness check.
 - Does not apply the eight-task limit. `atry plan done` applies it when `strict.plan` is true.
 - Records actor provenance (`agent-env` when running in recognized agent environments, otherwise `unknown`).
@@ -55,6 +56,10 @@
 
 6. **Preview**:
    - `atry close <run> --preview` prints the close readiness status and diagnostic reasons without closing the run.
+   - The preview adds `decision` (`{ question: string, onYes: string | null, onYesArg: string | null, onNo: null }`) and prints `question:` and `on yes:` lines after the current lines.
+   - `onYes` is `atry close <run> --via confirm`. It adds `--ack-warnings` when the preview recommends `n` and `strict.reviewIntegrity` is `false`. It adds `--ack-open` when the preview lists `open items`. `onYesArg` is the same command with `--via arg`.
+   - `onYes` and `onYesArg` are `null`, and `question` says why, when `strict.reviewIntegrity` is `true` and the preview recommends `n`, and when a cross-review delta has no later self-review.
+   - `--ack-fixes` and `--waive-review` never appear in `onYes`.
 
 7. **Worktree Removal**:
    - When a run has a worktree record, `close` checks if the run branch is merged and the working tree is clean.

@@ -189,6 +189,11 @@
         },
         {
           "argv": ["review", "done", "1792660551", "self", "--run-tests"],
+          "exit": 2,
+          "stderr": "30-self-review/01.json:## Acceptance:T1: ## Acceptance needs one line for T1: - T1: met or - T1: unmet F<k>\n"
+        },
+        {
+          "argv": ["review", "done", "1792660551", "self", "--run-tests"],
           "exit": 0,
           "stdout": "review: 30-self-review/01.md\nstage: self-review\naction: completed\nlifecycle: reviewing\nhead: 4f96549\nsize: 3 120 4\n"
         }
@@ -225,12 +230,22 @@
       "summary": "A soft close shows the warning, then records the acknowledged close.",
       "steps": [
         {
-          "argv": ["close", "1792660551", "--preview"],
+          "argv": ["close", "1792660551", "--preview", "--json"],
           "exit": 0,
-          "stdout": "recommend: n\nopen items\n"
+          "stdout": {
+            "schema": 1,
+            "recommend": "n",
+            "reasons": ["open items"],
+            "decision": {
+              "question": "open items. Close 1792660551?",
+              "onYes": "atry close 1792660551 --via confirm --ack-warnings --ack-open",
+              "onYesArg": "atry close 1792660551 --via arg --ack-warnings --ack-open",
+              "onNo": null
+            }
+          }
         },
         {
-          "argv": ["close", "1792660551", "--via", "confirm", "--ack-warnings"],
+          "argv": ["close", "1792660551", "--via", "confirm", "--ack-warnings", "--ack-open"],
           "exit": 0,
           "stdout": "lifecycle: closed\n"
         }

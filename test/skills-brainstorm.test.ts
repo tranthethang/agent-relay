@@ -12,3 +12,9 @@ test("brainstorm stays read-only until the user allows notes", () => {
   expect(text).not.toContain("atry run new");
   expect(assertNoShellSnippet(text)).toBeUndefined();
 });
+
+test("brainstorm rules that are not obvious carry a Why line", () => {
+  expect(text).toMatch(/- Run `atry approve` or `atry close`\.\n\nWhy: /);
+  expect(text).toMatch(/A vague reply is not permission\. Ask what the user wants next\.\nWhy: /);
+  expect(text).toMatch(/Do not start that skill in the same turn\.\nWhy: /);
+});

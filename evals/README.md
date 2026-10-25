@@ -1,20 +1,21 @@
 # Skill evals
 
-The eval harness checks two different things. Neither layer calls a model.
+The eval harness has three layers. The fake and real layers do not call a model.
+The model-backed layer does, and it runs nightly, not on a push.
 
 | Layer        | Command                         | What it proves                                                                | Runs in CI                        |
 | ------------ | ------------------------------- | ----------------------------------------------------------------------------- | --------------------------------- |
 | Fake         | `npm run evals -- --layer fake` | The recorded command surface, JSON shape, step count, and skill token budget. | Yes, on macOS, Linux, and Windows |
 | Real         | `npm run evals -- --layer real` | The built CLI's exit codes, JSON fields, file contents, and git state.        | Yes, on macOS, Linux, and Windows |
-| Model-backed | by hand                         | A person compares the commands an agent issues with the recorded steps.       | No                                |
+| Model-backed | `npm run evals:model`           | A compliance rate: how often an agent's events match a trajectory.            | Nightly report, never a gate      |
 
 `npm run evals` runs the fake layer and the real layer, in that order. A real
 failure is never hidden behind a fake pass: the summary counts both layers and
 the command exits 1 when either layer has a failure.
 
 The real layer is the behavioral evidence for this repository. It does not prove
-that a model reads a skill and makes the same decision. That check is still
-manual.
+that a model reads a skill and makes the same decision. The model-backed layer
+samples that decision. See below.
 
 ## Files
 
@@ -24,6 +25,7 @@ manual.
 | `fake-atry.ts`   | Stands in for `atry`. Prints the response of one step and records the call.   |
 | `real.ts`        | Real scenarios. Creates temp repositories and drives `node dist/atry.js`.     |
 | `run.ts`         | Single entry point. Runs the selected layers and prints one combined summary. |
+| `model/`         | The model-backed layer: scenarios, fixtures, runners, matcher, and report.    |
 
 ## Run
 
@@ -54,7 +56,10 @@ including a missing `dist/atry.js` or `--drift` without the real layer.
 
 1. **Command sequence.** Each step runs through the fake. The fake refuses an
    argv that differs from the recorded step. The skill bundle must also name
-   the command, as `atry <verb>`, in `SKILL.md`.
+   the command, as `atry <verb>`, in `SKILL.md`. A verb that `next` or a preview
+   `decision` hands out (`approve`, `close`, `review new`, `review done`,
+   `stage start`, `stage done`, `task start`, `integrate`) is exempt. For those
+   verbs the skill must hold the synced `<!-- BEGIN LOOP -->` block instead.
 2. **JSON schema.** An object response must set `schema` to `1`. It must also
    hold the keys that its command returns, for example `next` needs `actions`
    and `command`.
@@ -79,6 +84,42 @@ It runs `node dist/atry.js` with `ATRY_DEV=1` and deletes both directories in a
 `--drift` flips one recorded expectation on purpose, so the real layer must fail.
 The test suite uses it to show that a behavior drift is caught rather than only a
 missing command.
+
+## Model-backed layer
+
+`npm run evals:model` drives `claude -p` and `codex exec` through four
+scenarios. It is not part of `npm run evals`. It needs `npm run build` first.
+
+| Scenario              | Fixture                      | Required events                                         | Forbidden          |
+| --------------------- | ---------------------------- | ------------------------------------------------------- | ------------------ |
+| `brainstorm-readonly` | clean repo                   | none                                                    | a run, a tree edit |
+| `plan-small`          | repo with one small file     | run created, plan started, plan completed               | plan approved      |
+| `implement-approved`  | approved run with two tasks  | implement started, two `task-done`, implement completed | run closed         |
+| `self-review`         | run with implement completed | self-review started, self-review completed              | run closed         |
+
+Each run builds a temp git repo, installs the skills from this checkout with
+`atry skills install --dir`, and puts a shim for `dist/atry.js` first on `PATH`.
+The agent gets a 15 minute timeout. A timeout is a fail.
+
+A trajectory is an ordered list of required `{ stage, action }` pairs plus a
+list of forbidden pairs. A scenario passes when the required pairs appear in
+`events.jsonl` in order as a subsequence, no forbidden pair appears, and the
+scenario's file check holds. The report also gives matched over required pairs,
+so a partial run shows progress. `*` matches any stage.
+
+The rate per tool is passed scenarios divided by scenarios that ran. A tool with
+no binary on `PATH` or an empty API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`)
+is `skipped`. A skipped row is not a pass and is left out of `ran`.
+
+```bash
+npm run build
+npm run evals:model -- --tool claude-code --scenario plan-small --repeat 3 --out /tmp/model-report
+```
+
+The output is `report.json`, `report.md`, and each run's `events/<tool>/*.jsonl`.
+The exit code is 0 when the harness ran, whatever the rate. Exit 2 is a usage
+error or a missing `dist/atry.js`. The `Model evals` workflow runs it nightly at
+`0 19 * * *` UTC and on `workflow_dispatch`. It is not in CI on push or pull request.
 
 ## Add a fake scenario
 
@@ -114,9 +155,10 @@ command.
   It still does not prove that a model reads the skill or makes a decision.
 - A step is data. Keep it equal to what the real CLI prints. A stale response
   passes the checks and teaches the wrong contract.
-- The model-backed layer runs by hand. A person installs the skills, asks the
-  tool to run one scenario, and compares the commands with the recorded steps.
-  CI cannot run it and does not claim to.
+- The model-backed layer is a sample. A model is not deterministic, four
+  scenarios are few, and a pass shows only that the recorded events matched the
+  trajectory on that run. It does not prove a skill works in every case, and it
+  does not gate a release.
 - `npm test -- test/evals.test.ts` runs the fake layer, checks that a wrong
   command and a wrong schema fail, and checks that `--drift` fails the real
   layer.

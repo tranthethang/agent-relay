@@ -1,10 +1,17 @@
 import { execFile, spawn } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
-import { cliPath, gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
+import {
+  cliPath,
+  ensurePlanReady,
+  gitCommit,
+  reachReview,
+  runCli,
+  withTempGitRepo,
+} from "./helper.js";
 import { createRun } from "./plan-helper.js";
 
 const execFileAsync = promisify(execFile);
@@ -24,7 +31,7 @@ test("atry review done validates the latest JSON and records head and size", asy
           kind: "self",
           tool: "codex",
           model: "gpt-5.4",
-          fixed: 1,
+          findings: [],
           open: [],
         })
       }\n`,
@@ -176,7 +183,7 @@ test("atry review done refuses a tool changed after review new", async () => {
           kind: "self",
           tool: "codex",
           model: "m1",
-          fixed: 0,
+          findings: [],
           open: [],
         })
       }\n`,
@@ -195,7 +202,7 @@ test("atry review done requires column-zero question cards to match open items",
     await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
     await writeFile(
       join(run, "30-self-review", "01.md"),
-      "# self\n\n  - Q1: indented\n- Q2: column zero\n",
+      "# self\n\n  - Q1: indented\n- Q2: column zero\n\n## Acceptance\n",
     );
     await writeFile(
       join(run, "30-self-review", "01.json"),
@@ -205,7 +212,7 @@ test("atry review done requires column-zero question cards to match open items",
           kind: "self",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [],
         })
       }\n`,
@@ -221,7 +228,7 @@ test("atry review done requires column-zero question cards to match open items",
           kind: "self",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [{ q: "Column-zero card", need: "one open item" }],
         })
       }\n`,
@@ -294,7 +301,7 @@ test("atry close reads the completed review, not a later unfinished scaffold", a
     await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
     await writeFile(
       join(run, "30-self-review", "01.md"),
-      "# self\n\n- Q1: Keep it?\n  - Need: usage data\n",
+      "# self\n\n- Q1: Keep it?\n  - Need: usage data\n\n## Acceptance\n",
     );
     await writeFile(
       join(run, "30-self-review", "01.json"),
@@ -304,7 +311,7 @@ test("atry close reads the completed review, not a later unfinished scaffold", a
           kind: "self",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [{ q: "Keep it?", need: "usage data" }],
         })
       }\n`,
@@ -338,7 +345,7 @@ test("atry review done names the invalid field and a missing review", async () =
           kind: "cross",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [],
         })
       }\n`,
@@ -478,5 +485,154 @@ test("atry review done refuses when the review stage changed during tests", asyn
     const events = await selfReviewEvents(run);
     expect(events.filter((event) => event.action === "started")).toHaveLength(2);
     expect(events.some((event) => event.action === "completed")).toBe(false);
+  });
+});
+
+test("atry review done refuses a finding id missing from the Markdown and records no event", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-finding-id");
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    await writeFile(
+      join(run, "30-self-review", "01.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          kind: "self",
+          tool: "cursor",
+          model: "unknown",
+          findings: [{
+            id: "F1",
+            severity: "high",
+            file: null,
+            line: null,
+            status: "open",
+            evidence: "x",
+          }],
+          open: [],
+        })
+      }\n`,
+    );
+    const before = await readFile(join(run, "events.jsonl"), "utf8");
+    const done = await runCli(["review", "done", run, "self"], dir);
+    expect(done.code).toBe(2);
+    expect(done.stderr).toContain("30-self-review/01.json:findings[0].id");
+    expect(await readFile(join(run, "events.jsonl"), "utf8")).toBe(before);
+    await writeFile(
+      join(run, "30-self-review", "01.md"),
+      "# self\n\n- F10: x is null\n\n## Acceptance\n",
+    );
+    const prefix = await runCli(["review", "done", run, "self"], dir);
+    expect(prefix.code).toBe(2);
+    expect(prefix.stderr).toContain("30-self-review/01.json:findings[0].id");
+    await writeFile(
+      join(run, "30-self-review", "01.md"),
+      "# self\n\n- F1: x is null\n\n## Acceptance\n",
+    );
+    const ok = await runCli(["review", "done", run, "self"], dir);
+    expect(ok.code, ok.stderr).toBe(0);
+  });
+});
+
+async function reachReviewWithTasks(run: string, dir: string): Promise<void> {
+  const tasks = ["T1", "T2", "T3"].map((id) => ({
+    id,
+    title: id,
+    deps: [],
+    files: [`src/${id}.ts`],
+    path: `10-plan/${id}.md`,
+  }));
+  await writeFile(
+    join(run, "10-plan", "index.json"),
+    `${JSON.stringify({ schema: 1, tasks })}\n`,
+  );
+  await ensurePlanReady(run);
+  for (
+    const args of [
+      ["approve", run, "--via", "arg"],
+      ["stage", "start", run, "implement", "--tool", "cursor"],
+      ["task", "start", run, "T1"],
+      ["task", "done", run, "T1"],
+      ["task", "start", run, "T2"],
+      ["task", "done", run, "T2"],
+      ["task", "skip", run, "T3", "--reason", "fixture"],
+      ["stage", "done", run, "implement", "--tool", "cursor"],
+    ]
+  ) {
+    const result = await runCli(args, dir);
+    expect(result.code, result.stderr).toBe(0);
+  }
+}
+
+test("atry review done checks the Acceptance section for each task that is not skipped", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-acceptance");
+    await mkdir(join(run, "10-plan"), { recursive: true });
+    await reachReviewWithTasks(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    const finding = {
+      id: "F1",
+      severity: "medium",
+      file: null,
+      line: null,
+      status: "open",
+      evidence: "x",
+    };
+    await writeFile(
+      join(run, "30-self-review", "01.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          kind: "self",
+          tool: "cursor",
+          model: "unknown",
+          findings: [finding],
+          open: [],
+        })
+      }\n`,
+    );
+    const markdown = join(run, "30-self-review", "01.md");
+    const before = await readFile(join(run, "events.jsonl"), "utf8");
+    const refused = async (body: string, field: string, message: string) => {
+      await writeFile(markdown, `# self\n\n## Findings\n\n- F1: x\n\n${body}`);
+      const done = await runCli(["review", "done", run, "self"], dir);
+      expect(done.code, done.stderr).toBe(2);
+      expect(done.stderr).toContain(`30-self-review/01.json:${field}: `);
+      expect(done.stderr).toContain(message);
+      expect(await readFile(join(run, "events.jsonl"), "utf8")).toBe(before);
+    };
+
+    await refused("", "## Acceptance", "no ## Acceptance section");
+    await refused("## Acceptance\n", "## Acceptance:T1", "needs one line for T1");
+    await refused("## Acceptance\n\n- T1: met\n", "## Acceptance:T2", "needs one line for T2");
+    await refused(
+      "## Acceptance\n\n- T1: met\n\n## Notes\n\n- T2: met\n",
+      "## Acceptance:T2",
+      "needs one line for T2",
+    );
+    await refused(
+      "## Acceptance\n\n- T1: unmet\n- T2: met\n",
+      "## Acceptance:T1",
+      "needs one line for T1",
+    );
+    await refused(
+      "## Acceptance\n\n- T1: met\n- T1: met\n- T2: met\n",
+      "## Acceptance:T1",
+      "more than one line for T1",
+    );
+    await refused(
+      "## Acceptance\n\n- T1: met\n- T2: unmet F1 F2\n",
+      "## Acceptance:T2",
+      "names F2, which is not in the review JSON findings",
+    );
+
+    await writeFile(
+      markdown,
+      "# self\n\n## Findings\n\n- F1: x\n\n## Acceptance\n\n- T1: met\n- T2: unmet F1\n",
+    );
+    const done = await runCli(["review", "done", run, "self"], dir);
+    expect(done.code, done.stderr).toBe(0);
   });
 });

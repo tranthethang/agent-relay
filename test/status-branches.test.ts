@@ -69,6 +69,7 @@ function detailWith(overrides: Partial<StatusDetail>): StatusDetail {
     reviews: baseReviews,
     actors: {},
     drift: 0,
+    findings: { open: 0, highOpen: 0 },
     ...overrides,
   };
 }

@@ -22,3 +22,10 @@ test("plan uses run new, plan new, and plan done", () => {
   expect(text).not.toContain("plan.md");
   expect(assertNoShellSnippet(text)).toBeUndefined();
 });
+
+test("plan rules that are not obvious carry a Why line", () => {
+  expect(text).toMatch(/Stop when the draft has more than one goal\.\nWhy: /);
+  expect(text).toMatch(/Use at most eight tasks\.\nWhy: /);
+  expect(text).toMatch(/`files` lists the repo paths that the task will edit\.\nWhy: /);
+  expect(text).toMatch(/Do not invent a ref\.\nWhy: /);
+});

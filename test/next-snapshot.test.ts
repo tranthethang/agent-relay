@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { expect, test } from "vitest";
 import { type EventLine } from "../src/core/event.js";
 import { gitCommit, runCli, withTempDir, withTempGitRepo } from "./helper.js";
@@ -108,7 +108,7 @@ test("atry next --json snapshots each lifecycle", async () => {
                 "run": "1792208701",
                 "stage": "implement",
               },
-              "command": "atry stage start 1792208701 implement",
+              "command": "atry stage start 1792208701 implement --tool <tool>",
               "kind": "stage-start",
               "needsHuman": false,
               "read": [
@@ -118,14 +118,14 @@ test("atry next --json snapshots each lifecycle", async () => {
               "reason": "Implement has not started.",
             },
           ],
-          "command": "atry stage start 1792208701 implement",
+          "command": "atry stage start 1792208701 implement --tool <tool>",
           "needsHuman": false,
           "read": [
             "10-plan/overview.md",
             "10-plan/index.json",
           ],
           "reason": "Implement has not started.",
-          "recommendation": "atry stage start 1792208701 implement",
+          "recommendation": "atry stage start 1792208701 implement --tool <tool>",
           "schema": 1,
           "state": {
             "approved": true,
@@ -169,7 +169,7 @@ test("atry next --json snapshots each lifecycle", async () => {
                 "review": "self",
                 "run": "1792208703",
               },
-              "command": "atry review new 1792208703 self",
+              "command": "atry review new 1792208703 self --tool <tool>",
               "kind": "review-new",
               "needsHuman": false,
               "read": [
@@ -179,14 +179,14 @@ test("atry next --json snapshots each lifecycle", async () => {
               "reason": "No self-review covers the current tree.",
             },
           ],
-          "command": "atry review new 1792208703 self",
+          "command": "atry review new 1792208703 self --tool <tool>",
           "needsHuman": false,
           "read": [
             "10-plan/overview.md",
             "20-implement/",
           ],
           "reason": "No self-review covers the current tree.",
-          "recommendation": "atry review new 1792208703 self",
+          "recommendation": "atry review new 1792208703 self --tool <tool>",
           "schema": 1,
           "state": {
             "approved": true,
@@ -259,7 +259,8 @@ test("approve and close previews snapshot their prompt text", async () => {
     );
     const approveText = await runCli(["approve", run.path, "--preview"], dir);
     const approveJson = await runCli(["approve", run.path, "--preview", "--json"], dir);
-    expect(approveText.stdout).toMatchInlineSnapshot(`
+    const named = (text: string) => text.replaceAll(basename(run.path), "<run>");
+    expect(named(approveText.stdout)).toMatchInlineSnapshot(`
       "Goal:
       Ship the preview.
 
@@ -275,11 +276,19 @@ test("approve and close previews snapshot their prompt text", async () => {
       tasks: 1
       - T1: One
       ready: yes
+      question: Approve the plan for <run> with 1 tasks?
+      on yes: atry approve <run> --via confirm
       "
     `);
-    expect(JSON.parse(approveJson.stdout)).toMatchInlineSnapshot(`
+    expect(JSON.parse(named(approveJson.stdout))).toMatchInlineSnapshot(`
       {
         "constraints": "",
+        "decision": {
+          "onNo": null,
+          "onYes": "atry approve <run> --via confirm",
+          "onYesArg": "atry approve <run> --via arg",
+          "question": "Approve the plan for <run> with 1 tasks?",
+        },
         "decisions": "- Keep the headings exact.",
         "goal": "Ship the preview.",
         "missing": [],
@@ -304,13 +313,21 @@ test("approve and close previews snapshot their prompt text", async () => {
 
     const closeText = await runCli(["close", run.path, "--preview"], dir);
     const closeJson = await runCli(["close", run.path, "--preview", "--json"], dir);
-    expect(closeText.stdout).toMatchInlineSnapshot(`
+    expect(named(closeText.stdout)).toMatchInlineSnapshot(`
       "recommend: n
       missing self review
+      question: missing self review. Close <run>?
+      on yes: atry close <run> --via confirm --ack-warnings
       "
     `);
-    expect(JSON.parse(closeJson.stdout)).toMatchInlineSnapshot(`
+    expect(JSON.parse(named(closeJson.stdout))).toMatchInlineSnapshot(`
       {
+        "decision": {
+          "onNo": null,
+          "onYes": "atry close <run> --via confirm --ack-warnings",
+          "onYesArg": "atry close <run> --via arg --ack-warnings",
+          "question": "missing self review. Close <run>?",
+        },
         "reasons": [
           "missing self review",
         ],
@@ -333,10 +350,20 @@ test("approve and close previews snapshot their prompt text", async () => {
       expect(result.code, result.stderr).toBe(0);
     }
     await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+    await writeFile(
+      join(run.path, "30-self-review", "01.md"),
+      "# self\n\n## Findings\n\n## Acceptance\n\n- T1: met\n",
+    );
     await runCli(["review", "done", run.path, "self"], dir);
     const ready = await runCli(["close", run.path, "--preview", "--json"], dir);
-    expect(JSON.parse(ready.stdout)).toMatchInlineSnapshot(`
+    expect(JSON.parse(named(ready.stdout))).toMatchInlineSnapshot(`
       {
+        "decision": {
+          "onNo": null,
+          "onYes": "atry close <run> --via confirm",
+          "onYesArg": "atry close <run> --via arg",
+          "question": "Close <run>?",
+        },
         "reasons": [],
         "recommend": "y",
         "schema": 1,

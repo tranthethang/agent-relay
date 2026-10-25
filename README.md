@@ -106,8 +106,10 @@ npm run evals
 ```
 
 `npm run evals` runs a fake layer and a real layer. Neither calls a model, so
-neither proves that an agent followed a skill. Details, coverage bars, and the
-manual model-backed check are in
+neither proves that an agent followed a skill. A separate nightly workflow runs
+`npm run evals:model`, which drives `claude` and `codex` through four scenarios
+and reports a compliance rate. That rate is a sample and does not gate a release.
+Details, coverage bars, and the model-backed layer are in
 [`testing.md`](specs/90-maintainer/20-testing/testing.md).
 
 - Contributor rules: [`AGENTS.md`](AGENTS.md), [`CONTRIBUTING.md`](CONTRIBUTING.md).

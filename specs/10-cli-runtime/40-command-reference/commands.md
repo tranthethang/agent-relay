@@ -69,7 +69,10 @@ only when you dogfood a build from this repo.
 ### Stats and doctor
 
 `atry stats` reads `events.jsonl` across runs. `atry stats <run>` reads one run.
-A row reports stage time, review rounds, waivers, failed tests, and drift.
+A row reports stage time, review rounds, waivers, failed tests, drift, and findings.
+The text row ends with `findings=<total> high-open=<n> fixed=<n>`. The JSON row ends with
+`findings: { high, medium, low, open, fixed, rejected, highOpen }`, summed over every review of the run.
+A review with no `findings` counts as zero.
 Stage time is a number of milliseconds. The command does not write an event.
 `--since <ISO date>` keeps a run with at least one event at or after the date.
 `--failed` keeps a run with at least one failed test. Both filters combine, and
@@ -82,6 +85,9 @@ when an installed bundle is stale, or when `PATH` runs a different base version
 from the running CLI.
 A missing policy file passes and reports `default`.
 
+`atry status <run>` ends with `findings: <open> open, <highOpen> high open`, counted from
+the latest review of each kind. The JSON detail adds `findings: { open, highOpen }`.
+
 ### Next and previews
 
 `atry next <run>` prints the next command. `--json` adds `command`, `reason`, `needsHuman`, and `read`.
@@ -92,7 +98,17 @@ when the plan is complete.
 `atry approve <run> --preview` prints Goal, Non-goals, Constraints, Decisions,
 each task file, and `ready: yes` or `ready: no` with the missing items.
 `atry close <run> --preview` prints `recommend: y` or `recommend: n` and the reasons.
+Each preview then prints `question: <question>` and `on yes: <command or none>`.
+With `--json`, each preview adds `decision`: `{ question: string, onYes: string | null,
+onYesArg: string | null, onNo: null }`. `onYes` is the command with `--via confirm`,
+and `onYesArg` is the same command with `--via arg`. Both are `null` when the run
+must not go on, and `question` says why.
 Neither preview records an event.
+In `next --json`, an action adds `question` (string, only when `needsHuman` is true).
+Its `approve` and `close` commands end in `--preview`. `stage start`, `stage done`, and
+`review new` carry `--tool <tool>`. A cross-review start also carries `--model <model>`.
+A `review-done` action adds `--run-tests` and sets `needsHuman` when the base policy
+sets `testCommand`.
 
 ### Plan and approval gates
 
@@ -104,6 +120,23 @@ The skills ask before they run those verbs. Implement start refuses when the
 plan is not approved or is no longer complete. Close checks the required
 reviews for its policy, the latest completed review tree against the current
 code tree, open questions, and changes made during the latest review.
+
+### Review done gates
+
+`atry review done` checks the latest review pair before it records an event.
+Each refusal below exits 2, records no event, and prints the field path.
+`<review>` is the review path in the run, such as `30-self-review/01`.
+
+| Refusal                                                             | Field                              |
+| ------------------------------------------------------------------- | ---------------------------------- |
+| The question card count differs from the JSON `open` count          | `<review>.json:open`               |
+| The `## Acceptance` section is missing                              | `<review>.json:## Acceptance`      |
+| A task that is not skipped has no valid line, or more than one line | `<review>.json:## Acceptance:T<n>` |
+| An `unmet` line names an id that is not in the JSON `findings`      | `<review>.json:## Acceptance:T<n>` |
+| A finding id is missing from the review markdown                    | `<review>.json:findings[<i>].id`   |
+
+A valid Acceptance line is `- T<n>: met` or `- T<n>: unmet F<k>`.
+`review-pairs.md` describes the section in full.
 
 ### Close gates
 
@@ -123,4 +156,15 @@ does not skip that self-review.
 `--waive-review <reason>` records a review waiver
 and skips the required-review and tree checks. It does not skip the
 open-question check, the cross-delta rule, or the warning gate.
+`close` refuses with exit 4 while the latest review of a required kind has an open `high`
+finding. The preview lists `open high finding: <kind> <id>` and recommends `n`.
+No ack flag and no waiver passes that gate. `--abandon` does.
 `atry close --abandon <reason>` stops a run from any open state.
+
+### Distill and verify
+
+`atry distill <run>` writes `90-distill/manifest.json` with a run header, a label on each file, and an `atEvent` anchor.
+`atry distill verify <run>` reports a manifest that is older than the event log as `stale: yes` with `new events: <n>`.
+It lists `events.jsonl` and `run.json` as `stale: <path>`, not as `mismatched`, and exits 1.
+The `--json` result adds `stale` and `newEvents` and keeps `schema` 1.
+See `specs/70-storage-and-git/30-distill-manifest/manifest-export.md`.

@@ -70,7 +70,7 @@ function event(fields: Partial<EventLine> & Pick<EventLine, "stage" | "action">)
 
 function useEvents(events: EventLine[], lifecycle = "reviewing"): void {
   const loaded = {
-    run: { state: { lifecycle }, base: "base" },
+    run: { state: { lifecycle, tasks: [] }, base: "base" },
     events,
     warning: null,
   };
@@ -78,7 +78,7 @@ function useEvents(events: EventLine[], lifecycle = "reviewing"): void {
 }
 
 function reviewBody(kind: "self" | "cross", model: string, open: unknown[] = []): string {
-  return `${JSON.stringify({ schema: 1, kind, tool: "cursor", model, fixed: 0, open })}\n`;
+  return `${JSON.stringify({ schema: 1, kind, tool: "cursor", model, findings: [], open })}\n`;
 }
 
 async function writeReview(
@@ -91,7 +91,12 @@ async function writeReview(
   await mkdir(join(path, ".."), { recursive: true });
   await writeFile(path, body);
   const markdown = cards.map((card, index) => `- Q${index + 1}: ${card}\n`).join("");
-  await writeFile(path.replace(/\.json$/, ".md"), `# review\n\n${markdown}`);
+  await writeFile(path.replace(/\.json$/, ".md"), `# review\n\n${markdown}\n\n## Acceptance\n`);
+  await mkdir(join(runDir, "10-plan"), { recursive: true });
+  await writeFile(
+    join(runDir, "10-plan", "index.json"),
+    `${JSON.stringify({ schema: 1, tasks: [] })}\n`,
+  );
 }
 
 function errnoError(code: string): NodeJS.ErrnoException {
@@ -248,7 +253,7 @@ test("readReviewDocument maps invalid JSON and root errors, and rethrows read er
 });
 
 test("diversityWarnings flags a cross tool that matches the self-review tool", () => {
-  const review = { schema: 1, kind: "cross", tool: "cursor", model: "m", fixed: 0, open: [] };
+  const review = { schema: 1, kind: "cross", tool: "cursor", model: "m", findings: [], open: [] };
   expect(diversityWarnings(review as never, undefined, { tool: "cursor" })).toEqual([
     "cross tool matches self-review tool",
   ]);
@@ -371,7 +376,14 @@ test("readReviewDocument names the failing field", async () => {
 });
 
 test("diversityWarnings flags a matching vendor with known models", () => {
-  const review = { schema: 1, kind: "cross", tool: "codex", model: "gpt-5.5", fixed: 0, open: [] };
+  const review = {
+    schema: 1,
+    kind: "cross",
+    tool: "codex",
+    model: "gpt-5.5",
+    findings: [],
+    open: [],
+  };
   expect(diversityWarnings(review as never, { model: "gpt-4o" }, undefined)).toContain(
     "cross model vendor matches implement model",
   );

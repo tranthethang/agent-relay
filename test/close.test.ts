@@ -1,18 +1,28 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 import { gitCommit, reachReview, runCli, withTempGitRepo } from "./helper.js";
 
 const execFileAsync = promisify(execFile);
 
+type Decided = { decision: { onYes: string | null; onYesArg: string | null } };
+
+// A decision command runs as given: `atry close <run> ...` without the program name.
+function decisionArgs(preview: Decided, field: "onYes" | "onYesArg"): string[] {
+  const command = preview.decision[field];
+  if (command === null) throw new Error("decision has no command");
+  const [, ...args] = command.split(" ");
+  return args;
+}
+
 const review = {
   schema: 1,
   kind: "cross",
   tool: "cursor",
   model: "unknown",
-  fixed: 0,
+  findings: [],
   open: [{ q: "Which gate?", a: "Keep exit 4", b: "Warn only" }],
 };
 
@@ -153,12 +163,23 @@ test("close --preview recommends n for a missing review and y after self-review"
     const run = JSON.parse(created.stdout) as { path: string };
     const early = await runCli(["close", run.path, "--preview", "--json"], dir);
     expect(early.code).toBe(0);
+    const name = basename(run.path);
     expect(JSON.parse(early.stdout)).toMatchObject({
       recommend: "n",
       reasons: ["missing self review"],
+      decision: {
+        question: `missing self review. Close ${name}?`,
+        onYes: `atry close ${name} --via confirm --ack-warnings`,
+        onYesArg: `atry close ${name} --via arg --ack-warnings`,
+        onNo: null,
+      },
     });
     const earlyText = await runCli(["close", run.path, "--preview"], dir);
-    expect(earlyText.stdout).toBe("recommend: n\nmissing self review\n");
+    expect(earlyText.stdout).toBe(
+      "recommend: n\nmissing self review\n"
+        + `question: missing self review. Close ${name}?\n`
+        + `on yes: atry close ${name} --via confirm --ack-warnings\n`,
+    );
 
     await reachReview(run.path, dir);
     await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
@@ -166,9 +187,26 @@ test("close --preview recommends n for a missing review and y after self-review"
     const before = await readFile(join(run.path, "events.jsonl"), "utf8");
     const ready = await runCli(["close", run.path, "--preview", "--json"], dir);
     expect(ready.code).toBe(0);
-    expect(JSON.parse(ready.stdout)).toEqual({ schema: 1, recommend: "y", reasons: [] });
-    expect((await runCli(["close", run.path, "--preview"], dir)).stdout).toBe("recommend: y\n");
+    expect(JSON.parse(ready.stdout)).toEqual({
+      schema: 1,
+      recommend: "y",
+      reasons: [],
+      decision: {
+        question: `Close ${name}?`,
+        onYes: `atry close ${name} --via confirm`,
+        onYesArg: `atry close ${name} --via arg`,
+        onNo: null,
+      },
+    });
+    expect((await runCli(["close", run.path, "--preview"], dir)).stdout).toBe(
+      `recommend: y\nquestion: Close ${name}?\non yes: atry close ${name} --via confirm\n`,
+    );
     expect(await readFile(join(run.path, "events.jsonl"), "utf8")).toBe(before);
+    const closed = await runCli(
+      decisionArgs(JSON.parse(ready.stdout) as Decided, "onYes"),
+      dir,
+    );
+    expect(closed.code, closed.stderr).toBe(0);
   });
 });
 
@@ -266,7 +304,7 @@ test("non-strict close lets the developer continue and records integrity warning
     const reviewPaths = JSON.parse(started.stdout) as { markdown: string; json: string };
     await writeFile(
       reviewPaths.markdown,
-      "# self\n\n## Findings\n\n- Q1: Continue without cross review?\n  - a. Stop\n  - b. Close anyway\n",
+      "# self\n\n## Findings\n\n- Q1: Continue without cross review?\n  - a. Stop\n  - b. Close anyway\n\n## Acceptance\n",
     );
     await writeFile(
       reviewPaths.json,
@@ -276,7 +314,7 @@ test("non-strict close lets the developer continue and records integrity warning
           kind: "self",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [{ q: "Continue without cross review?", a: "Stop", b: "Close anyway" }],
         })
       }\n`,
@@ -360,14 +398,25 @@ test("close --preview names run.json drift after the cache is rebuilt", async ()
     await writeFile(cachePath, `${JSON.stringify(cache)}\n`);
     const first = await runCli(["close", run.path, "--preview", "--json"], dir);
     expect(first.stderr).toContain("run.json disagreed with events.jsonl; rebuilt");
+    const name = basename(run.path);
     expect(JSON.parse(first.stdout)).toEqual({
       schema: 1,
       recommend: "n",
       reasons: ["run.json drifted 1 times"],
+      decision: {
+        question: `run.json drifted 1 times. Close ${name}?`,
+        onYes: `atry close ${name} --via confirm --ack-warnings`,
+        onYesArg: `atry close ${name} --via arg --ack-warnings`,
+        onNo: null,
+      },
     });
     const second = await runCli(["close", run.path, "--preview"], dir);
     expect(second.stderr).toBe("");
-    expect(second.stdout).toBe("recommend: n\nrun.json drifted 1 times\n");
+    expect(second.stdout).toBe(
+      "recommend: n\nrun.json drifted 1 times\n"
+        + `question: run.json drifted 1 times. Close ${name}?\n`
+        + `on yes: atry close ${name} --via confirm --ack-warnings\n`,
+    );
   });
 });
 
@@ -404,7 +453,7 @@ test("strict close refuses a cross-review delta until a later self-review", asyn
       recommendation: string;
       actions: { command: string }[];
     };
-    expect(next.recommendation).toMatch(/^atry review new \S+ self$/);
+    expect(next.recommendation).toMatch(/^atry review new \S+ self --tool <tool>$/);
     expect(next.actions.map((action) => action.command)).toEqual([
       next.recommendation,
       expect.stringContaining("--preview"),
@@ -435,7 +484,7 @@ test("a cross-review delta needs a self-review before close", async () => {
     const next = JSON.parse((await runCli(["next", run.path, "--json"], dir)).stdout) as {
       recommendation: string;
     };
-    expect(next.recommendation).toMatch(/^atry review new \S+ self$/);
+    expect(next.recommendation).toMatch(/^atry review new \S+ self --tool <tool>$/);
 
     const preview = await runCli(["close", run.path, "--preview", "--json"], dir);
     expect(JSON.parse(preview.stdout)).toEqual({
@@ -445,7 +494,17 @@ test("a cross-review delta needs a self-review before close", async () => {
         "changes made during the latest review",
         "cross-review changes have no later self-review",
       ],
+      decision: {
+        question: "Close is not possible. Run self-review again first. "
+          + "changes made during the latest review; "
+          + "cross-review changes have no later self-review.",
+        onYes: null,
+        onYesArg: null,
+        onNo: null,
+      },
     });
+    const blocked = await runCli(["close", run.path, "--preview"], dir);
+    expect(blocked.stdout).toContain("on yes: none\n");
     const refused = "review.self: cross-review changed code and no later self-review covers it\n";
     const unacked = await runCli(["close", run.path, "--via", "arg"], dir);
     expect(unacked.code).toBe(4);
@@ -460,12 +519,141 @@ test("a cross-review delta needs a self-review before close", async () => {
     await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
     expect((await runCli(["review", "done", run.path, "self"], dir)).code).toBe(0);
     const after = await runCli(["close", run.path, "--preview", "--json"], dir);
-    expect(JSON.parse(after.stdout)).toEqual({ schema: 1, recommend: "y", reasons: [] });
+    expect(JSON.parse(after.stdout)).toMatchObject({
+      recommend: "y",
+      reasons: [],
+      decision: { onYes: `atry close ${basename(run.path)} --via confirm` },
+    });
     const closed = await runCli(
       ["close", run.path, "--via", "arg", "--ack-warnings", "--json"],
       dir,
     );
     expect(closed.code).toBe(0);
     expect(JSON.parse(closed.stdout)).toMatchObject({ lifecycle: "closed" });
+  });
+});
+
+test("next marks review done as a developer decision only when testCommand is set", async () => {
+  for (const testCommand of [undefined, "npm test"]) {
+    await withTempGitRepo(async (dir) => {
+      if (testCommand !== undefined) {
+        await writeFile(
+          join(dir, ".agent-relay.json"),
+          JSON.stringify({ schema: 1, requireReviews: ["self"], smallChange: 100, testCommand }),
+        );
+        await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+      }
+      await gitCommit(dir);
+      const created = await runCli(
+        ["run", "new", "--slug", "next-tests", "--title", "Next tests", "--json"],
+        dir,
+      );
+      const run = JSON.parse(created.stdout) as { path: string };
+      await reachReview(run.path, dir);
+      await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+      const next = JSON.parse((await runCli(["next", run.path, "--json"], dir)).stdout) as {
+        actions: { kind: string; command: string; needsHuman: boolean; question?: string }[];
+      };
+      const action = next.actions[0];
+      expect(action?.kind).toBe("review-done");
+      if (testCommand === undefined) {
+        expect(action?.command).not.toContain("--run-tests");
+        expect(action?.needsHuman).toBe(false);
+        expect(action).not.toHaveProperty("question");
+      } else {
+        expect(action?.command).toMatch(/ --run-tests$/);
+        expect(action?.needsHuman).toBe(true);
+        expect(action?.question).toBe("Run npm test and record the result?");
+      }
+    });
+  }
+});
+
+async function reviewWithFinding(
+  dir: string,
+  slug: string,
+  finding: { severity: string; status: string },
+  policy?: object,
+): Promise<string> {
+  if (policy !== undefined) {
+    await writeFile(join(dir, ".agent-relay.json"), JSON.stringify({ schema: 1, ...policy }));
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+  }
+  await gitCommit(dir);
+  const created = await runCli(["run", "new", "--slug", slug, "--title", "T", "--json"], dir);
+  const run = (JSON.parse(created.stdout) as { path: string }).path;
+  await reachReview(run, dir);
+  await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+  await writeFile(
+    join(run, "30-self-review", "01.md"),
+    "# self\n\n- F1: x is null\n\n## Acceptance\n",
+  );
+  await writeFile(
+    join(run, "30-self-review", "01.json"),
+    `${
+      JSON.stringify({
+        schema: 1,
+        kind: "self",
+        tool: "cursor",
+        model: "unknown",
+        findings: [{ id: "F1", file: null, line: null, evidence: "x", ...finding }],
+        open: [],
+      })
+    }\n`,
+  );
+  const done = await runCli(["review", "done", run, "self"], dir);
+  expect(done.code, done.stderr).toBe(0);
+  return run;
+}
+
+test("close refuses an open high finding that no ack flag passes", async () => {
+  await withTempGitRepo(async (dir) => {
+    const run = await reviewWithFinding(dir, "high-open", { severity: "high", status: "open" });
+    const preview = await runCli(["close", run, "--preview", "--json"], dir);
+    const body = JSON.parse(preview.stdout) as {
+      recommend: string;
+      reasons: string[];
+      decision: { onYes: string | null };
+    };
+    expect(body.recommend).toBe("n");
+    expect(body.reasons).toContain("open high finding: self F1");
+    expect(body.decision.onYes).toBeNull();
+    for (
+      const flags of [[], ["--via", "arg"], ["--via", "arg", "--ack-warnings", "--ack-open"], [
+        "--ack-fixes",
+      ]]
+    ) {
+      const refused = await runCli(["close", run, ...flags], dir);
+      expect(refused.code).toBe(4);
+      expect(refused.stderr).toContain("open high finding: self F1");
+    }
+    const waived = await runCli(["close", run, "--waive-review", "why"], dir);
+    expect(waived.code).toBe(4);
+    const abandoned = await runCli(["close", run, "--abandon", "dropped", "--json"], dir);
+    expect(abandoned.code, abandoned.stderr).toBe(0);
+  });
+});
+
+test.each([
+  { severity: "high", status: "fixed" },
+  { severity: "high", status: "rejected" },
+  { severity: "medium", status: "open" },
+  { severity: "low", status: "open" },
+])("close passes the finding gate for %j", async (finding) => {
+  await withTempGitRepo(async (dir) => {
+    const run = await reviewWithFinding(dir, "finding-pass", finding);
+    const closed = await runCli(["close", run, "--via", "arg", "--json"], dir);
+    expect(closed.code, closed.stderr).toBe(0);
+  });
+});
+
+test("close ignores a high finding that an older review carried", async () => {
+  await withTempGitRepo(async (dir) => {
+    const run = await reviewWithFinding(dir, "older-high", { severity: "high", status: "open" });
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    const next = await runCli(["review", "done", run, "self"], dir);
+    expect(next.code, next.stderr).toBe(0);
+    const closed = await runCli(["close", run, "--via", "arg", "--json"], dir);
+    expect(closed.code, closed.stderr).toBe(0);
   });
 });

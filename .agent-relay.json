@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "testCommand": "npm test",
+  "requireReviews": [
+    "self",
+    "cross"
+  ],
+  "smallChange": 20,
+  "strict": {
+    "scope": false,
+    "plan": false,
+    "reviewIntegrity": false
+  },
+  "worktree": {
+    "enabled": false
+  }
+}

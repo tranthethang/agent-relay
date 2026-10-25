@@ -37,7 +37,10 @@ These actions stay forbidden until the user names the next skill or allows one w
 - Run tests or builds.
 - Run `atry approve` or `atry close`.
 
+Why: An early write changes the repo before the user agrees on the scope.
+
 A vague reply is not permission. Ask what the user wants next.
+Why: A guess at permission can start edits that the user did not ask for.
 When the user allows one notes write, do only that write. Then stay read-only.
 
 ## Context
@@ -70,3 +73,4 @@ Stop when the command fails. Show the field path to the user.
 
 When the user names the next skill, summarize what is resolved and what is open.
 Then stop. Do not start that skill in the same turn.
+Why: The user reads the summary and starts the next skill, so no edit begins before that check.

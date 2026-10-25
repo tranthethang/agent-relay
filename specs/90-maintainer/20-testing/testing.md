@@ -60,10 +60,30 @@ must fail; the test suite uses it to show that behavior drift is caught. See
 [`evals/README.md`](../../../evals/README.md) for the files, the options, and
 the steps to add a scenario.
 
-The model-backed layer runs by hand. A person installs the skills, asks the
-tool to run one scenario, and compares the commands the agent issues with the
-recorded steps. That layer shows a judgement failure. CI cannot run it and does
-not claim to.
+The model-backed layer is `npm run evals:model`. It is not part of
+`npm run evals`. It drives `claude -p` and `codex exec` through four scenarios
+(`brainstorm-readonly`, `plan-small`, `implement-approved`, `self-review`) and
+matches each run's `events.jsonl` against a trajectory. It reports a compliance
+rate per tool. It is a sample, not proof that a skill works in every case, and
+it never gates a release.
+
+The `Model evals` workflow runs it on `ubuntu-latest` at `0 19 * * *` UTC and on
+`workflow_dispatch`. It does not run on push, pull request, or a fork. It reads
+two repository secrets, `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`, in the eval
+step only. A tool with a missing binary or key is `skipped`, not a pass. The
+workflow writes the table to the job summary and uploads `report.json` and each
+`events.jsonl` as an artifact.
+
+To run it with one tool on a developer machine:
+
+```bash
+npm run build
+ANTHROPIC_API_KEY=... npm run evals:model -- --tool claude-code --out /tmp/model-report
+```
+
+`codex` is not installed on every machine. Without it, or without its key, the
+local run reports `codex` as `skipped`. See
+[`evals/README.md`](../../../evals/README.md) for the scenarios and the match rule.
 
 The eval layers do not replace `test/skills-*.test.ts`. A skill test checks
 text, such as a heading or a shared reference. The fake eval checks a recorded

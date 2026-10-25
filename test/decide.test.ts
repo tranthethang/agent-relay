@@ -11,7 +11,7 @@ async function createCompletedReview(dir: string, slug: string): Promise<string>
   await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
   await writeFile(
     join(run, "30-self-review", "01.md"),
-    "# self\n\n- Q1: Choose?\n  - a. Small\n  - b. Durable\n- Q2: Need data?\n  - Need: sample\n",
+    "# self\n\n- Q1: Choose?\n  - a. Small\n  - b. Durable\n- Q2: Need data?\n  - Need: sample\n\n## Acceptance\n",
   );
   await writeFile(
     join(run, "30-self-review", "01.json"),
@@ -67,7 +67,7 @@ test("review done refuses a dropped question without a decision", async () => {
   await withTempGitRepo(async (dir) => {
     const run = await createCompletedReview(dir, "decide-dropped");
     await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
-    await writeFile(join(run, "30-self-review", "02.md"), "# self\n\n");
+    await writeFile(join(run, "30-self-review", "02.md"), "# self\n\n## Acceptance\n");
     await writeFile(
       join(run, "30-self-review", "02.json"),
       `${

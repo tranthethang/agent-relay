@@ -25,7 +25,7 @@ test("an unknown vendor is not a vendor match and still checks the model line", 
     kind: "cross" as const,
     tool: "codex" as const,
     model: "custom-1",
-    fixed: 0,
+    findings: [],
     open: [],
   };
   expect(diversityWarnings(review, { model: "custom-2" }, undefined)).toEqual([

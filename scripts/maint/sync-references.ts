@@ -11,7 +11,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ALL_PARTS = ["core", "review-headings", "parallel", "manifest", "notes"];
-const REVIEW_TEMPLATES = ["reviewer-conduct.md"];
+const REVIEW_TEMPLATES = ["reviewer-conduct.md", "review-checklist.md"];
 const WRITING_SKILLS = [
   "atry-brainstorm",
   "atry-plan",
@@ -119,17 +119,17 @@ function skillDirs(root: string): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
-function replacePreflight(source: string, body: string): string {
+function replaceBlock(source: string, name: string, body: string): string {
   const ended = source.endsWith("\n");
   const lines = (ended ? source.slice(0, -1) : source).split("\n");
   const bodyLines = body.endsWith("\n") ? body.slice(0, -1).split("\n") : body.split("\n");
   const out: string[] = [];
   let inBlock = false;
   for (const line of lines) {
-    if (line.includes("<!-- BEGIN PREFLIGHT -->")) {
+    if (line.includes(`<!-- BEGIN ${name} -->`)) {
       out.push(line, "", ...bodyLines, "");
       inBlock = true;
-    } else if (line.includes("<!-- END PREFLIGHT -->")) {
+    } else if (line.includes(`<!-- END ${name} -->`)) {
       inBlock = false;
       out.push(line);
     } else if (!inBlock) {
@@ -249,21 +249,45 @@ function reviewTemplateMatches(src: string, dest: string): boolean {
 function syncPreflight(root: string, dirs: readonly string[], checkOnly: boolean): boolean {
   const preflight = join(root, "specs/80-skills-integration/00-skill-bridge/preflight.md");
   if (!existsSync(preflight)) fail(`Error: ${preflight} not found`);
-  const preflightBody = trimBlankLines(readFileSync(preflight, "utf8"));
-  const preflightHash = sha256(preflightBody);
+  const body = trimBlankLines(readFileSync(preflight, "utf8"));
   let drift = false;
   for (const dir of dirs) {
-    if (!syncSkillPreflight(join(dir, "SKILL.md"), preflightBody, preflightHash, checkOnly)) {
-      drift = true;
-    }
+    if (!syncSkillBlock(join(dir, "SKILL.md"), "PREFLIGHT", body, checkOnly)) drift = true;
   }
   return drift;
 }
 
-function syncSkillPreflight(
+// A skill without LOOP markers is skipped. The source file is read only when a skill has them.
+function syncLoop(root: string, dirs: readonly string[], checkOnly: boolean): boolean {
+  const loop = join(root, "specs/80-skills-integration/00-skill-bridge/loop.md");
+  let body: string | undefined;
+  let drift = false;
+  for (const dir of dirs) {
+    const skillMd = join(dir, "SKILL.md");
+    if (!existsSync(skillMd)) continue;
+    const source = readFileSync(skillMd, "utf8");
+    const hasBegin = source.includes("<!-- BEGIN LOOP -->");
+    if (hasBegin !== source.includes("<!-- END LOOP -->")) {
+      process.stderr.write(
+        `Error: Missing <!-- BEGIN LOOP --> / <!-- END LOOP --> markers in ${skillMd}\n`,
+      );
+      drift = true;
+      continue;
+    }
+    if (!hasBegin) continue;
+    if (body === undefined) {
+      if (!existsSync(loop)) fail(`Error: ${loop} not found`);
+      body = trimBlankLines(readFileSync(loop, "utf8"));
+    }
+    if (!syncSkillBlock(skillMd, "LOOP", body, checkOnly)) drift = true;
+  }
+  return drift;
+}
+
+function syncSkillBlock(
   skillMd: string,
-  preflightBody: string,
-  preflightHash: string,
+  name: string,
+  body: string,
   checkOnly: boolean,
 ): boolean {
   if (!existsSync(skillMd)) {
@@ -271,23 +295,22 @@ function syncSkillPreflight(
     return false;
   }
   const source = readFileSync(skillMd, "utf8");
-  if (!source.includes("<!-- BEGIN PREFLIGHT -->") || !source.includes("<!-- END PREFLIGHT -->")) {
-    process.stderr.write(
-      `Error: Missing <!-- BEGIN PREFLIGHT --> / <!-- END PREFLIGHT --> markers in ${skillMd}\n`,
-    );
+  const begin = `<!-- BEGIN ${name} -->`;
+  const end = `<!-- END ${name} -->`;
+  if (!source.includes(begin) || !source.includes(end)) {
+    process.stderr.write(`Error: Missing ${begin} / ${end} markers in ${skillMd}\n`);
     return false;
   }
-  const existing = source.split("<!-- BEGIN PREFLIGHT -->")[1]?.split("<!-- END PREFLIGHT -->")[0]
-    ?? "";
-  if (sha256(trimBlankLines(existing)) === preflightHash) return true;
+  const existing = source.split(begin)[1]?.split(end)[0] ?? "";
+  if (sha256(trimBlankLines(existing)) === sha256(body)) return true;
   if (checkOnly) {
     process.stderr.write(
-      `Out of sync: ${skillMd} preflight block differs from sync source\n`,
+      `Out of sync: ${skillMd} ${name.toLowerCase()} block differs from sync source\n`,
     );
     return false;
   }
-  writeFileSync(skillMd, replacePreflight(source, preflightBody));
-  process.stdout.write(`synced preflight into ${skillMd}\n`);
+  writeFileSync(skillMd, replaceBlock(source, name, body));
+  process.stdout.write(`synced ${name.toLowerCase()} into ${skillMd}\n`);
   return true;
 }
 
@@ -303,6 +326,7 @@ function main(): void {
   if (syncWriting(root, checkOnly)) drift = true;
   if (syncReviewTemplates(root, checkOnly)) drift = true;
   if (syncPreflight(root, dirs, checkOnly)) drift = true;
+  if (syncLoop(root, dirs, checkOnly)) drift = true;
 
   if (!checkOnly) return;
   if (drift) {

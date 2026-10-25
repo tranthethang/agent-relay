@@ -8,13 +8,14 @@ import { type EventLine } from "../core/event.js";
 import { reviewIntegrity } from "../core/lifecycle.js";
 import { explainNextWithChoices, nextActions, nextStep, nextText } from "../core/next.js";
 import { planFilesState } from "../core/plan.js";
+import { readPolicy } from "../core/policy.js";
 import { preflightResult, preflightText } from "../core/preflight.js";
 import { type RunState } from "../core/reduce.js";
 import { oneToken, selectRun } from "../core/select.js";
 import { statusDetail, statusDetailText, statusList, statusListText } from "../core/status.js";
 import { indexForImplement } from "../core/tasks.js";
 import { schemaVersion } from "../core/vocab.js";
-import { openTaskWorktrees } from "../core/worktree.js";
+import { gitCwd, openTaskWorktrees } from "../core/worktree.js";
 import { packageVersion } from "../version.js";
 import { registerClaim } from "./claim.js";
 import { flagRun, registerDistill } from "./distill.js";
@@ -112,8 +113,11 @@ export function registerCommands(program: Command): void {
         index,
         integrate,
       );
+      const testCommand = loaded.run.state.lifecycle === "reviewing"
+        ? await baseTestCommand(runDir, loaded.run.base)
+        : undefined;
       writeResult(
-        explainNextWithChoices(step, loaded.run.state, choices),
+        explainNextWithChoices(step, loaded.run.state, choices, testCommand),
         commandJson(command),
         nextText,
       );
@@ -177,6 +181,17 @@ export async function reviewsForNext(
     ) {
       return undefined;
     }
+    throw error;
+  }
+}
+
+// `next` only offers a test run in a review. A policy that cannot be read
+// must not block `next`, so that case offers no test run.
+async function baseTestCommand(runDir: string, base: string): Promise<string | undefined> {
+  try {
+    return (await readPolicy(await gitCwd(runDir), base)).testCommand;
+  } catch (error) {
+    if (error instanceof RelayError) return undefined;
     throw error;
   }
 }

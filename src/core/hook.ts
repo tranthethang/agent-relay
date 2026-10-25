@@ -1,5 +1,5 @@
-import { mkdir, readFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { mkdir, readFile, realpath } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { rebuildRun } from "./cache.js";
 import { findRelayDir, listRunNames } from "./discover.js";
 import { RelayError } from "./error.js";
@@ -8,7 +8,7 @@ import { gitRoot } from "./git.js";
 import { guardPath } from "./guard.js";
 import { readPolicy } from "./policy.js";
 import { schemaVersion } from "./vocab.js";
-import { runGitCwd } from "./worktree.js";
+import { gitCwd, runGitCwd } from "./worktree.js";
 
 export const hookCommand = "atry hook check";
 export const hookMatcher = "Edit|MultiEdit|Write|NotebookEdit";
@@ -70,6 +70,8 @@ export async function hookCheck(inputText: string): Promise<HookDecision | null>
     const runDir = join(relayDir, name);
     const loaded = await rebuildRun(runDir);
     if (loaded.run.state.lifecycle !== "implementing") continue;
+    const root = await gitRoot(await gitCwd(runDir));
+    if (!(await underRoot(root, input.path))) continue;
     if ((await guardPath(runDir, input.path)).allowed) return null;
     const policy = await readPolicy(await runGitCwd(runDir, loaded.run), loaded.run.base);
     outside.push({ name, strict: policy.strict.scope });
@@ -84,6 +86,22 @@ export async function hookCheck(inputText: string): Promise<HookDecision | null>
         + "Start the task that lists this file, or amend the plan.",
     },
   };
+}
+
+// A path outside the root, or the root itself, is not under it.
+async function underRoot(root: string, path: string): Promise<boolean> {
+  const rel = relative(await realpath(root), await realExisting(path));
+  return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+// Real path of the nearest existing ancestor, with the missing tail joined back.
+async function realExisting(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch (error) {
+    if (!isEnoent(error)) throw error;
+    return join(await realExisting(dirname(path)), basename(path));
+  }
 }
 
 function parseHookInput(text: string): { cwd: string; path?: string } {

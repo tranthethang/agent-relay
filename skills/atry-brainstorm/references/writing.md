@@ -14,6 +14,9 @@ These rules apply to `en` only. They apply to `SKILL.md` text and to stage outpu
 - A paragraph has 6 sentences or fewer and one topic.
 - Use one term for one concept. Do not use a synonym for a glossary term.
 - Do not use idioms.
+- Follow a rule whose purpose is not obvious with one line that starts with `Why:`.
+- A `Why:` line names the failure that the rule prevents. It has 25 words or fewer.
+- Do not add a `Why:` line to a plain procedure step.
 
 These rules follow the spirit of ASD-STE100. They do not state ASD-STE100 compliance. Do not copy the ASD-STE100 word list.
 

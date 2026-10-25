@@ -11,7 +11,12 @@ import { appendEvent, withRunLock } from "./mutate.js";
 import { planReadiness, type PlanTaskPreview } from "./plan.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
-import { crossDeltaNeedsSelfReview, parseReviewJson, readReviewDocument } from "./review.js";
+import {
+  crossDeltaNeedsSelfReview,
+  parseReviewJson,
+  readReviewAt,
+  readReviewDocument,
+} from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
 import { outsidePaths } from "./scope.js";
 import { openPlanTasks, planIndexSchema, readPlanIndex } from "./tasks.js";
@@ -115,6 +120,13 @@ export function closeText(result: CloseResult): string {
   return `${lines.join("\n")}\n`;
 }
 
+export type Decision = {
+  question: string;
+  onYes: string | null;
+  onYesArg: string | null;
+  onNo: null;
+};
+
 export type ApprovePreview = {
   schema: 1;
   goal: string;
@@ -125,6 +137,7 @@ export type ApprovePreview = {
   taskFiles: PlanTaskPreview[];
   ready: boolean;
   missing: string[];
+  decision: Decision;
 };
 
 export type ClosePreview = {
@@ -132,6 +145,7 @@ export type ClosePreview = {
   recommend: "y" | "n";
   reasons: string[];
   worktree?: { remove: boolean; reason?: string };
+  decision: Decision;
 };
 
 export function approvePreviewText(result: ApprovePreview): string {
@@ -150,6 +164,8 @@ export function approvePreviewText(result: ApprovePreview): string {
     `ready: ${ready}\n`,
   ];
   if (result.missing.length > 0) sections.push(`missing:\n${missingLines}`);
+  sections.push(`question: ${result.decision.question}\n`);
+  sections.push(`on yes: ${result.decision.onYes ?? "none"}\n`);
   return sections.join("");
 }
 
@@ -160,13 +176,30 @@ export function closePreviewText(result: ClosePreview): string {
   if (result.worktree?.reason !== undefined) {
     worktree = `worktree: close will keep it (${result.worktree.reason})\n`;
   }
-  return `recommend: ${result.recommend}\n${reasons}${worktree}`;
+  const decision = `question: ${result.decision.question}\non yes: ${
+    result.decision.onYes ?? "none"
+  }\n`;
+  return `recommend: ${result.recommend}\n${reasons}${worktree}${decision}`;
 }
 
 export { sectionText } from "./plan.js";
 
 export async function approvePreview(runDir: string): Promise<ApprovePreview> {
   const readiness = await planReadiness(runDir);
+  const run = basename(runDir);
+  const decision: Decision = readiness.ready
+    ? {
+      question: `Approve the plan for ${run} with ${readiness.tasks} tasks?`,
+      onYes: `atry approve ${run} --via confirm`,
+      onYesArg: `atry approve ${run} --via arg`,
+      onNo: null,
+    }
+    : {
+      question: `The plan is not ready. Missing: ${readiness.missing.join("; ")}.`,
+      onYes: null,
+      onYesArg: null,
+      onNo: null,
+    };
   return {
     schema: schemaVersion,
     goal: readiness.goal,
@@ -177,26 +210,79 @@ export async function approvePreview(runDir: string): Promise<ApprovePreview> {
     taskFiles: readiness.taskFiles,
     ready: readiness.ready,
     missing: readiness.missing,
+    decision,
   };
 }
 
 export async function closePreview(runDir: string): Promise<ClosePreview> {
   const loaded = await rebuildRun(runDir);
   const reasons = await closeReasons(runDir, loaded.run.base, loaded.events, "preview");
-  const preview: ClosePreview = {
-    schema: schemaVersion,
-    recommend: reasons.length === 0 ? "y" : "n",
-    reasons,
-  };
+  const recommend = reasons.length === 0 ? "y" : "n";
+  let worktree: ClosePreview["worktree"];
   if (loaded.run.worktree !== undefined) {
     const reason = await keepReason(
       await mainRoot(runDir),
       basename(runDir),
       loaded.run.worktree,
     );
-    preview.worktree = reason === null ? { remove: true } : { remove: false, reason };
+    worktree = reason === null ? { remove: true } : { remove: false, reason };
   }
+  const policy = await readPolicy(await gitCwd(runDir), loaded.run.base);
+  const preview: ClosePreview = {
+    schema: schemaVersion,
+    recommend,
+    reasons,
+    decision: closeDecision(basename(runDir), recommend, reasons, worktree, policy.strict),
+  };
+  if (worktree !== undefined) preview.worktree = worktree;
   return preview;
+}
+
+// The decision names only flags that `closeRun` accepts. `--ack-fixes` and
+// `--waive-review` stay a person's choice and never appear here.
+function closeDecision(
+  run: string,
+  recommend: "y" | "n",
+  reasons: readonly string[],
+  worktree: ClosePreview["worktree"],
+  strict: { reviewIntegrity: boolean },
+): Decision {
+  const detail = [
+    ...reasons,
+    ...(worktree === undefined
+      ? []
+      : [
+        worktree.remove
+          ? "worktree: close will remove it"
+          : `worktree: close will keep it (${worktree.reason})`,
+      ]),
+  ].join("; ");
+  const blocked = (why: string): Decision => ({
+    question: `${why} ${detail}.`,
+    onYes: null,
+    onYesArg: null,
+    onNo: null,
+  });
+  if (reasons.includes("cross-review changes have no later self-review")) {
+    return blocked("Close is not possible. Run self-review again first.");
+  }
+  if (reasons.some((reason) => reason.startsWith("open high finding: "))) {
+    return blocked("Close is not possible. Fix each open high finding in a new review first.");
+  }
+  if (recommend === "n" && strict.reviewIntegrity) {
+    return blocked("Close is not possible while strict.reviewIntegrity is true.");
+  }
+  const command = `atry close ${run}`;
+  const flags = `${recommend === "n" ? " --ack-warnings" : ""}${
+    reasons.includes("open items") ? " --ack-open" : ""
+  }`;
+  const question = detail === "" ? `Close ${run}?` : `${detail}. Close ${run}?`;
+  return {
+    question,
+    onYes: `${command} --via confirm${flags}`,
+    onYesArg: `${command} --via arg${flags}`,
+    onNo: null,
+  };
 }
 
 async function closeReasons(
@@ -212,6 +298,9 @@ async function closeReasons(
   }
   if (integrity.treeMatch === false) reasons.push("tree mismatch");
   if (integrity.delta !== undefined) reasons.push("changes made during the latest review");
+  for (const finding of await openHighFindings(runDir, integrity.required, events)) {
+    reasons.push(`open high finding: ${finding.kind} ${finding.id}`);
+  }
   if (mode === "preview") {
     if (crossDeltaNeedsSelfReview(events)) {
       reasons.push("cross-review changes have no later self-review");
@@ -368,6 +457,7 @@ export async function closeRun(input: {
     const policy = await readPolicy(await gitCwd(input.runDir), loaded.run.base);
     const softClose = !policy.strict.reviewIntegrity && via !== undefined;
     assertCrossDeltaSelfReview(loaded.events);
+    await assertNoOpenHighFindings(input.runDir, loaded.run.base, loaded.events);
     if (input.ackOpen !== true) {
       await assertNoOpenQuestions(input.runDir, loaded.events);
     }
@@ -762,6 +852,44 @@ async function measure(
   const head = await gitHead(cwd);
   const tree = await workTree(cwd);
   return { head, tree, size: await treeDiffSize(cwd, base, tree) };
+}
+
+// The latest completed review of each required kind decides. An older review does not count.
+async function openHighFindings(
+  runDir: string,
+  required: readonly ("self" | "cross")[],
+  events: readonly EventLine[],
+): Promise<{ kind: "self" | "cross"; id: string }[]> {
+  const open: { kind: "self" | "cross"; id: string }[] = [];
+  for (const kind of required) {
+    const stage = kind === "self" ? "self-review" : "cross-review";
+    const latest = [...events].reverse().find((event) =>
+      event.stage === stage && event.action === "completed" && event.ref !== undefined
+    );
+    if (latest?.ref === undefined) continue;
+    const review = await readReviewAt(runDir, stage, latest.ref);
+    for (const finding of review.findings) {
+      if (finding.severity === "high" && finding.status === "open") {
+        open.push({ kind, id: finding.id });
+      }
+    }
+  }
+  return open;
+}
+
+async function assertNoOpenHighFindings(
+  runDir: string,
+  base: string,
+  events: readonly EventLine[],
+): Promise<void> {
+  const { required } = await reviewIntegrity(runDir, base, events);
+  const open = await openHighFindings(runDir, required, events);
+  if (open.length === 0) return;
+  throw new RelayError(
+    "gate",
+    `close refused: open high finding: ${open.map((item) => `${item.kind} ${item.id}`).join(", ")}`,
+    "findings",
+  );
 }
 
 async function assertNoOpenQuestions(runDir: string, events: readonly EventLine[]): Promise<void> {
