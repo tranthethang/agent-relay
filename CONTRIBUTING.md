@@ -108,6 +108,7 @@ and `npm run sync`, so the skill copies match.
 - This repo commits `.agent-relay.json` with `testCommand: "npm test"` and `strict.scope: true`.
 - The Claude Code hook denies an edit outside the task files during implement.
 - Record each friction in the implement report or the review file, on one line that starts with `friction:`.
+- `test/dogfood-policy.test.ts` enforces `strict.scope` and `testCommand`. CI runs it through `npm test`.
 - Do not turn off a strict group to finish a run. Record the friction and use `--allow-extra <reason>` when the user agrees.
 
 ## Where things live
