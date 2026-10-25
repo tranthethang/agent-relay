@@ -13,6 +13,7 @@ import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
 import {
   crossDeltaNeedsSelfReview,
+  latestCompletedWithRef,
   parseReviewJson,
   readReviewAt,
   readReviewDocument,
@@ -863,10 +864,8 @@ async function openHighFindings(
   const open: { kind: "self" | "cross"; id: string }[] = [];
   for (const kind of required) {
     const stage = kind === "self" ? "self-review" : "cross-review";
-    const latest = [...events].reverse().find((event) =>
-      event.stage === stage && event.action === "completed" && event.ref !== undefined
-    );
-    if (latest?.ref === undefined) continue;
+    const latest = latestCompletedWithRef(events, stage);
+    if (latest === undefined) continue;
     const review = await readReviewAt(runDir, stage, latest.ref);
     for (const finding of review.findings) {
       if (finding.severity === "high" && finding.status === "open") {

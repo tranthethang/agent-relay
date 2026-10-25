@@ -8,7 +8,7 @@ import { isEnoent, readJson } from "./files.js";
 import { type ReviewIntegrity, reviewIntegrity, reviewProgress } from "./lifecycle.js";
 import { formatAge, nextActions, nextStep } from "./next.js";
 import { type RunState } from "./reduce.js";
-import { listReviewPaths, readReviewDocument, reviewJsonSchema, reviewKinds } from "./review.js";
+import { latestCompletedWithRef, readReviewAt, reviewJsonSchema, reviewKinds } from "./review.js";
 import { type RunJson } from "./run.js";
 import { indexForImplement, type PlanIndex } from "./tasks.js";
 import { schemaVersion } from "./vocab.js";
@@ -187,23 +187,28 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
     reviews,
     actors: runActors(loaded.events),
     drift: driftCount(loaded.events),
-    findings: await latestFindingCounts(runDir),
+    findings: await latestFindingCounts(runDir, loaded.events),
   };
   if (run.from !== undefined) detail.from = run.from;
   if (warnings.length > 0) detail.warnings = warnings;
   return detail;
 }
 
-// Counts come from the latest review of each kind. An unreadable review counts as zero;
-// `statusReviews` already reports it.
-async function latestFindingCounts(runDir: string): Promise<{ open: number; highOpen: number }> {
+// Counts come from the latest completed review of each kind, found through the event `ref`
+// as the close gate does. An unreadable review counts as zero; `statusReviews` already
+// reports it.
+async function latestFindingCounts(
+  runDir: string,
+  events: readonly EventLine[],
+): Promise<{ open: number; highOpen: number }> {
   const counts = { open: 0, highOpen: 0 };
   for (const kind of reviewKinds) {
-    const latest = (await listReviewPaths(runDir, kind)).at(-1);
+    const stage = kind === "self" ? "self-review" : "cross-review";
+    const latest = latestCompletedWithRef(events, stage);
     if (latest === undefined) continue;
     let review;
     try {
-      review = await readReviewDocument(runDir, latest);
+      review = await readReviewAt(runDir, stage, latest.ref);
     } catch (error) {
       if (error instanceof RelayError) continue;
       throw error;

@@ -360,26 +360,60 @@ test("status does not recommend implement completion without a valid index", asy
   });
 });
 
-test("statusDetail counts findings from the latest review of each kind", async () => {
+function completedEvent(stage: string, ref: string): Record<string, unknown> {
+  return { schema: 1, ts: "2026-10-17T01:00:00.000Z", stage, action: "completed", ref };
+}
+
+test("statusDetail counts findings from the latest completed review of each kind", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const runDir = await seedRun(relay, runName, runCache(plannedState), [
+      createdEvent,
+      completedEvent("self-review", "30-self-review/01.json"),
+      completedEvent("cross-review", "40-cross-review/01.json"),
+    ]);
+    await seedReviews(runDir);
+    const detail = await statusDetail(runDir, now);
+    expect(detail.findings).toEqual({ open: 2, highOpen: 1 });
+    expect(statusDetailText(detail)).toContain("\nfindings: 2 open, 1 high open\n");
+  });
+});
+
+test("statusDetail ignores a started review that has no completed event", async () => {
+  await withTempDir(async (root) => {
+    const relay = await seedRelay(root);
+    const runDir = await seedRun(relay, runName, runCache(plannedState), [
+      createdEvent,
+      completedEvent("self-review", "30-self-review/01.json"),
+    ]);
+    await mkdir(join(runDir, "30-self-review"), { recursive: true });
+    await writeFile(
+      join(runDir, "30-self-review", "01.json"),
+      reviewJson("self", [finding("F1", "high", "open")]),
+    );
+    await writeFile(join(runDir, "30-self-review", "02.json"), reviewJson("self", []));
+    expect((await statusDetail(runDir, now)).findings).toEqual({ open: 1, highOpen: 1 });
+  });
+});
+
+test("statusDetail reports no findings when no review is completed", async () => {
   await withTempDir(async (root) => {
     const relay = await seedRelay(root);
     const runDir = await seedRun(relay, runName, runCache(plannedState), [createdEvent]);
     await seedReviews(runDir);
     const detail = await statusDetail(runDir, now);
-    expect(detail.findings).toEqual({ open: 1, highOpen: 0 });
-    expect(statusDetailText(detail)).toContain("\nfindings: 1 open, 0 high open\n");
-    await writeFile(
-      join(runDir, "30-self-review", "03.json"),
-      reviewJson("self", [finding("F1", "high", "open")]),
-    );
-    expect((await statusDetail(runDir, now)).findings).toEqual({ open: 2, highOpen: 1 });
+    expect(detail.findings).toEqual({ open: 0, highOpen: 0 });
+    expect(statusDetailText(detail)).toContain("\nfindings: 0 open, 0 high open\n");
   });
 });
 
 test("statusDetail counts an unreadable latest review as zero findings", async () => {
   await withTempDir(async (root) => {
     const relay = await seedRelay(root);
-    const runDir = await seedRun(relay, runName, runCache(plannedState), [createdEvent]);
+    const runDir = await seedRun(relay, runName, runCache(plannedState), [
+      createdEvent,
+      completedEvent("self-review", "30-self-review/01.json"),
+    ]);
     await mkdir(join(runDir, "30-self-review"), { recursive: true });
     await writeFile(join(runDir, "30-self-review", "01.json"), "not json\n");
     const detail = await statusDetail(runDir, now);
