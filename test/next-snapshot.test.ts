@@ -350,6 +350,10 @@ test("approve and close previews snapshot their prompt text", async () => {
       expect(result.code, result.stderr).toBe(0);
     }
     await runCli(["review", "new", run.path, "self", "--tool", "cursor"], dir);
+    await writeFile(
+      join(run.path, "30-self-review", "01.md"),
+      "# self\n\n## Findings\n\n## Acceptance\n\n- T1: met\n",
+    );
     await runCli(["review", "done", run.path, "self"], dir);
     const ready = await runCli(["close", run.path, "--preview", "--json"], dir);
     expect(JSON.parse(named(ready.stdout))).toMatchInlineSnapshot(`

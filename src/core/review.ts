@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { type RebuildResult } from "./cache.js";
-import { exists } from "./claim.js";
+import { exists, loadPlanIndex } from "./claim.js";
 import { detectTool } from "./detect.js";
 import { fromZod, RelayError } from "./error.js";
 import { type EventLine } from "./event.js";
@@ -152,7 +152,7 @@ export function reviewScaffold(kind: ReviewKind, tool: string, model: string): R
 }
 
 export function reviewMarkdown(kind: ReviewKind): string {
-  return `# ${kind}\n\n## Findings\n`;
+  return `# ${kind}\n\n## Findings\n\n## Acceptance\n`;
 }
 
 export async function reviewNew(input: {
@@ -272,6 +272,7 @@ async function checkReviewDone(
   const started = lastReviewStart(loaded.events, place.stage);
   assertReviewMatchesStart(review, started);
   await assertQuestionCards(runDir, review);
+  await assertAcceptance(runDir, loaded.run.state, review);
   await assertFindingIds(runDir, review);
   await assertPriorQuestionsDecided(runDir, loaded.events, review);
   const warnings = kind === "cross"
@@ -379,6 +380,63 @@ async function assertQuestionCards(
       `review Markdown has ${cardCount} question cards but JSON has ${review.value.open.length} open items`,
       `${review.rel}:open`,
     );
+  }
+}
+
+const acceptanceLine = /^- (T[1-9]\d*): (met|unmet(?: F[1-9]\d*)+)$/;
+
+// Each task that is not skipped needs one `- T<n>: met` or `- T<n>: unmet F<k>` line.
+async function assertAcceptance(
+  runDir: string,
+  state: RunState,
+  review: { rel: string; value: ReviewJson },
+): Promise<void> {
+  const markdownRel = review.rel.replace(/\.json$/, ".md");
+  const markdown = await readFile(join(runDir, markdownRel), "utf8");
+  const field = `${review.rel}:## Acceptance`;
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^## Acceptance\s*$/.test(line));
+  if (start === -1) {
+    throw new RelayError("validation", "review Markdown has no ## Acceptance section", field);
+  }
+  const end = lines.findIndex((line, index) => index > start && line.startsWith("## "));
+  const section = lines.slice(start + 1, end === -1 ? undefined : end);
+  const skipped = new Set(
+    state.tasks.filter((task) => task.status === "skipped").map((task) => task.id),
+  );
+  const findingIds = new Set(review.value.findings.map((finding) => finding.id));
+  const index = await loadPlanIndex(runDir);
+  for (const task of index.tasks) {
+    if (skipped.has(task.id)) continue;
+    const matches = section.flatMap((line) => {
+      const match = acceptanceLine.exec(line.trimEnd());
+      return match !== null && match[1] === task.id ? [match] : [];
+    });
+    if (matches.length === 0) {
+      throw new RelayError(
+        "validation",
+        `## Acceptance needs one line for ${task.id}: - ${task.id}: met or - ${task.id}: unmet F<k>`,
+        `${field}:${task.id}`,
+      );
+    }
+    if (matches.length > 1) {
+      throw new RelayError(
+        "validation",
+        `## Acceptance has more than one line for ${task.id}`,
+        `${field}:${task.id}`,
+      );
+    }
+    const named = matches[0][2] === "met" ? [] : matches[0][2].split(" ").slice(1);
+    const unknown = named.filter((id) => !findingIds.has(id));
+    if (unknown.length > 0) {
+      throw new RelayError(
+        "validation",
+        `## Acceptance line for ${task.id} names ${
+          unknown.join(", ")
+        }, which is not in the review JSON findings`,
+        `${field}:${task.id}`,
+      );
+    }
   }
 }
 

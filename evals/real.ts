@@ -269,7 +269,7 @@ async function writeReviewPair(
     ? ""
     : `\n- Q1: ${question}\n  - a. Stop\n  - b. Close anyway\n`;
   const lines = findings.map((finding) => `\n- ${finding.id}: eval defect\n`).join("");
-  await write(markdown, `# ${kind}\n\n## Findings\n${lines}${cards}`);
+  await write(markdown, `# ${kind}\n\n## Findings\n${lines}${cards}\n## Acceptance\n`);
   await write(
     jsonPath,
     `${

@@ -70,7 +70,7 @@ function event(fields: Partial<EventLine> & Pick<EventLine, "stage" | "action">)
 
 function useEvents(events: EventLine[], lifecycle = "reviewing"): void {
   const loaded = {
-    run: { state: { lifecycle }, base: "base" },
+    run: { state: { lifecycle, tasks: [] }, base: "base" },
     events,
     warning: null,
   };
@@ -91,7 +91,12 @@ async function writeReview(
   await mkdir(join(path, ".."), { recursive: true });
   await writeFile(path, body);
   const markdown = cards.map((card, index) => `- Q${index + 1}: ${card}\n`).join("");
-  await writeFile(path.replace(/\.json$/, ".md"), `# review\n\n${markdown}`);
+  await writeFile(path.replace(/\.json$/, ".md"), `# review\n\n${markdown}\n\n## Acceptance\n`);
+  await mkdir(join(runDir, "10-plan"), { recursive: true });
+  await writeFile(
+    join(runDir, "10-plan", "index.json"),
+    `${JSON.stringify({ schema: 1, tasks: [] })}\n`,
+  );
 }
 
 function errnoError(code: string): NodeJS.ErrnoException {

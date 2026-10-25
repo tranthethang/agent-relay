@@ -107,7 +107,7 @@ test("a soft close needs --ack-open for an open question even with --ack-warning
     const reviewPaths = JSON.parse(started.stdout) as { markdown: string; json: string };
     await writeFile(
       reviewPaths.markdown,
-      "# self\n\n## Findings\n\n- Q1: Continue?\n  - a. Stop\n  - b. Close anyway\n",
+      "# self\n\n## Findings\n\n- Q1: Continue?\n  - a. Stop\n  - b. Close anyway\n\n## Acceptance\n",
     );
     await writeFile(
       reviewPaths.json,

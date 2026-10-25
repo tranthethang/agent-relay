@@ -304,7 +304,7 @@ test("non-strict close lets the developer continue and records integrity warning
     const reviewPaths = JSON.parse(started.stdout) as { markdown: string; json: string };
     await writeFile(
       reviewPaths.markdown,
-      "# self\n\n## Findings\n\n- Q1: Continue without cross review?\n  - a. Stop\n  - b. Close anyway\n",
+      "# self\n\n## Findings\n\n- Q1: Continue without cross review?\n  - a. Stop\n  - b. Close anyway\n\n## Acceptance\n",
     );
     await writeFile(
       reviewPaths.json,
@@ -584,7 +584,10 @@ async function reviewWithFinding(
   const run = (JSON.parse(created.stdout) as { path: string }).path;
   await reachReview(run, dir);
   await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
-  await writeFile(join(run, "30-self-review", "01.md"), "# self\n\n- F1: x is null\n");
+  await writeFile(
+    join(run, "30-self-review", "01.md"),
+    "# self\n\n- F1: x is null\n\n## Acceptance\n",
+  );
   await writeFile(
     join(run, "30-self-review", "01.json"),
     `${
