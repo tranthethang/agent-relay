@@ -566,7 +566,7 @@ function latestCompletedReview(events: readonly EventLine[]): EventLine | undefi
   return undefined;
 }
 
-async function readReviewAt(
+export async function readReviewAt(
   runDir: string,
   stage: EventLine["stage"],
   rel: string,

@@ -11,7 +11,12 @@ import { appendEvent, withRunLock } from "./mutate.js";
 import { planReadiness, type PlanTaskPreview } from "./plan.js";
 import { readPolicy } from "./policy.js";
 import { type RunState } from "./reduce.js";
-import { crossDeltaNeedsSelfReview, parseReviewJson, readReviewDocument } from "./review.js";
+import {
+  crossDeltaNeedsSelfReview,
+  parseReviewJson,
+  readReviewAt,
+  readReviewDocument,
+} from "./review.js";
 import { brainstormOpenSchema } from "./scaffold.js";
 import { outsidePaths } from "./scope.js";
 import { openPlanTasks, planIndexSchema, readPlanIndex } from "./tasks.js";
@@ -261,6 +266,9 @@ function closeDecision(
   if (reasons.includes("cross-review changes have no later self-review")) {
     return blocked("Close is not possible. Run self-review again first.");
   }
+  if (reasons.some((reason) => reason.startsWith("open high finding: "))) {
+    return blocked("Close is not possible. Fix each open high finding in a new review first.");
+  }
   if (recommend === "n" && strict.reviewIntegrity) {
     return blocked("Close is not possible while strict.reviewIntegrity is true.");
   }
@@ -290,6 +298,9 @@ async function closeReasons(
   }
   if (integrity.treeMatch === false) reasons.push("tree mismatch");
   if (integrity.delta !== undefined) reasons.push("changes made during the latest review");
+  for (const finding of await openHighFindings(runDir, integrity.required, events)) {
+    reasons.push(`open high finding: ${finding.kind} ${finding.id}`);
+  }
   if (mode === "preview") {
     if (crossDeltaNeedsSelfReview(events)) {
       reasons.push("cross-review changes have no later self-review");
@@ -446,6 +457,7 @@ export async function closeRun(input: {
     const policy = await readPolicy(await gitCwd(input.runDir), loaded.run.base);
     const softClose = !policy.strict.reviewIntegrity && via !== undefined;
     assertCrossDeltaSelfReview(loaded.events);
+    await assertNoOpenHighFindings(input.runDir, loaded.run.base, loaded.events);
     if (input.ackOpen !== true) {
       await assertNoOpenQuestions(input.runDir, loaded.events);
     }
@@ -840,6 +852,44 @@ async function measure(
   const head = await gitHead(cwd);
   const tree = await workTree(cwd);
   return { head, tree, size: await treeDiffSize(cwd, base, tree) };
+}
+
+// The latest completed review of each required kind decides. An older review does not count.
+async function openHighFindings(
+  runDir: string,
+  required: readonly ("self" | "cross")[],
+  events: readonly EventLine[],
+): Promise<{ kind: "self" | "cross"; id: string }[]> {
+  const open: { kind: "self" | "cross"; id: string }[] = [];
+  for (const kind of required) {
+    const stage = kind === "self" ? "self-review" : "cross-review";
+    const latest = [...events].reverse().find((event) =>
+      event.stage === stage && event.action === "completed" && event.ref !== undefined
+    );
+    if (latest?.ref === undefined) continue;
+    const review = await readReviewAt(runDir, stage, latest.ref);
+    for (const finding of review.findings) {
+      if (finding.severity === "high" && finding.status === "open") {
+        open.push({ kind, id: finding.id });
+      }
+    }
+  }
+  return open;
+}
+
+async function assertNoOpenHighFindings(
+  runDir: string,
+  base: string,
+  events: readonly EventLine[],
+): Promise<void> {
+  const { required } = await reviewIntegrity(runDir, base, events);
+  const open = await openHighFindings(runDir, required, events);
+  if (open.length === 0) return;
+  throw new RelayError(
+    "gate",
+    `close refused: open high finding: ${open.map((item) => `${item.kind} ${item.id}`).join(", ")}`,
+    "findings",
+  );
 }
 
 async function assertNoOpenQuestions(runDir: string, events: readonly EventLine[]): Promise<void> {

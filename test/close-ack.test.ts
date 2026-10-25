@@ -117,7 +117,7 @@ test("a soft close needs --ack-open for an open question even with --ack-warning
           kind: "self",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [{ q: "Continue?", a: "Stop", b: "Close anyway" }],
         })
       }\n`,

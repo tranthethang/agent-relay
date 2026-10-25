@@ -304,7 +304,7 @@ test("closePreview scans review folders and refuses an invalid review ref", asyn
     await toReviewing(runDir);
     await startStage({ runDir, stage: "self-review", tool: "cursor" });
     await doneStage({ runDir, stage: "self-review", tool: "cursor" });
-    const review = { schema: 1, kind: "self", tool: "cursor", model: "unknown", fixed: 0 };
+    const review = { schema: 1, kind: "self", tool: "cursor", model: "unknown", findings: [] };
     const selfDir = join(runDir, "30-self-review");
     await mkdir(selfDir, { recursive: true });
     await writeFile(join(selfDir, "notes.md"), "notes\n");
@@ -345,7 +345,7 @@ async function commitPolicy(dir: string, strict: Record<string, boolean>): Promi
   await gitCommit(dir, "policy");
 }
 
-const review = { schema: 1, kind: "self", tool: "cursor", model: "unknown", fixed: 0 };
+const review = { schema: 1, kind: "self", tool: "cursor", model: "unknown", findings: [] };
 
 test("text helpers print optional lines only when present", () => {
   const base = {

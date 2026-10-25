@@ -22,7 +22,7 @@ const review = {
   kind: "cross",
   tool: "cursor",
   model: "unknown",
-  fixed: 0,
+  findings: [],
   open: [{ q: "Which gate?", a: "Keep exit 4", b: "Warn only" }],
 };
 
@@ -314,7 +314,7 @@ test("non-strict close lets the developer continue and records integrity warning
           kind: "self",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [{ q: "Continue without cross review?", a: "Stop", b: "Close anyway" }],
         })
       }\n`,
@@ -567,4 +567,90 @@ test("next marks review done as a developer decision only when testCommand is se
       }
     });
   }
+});
+
+async function reviewWithFinding(
+  dir: string,
+  slug: string,
+  finding: { severity: string; status: string },
+  policy?: object,
+): Promise<string> {
+  if (policy !== undefined) {
+    await writeFile(join(dir, ".agent-relay.json"), JSON.stringify({ schema: 1, ...policy }));
+    await execFileAsync("git", ["add", ".agent-relay.json"], { cwd: dir });
+  }
+  await gitCommit(dir);
+  const created = await runCli(["run", "new", "--slug", slug, "--title", "T", "--json"], dir);
+  const run = (JSON.parse(created.stdout) as { path: string }).path;
+  await reachReview(run, dir);
+  await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+  await writeFile(join(run, "30-self-review", "01.md"), "# self\n\n- F1: x is null\n");
+  await writeFile(
+    join(run, "30-self-review", "01.json"),
+    `${
+      JSON.stringify({
+        schema: 1,
+        kind: "self",
+        tool: "cursor",
+        model: "unknown",
+        findings: [{ id: "F1", file: null, line: null, evidence: "x", ...finding }],
+        open: [],
+      })
+    }\n`,
+  );
+  const done = await runCli(["review", "done", run, "self"], dir);
+  expect(done.code, done.stderr).toBe(0);
+  return run;
+}
+
+test("close refuses an open high finding that no ack flag passes", async () => {
+  await withTempGitRepo(async (dir) => {
+    const run = await reviewWithFinding(dir, "high-open", { severity: "high", status: "open" });
+    const preview = await runCli(["close", run, "--preview", "--json"], dir);
+    const body = JSON.parse(preview.stdout) as {
+      recommend: string;
+      reasons: string[];
+      decision: { onYes: string | null };
+    };
+    expect(body.recommend).toBe("n");
+    expect(body.reasons).toContain("open high finding: self F1");
+    expect(body.decision.onYes).toBeNull();
+    for (
+      const flags of [[], ["--via", "arg"], ["--via", "arg", "--ack-warnings", "--ack-open"], [
+        "--ack-fixes",
+      ]]
+    ) {
+      const refused = await runCli(["close", run, ...flags], dir);
+      expect(refused.code).toBe(4);
+      expect(refused.stderr).toContain("open high finding: self F1");
+    }
+    const waived = await runCli(["close", run, "--waive-review", "why"], dir);
+    expect(waived.code).toBe(4);
+    const abandoned = await runCli(["close", run, "--abandon", "dropped", "--json"], dir);
+    expect(abandoned.code, abandoned.stderr).toBe(0);
+  });
+});
+
+test.each([
+  { severity: "high", status: "fixed" },
+  { severity: "high", status: "rejected" },
+  { severity: "medium", status: "open" },
+  { severity: "low", status: "open" },
+])("close passes the finding gate for %j", async (finding) => {
+  await withTempGitRepo(async (dir) => {
+    const run = await reviewWithFinding(dir, "finding-pass", finding);
+    const closed = await runCli(["close", run, "--via", "arg", "--json"], dir);
+    expect(closed.code, closed.stderr).toBe(0);
+  });
+});
+
+test("close ignores a high finding that an older review carried", async () => {
+  await withTempGitRepo(async (dir) => {
+    const run = await reviewWithFinding(dir, "older-high", { severity: "high", status: "open" });
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    const next = await runCli(["review", "done", run, "self"], dir);
+    expect(next.code, next.stderr).toBe(0);
+    const closed = await runCli(["close", run, "--via", "arg", "--json"], dir);
+    expect(closed.code, closed.stderr).toBe(0);
+  });
 });
