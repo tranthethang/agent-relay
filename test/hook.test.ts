@@ -226,6 +226,14 @@ test("hook check still checks a new file in a missing dir and a symlinked prefix
   });
 });
 
+test("hook check still checks a path whose folder name starts with two dots", async () => {
+  await withTempGitRepo(async (dir) => {
+    await implementingRun(dir, "hook-dots");
+    const dotted = await hookCheck(hookInput(dir, { file_path: join(dir, "..cache", "a.ts") }));
+    expect(dotted?.hookSpecificOutput.permissionDecision).toBe("ask");
+  });
+});
+
 test("hook check prints nothing when the input or a run is broken", async () => {
   await withTempGitRepo(async (dir) => {
     expect(await runHookCli("not json", dir)).toEqual({ stdout: "", code: 0 });
