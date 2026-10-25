@@ -260,6 +260,7 @@ async function writeReviewPair(
   started: Record<string, unknown>,
   kind: "self" | "cross",
   question: string | undefined,
+  findings: { id: string; severity: string; status: string }[] = [],
 ): Promise<void> {
   const markdown = textField(check, started, "markdown", `review new ${kind}`);
   const jsonPath = textField(check, started, "json", `review new ${kind}`);
@@ -267,7 +268,8 @@ async function writeReviewPair(
   const cards = question === undefined
     ? ""
     : `\n- Q1: ${question}\n  - a. Stop\n  - b. Close anyway\n`;
-  await write(markdown, `# ${kind}\n\n## Findings\n${cards}`);
+  const lines = findings.map((finding) => `\n- ${finding.id}: eval defect\n`).join("");
+  await write(markdown, `# ${kind}\n\n## Findings\n${lines}${cards}`);
   await write(
     jsonPath,
     `${
@@ -276,7 +278,12 @@ async function writeReviewPair(
         kind,
         tool: kind === "self" ? "cursor" : "codex",
         model: kind === "self" ? "unknown" : "gpt-5.4",
-        fixed: 0,
+        findings: findings.map((finding) => ({
+          ...finding,
+          file: null,
+          line: null,
+          evidence: "eval fixture",
+        })),
         open,
       })
     }\n`,
@@ -654,6 +661,66 @@ async function decisionClose(check: Check, ctx: Context): Promise<void> {
   expectField(check, parseJson(check, closed, "decision close"), "lifecycle", "closed", "decision");
 }
 
+// An open high finding refuses close with exit 4. A later review that sets it fixed lets close pass.
+async function highFindingGate(check: Check, ctx: Context): Promise<void> {
+  await write(
+    join(ctx.repo, ".agent-relay.json"),
+    `${JSON.stringify({ schema: 1, requireReviews: ["self"], smallChange: 0 })}\n`,
+  );
+  await commitAll(ctx, "policy");
+  const run = await newRun(check, ctx, "real-high-finding");
+  await reachReview(check, ctx, run);
+  const round = async (status: string): Promise<void> => {
+    const started = await cli(check, ctx, [
+      "review",
+      "new",
+      run,
+      "self",
+      "--tool",
+      "cursor",
+      "--json",
+    ]);
+    expectExit(check, started, 0, `review new self (${status})`);
+    await writeReviewPair(
+      check,
+      parseJson(check, started, `review new self (${status})`),
+      "self",
+      undefined,
+      [{ id: "F1", severity: "high", status }],
+    );
+    expectExit(
+      check,
+      await cli(check, ctx, ["review", "done", run, "self"]),
+      0,
+      `review done self (${status})`,
+    );
+  };
+  await round("open");
+  const preview = await cli(check, ctx, ["close", run, "--preview", "--json"]);
+  expectExit(check, preview, 0, "close preview with an open high finding");
+  expectText(check, preview, "open high finding: self F1", "close preview");
+  const refused = await cli(check, ctx, [
+    "close",
+    run,
+    "--via",
+    "confirm",
+    "--ack-warnings",
+    "--ack-open",
+  ]);
+  expectExit(check, refused, 4, "close with an open high finding");
+  expectText(check, refused, "open high finding: self F1", "close with an open high finding");
+  await round("fixed");
+  const closed = await cli(check, ctx, ["close", run, "--via", "confirm", "--json"]);
+  expectExit(check, closed, 0, "close after the finding is fixed");
+  expectField(
+    check,
+    parseJson(check, closed, "close after the finding is fixed"),
+    "lifecycle",
+    "closed",
+    "close after the finding is fixed",
+  );
+}
+
 const scenarios: Scenario[] = [
   {
     name: "real-plan-gate",
@@ -679,6 +746,11 @@ const scenarios: Scenario[] = [
     name: "real-decision-close",
     summary: "The close preview onYes command closes the run as printed.",
     run: decisionClose,
+  },
+  {
+    name: "real-high-finding-gate",
+    summary: "An open high finding refuses close until a later review sets it fixed.",
+    run: highFindingGate,
   },
 ];
 

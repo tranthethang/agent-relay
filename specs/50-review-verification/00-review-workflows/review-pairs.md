@@ -26,8 +26,9 @@ Summary of changes evaluated.
 
 ## Findings
 
-Specific observations, defects fixed, and open questions:
+Each finding with its id, then the open questions:
 
+- F1: `src/cache.ts:42` evicts the newest entry. Fixed.
 - Q1: Should cache eviction use LRU or FIFO?
   - a. Use FIFO for simpler implementation.
   - b. Use LRU for hit-rate durability.
@@ -41,7 +42,16 @@ Specific observations, defects fixed, and open questions:
   "kind": "self",
   "tool": "antigravity",
   "model": "gemini-3.8-flash",
-  "fixed": 1,
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "high",
+      "file": "src/cache.ts",
+      "line": 42,
+      "status": "fixed",
+      "evidence": "The eviction test failed before the change."
+    }
+  ],
   "open": [
     {
       "q": "Should cache eviction use LRU or FIFO?",
@@ -52,11 +62,22 @@ Specific observations, defects fixed, and open questions:
 }
 ```
 
-`fixed` is a count of defects fixed in that round, not a list.
+A finding is `{ id, severity, file, line, status, evidence }`.
+
+- `id` is `F<n>` and is unique in one review. `review done` refuses an id that the review markdown does not contain.
+- `severity` is `high`, `medium`, or `low`.
+- `status` is `fixed`, `open`, or `rejected`. Put the reason for `rejected` in `evidence`.
+- `file` is a repo-relative path, or `null` for a finding with no single file. `line` is a positive integer or `null`.
+- `evidence` is a non-empty string.
+
+A finding is a defect claim. A question card is a tradeoff for the user. They stay separate.
+The scaffold writes `findings: []`. An older review JSON with `fixed` as a number and no `findings` still parses as a review with no findings.
+The CLI never writes `fixed`. A file with both `fixed` and `findings` fails the parse with field `fixed`.
 
 ## Close Rules for Pairs
 
 - An open question in the latest review fails `atry close` with field `open` and exit 4. `--ack-open` accepts the question.
+- An open `high` finding in the latest review of a required kind fails `atry close` with field `findings` and exit 4. Fix it, or set it to `rejected` with evidence in a new review. No ack flag passes it.
 - A reviewer delta in the latest review appears as `changes made during the latest review`. A strict close needs `--ack-fixes`. A soft close needs `--ack-warnings`.
 - A cross-review delta needs a self-review completed after it. `atry close` fails with field `review.self` until that self-review exists.
 

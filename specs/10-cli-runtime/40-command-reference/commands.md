@@ -69,7 +69,10 @@ only when you dogfood a build from this repo.
 ### Stats and doctor
 
 `atry stats` reads `events.jsonl` across runs. `atry stats <run>` reads one run.
-A row reports stage time, review rounds, waivers, failed tests, and drift.
+A row reports stage time, review rounds, waivers, failed tests, drift, and findings.
+The text row ends with `findings=<total> high-open=<n> fixed=<n>`. The JSON row ends with
+`findings: { high, medium, low, open, fixed, rejected, highOpen }`, summed over every review of the run.
+A review with no `findings` counts as zero.
 Stage time is a number of milliseconds. The command does not write an event.
 `--since <ISO date>` keeps a run with at least one event at or after the date.
 `--failed` keeps a run with at least one failed test. Both filters combine, and
@@ -81,6 +84,9 @@ installed bundles, the policy file, `atry` on `PATH`, and the version that
 when an installed bundle is stale, or when `PATH` runs a different base version
 from the running CLI.
 A missing policy file passes and reports `default`.
+
+`atry status <run>` ends with `findings: <open> open, <highOpen> high open`, counted from
+the latest review of each kind. The JSON detail adds `findings: { open, highOpen }`.
 
 ### Next and previews
 
@@ -133,6 +139,9 @@ does not skip that self-review.
 `--waive-review <reason>` records a review waiver
 and skips the required-review and tree checks. It does not skip the
 open-question check, the cross-delta rule, or the warning gate.
+`close` refuses with exit 4 while the latest review of a required kind has an open `high`
+finding. The preview lists `open high finding: <kind> <id>` and recommends `n`.
+No ack flag and no waiver passes that gate. `--abandon` does.
 `atry close --abandon <reason>` stops a run from any open state.
 
 ### Distill and verify

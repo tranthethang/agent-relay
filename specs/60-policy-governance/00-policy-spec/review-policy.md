@@ -39,7 +39,13 @@ and continues when the command can preserve the relevant evidence. Set a group
 to `true` to keep its blocking behavior. Existing policy files that omit
 `strict` remain valid.
 
-Review JSON contains `schema`, `kind`, `tool`, `model`, `fixed`, and `open`.
+Review JSON contains `schema`, `kind`, `tool`, `model`, `findings`, and `open`.
+A finding is `{ id, severity, file, line, status, evidence }`. An older review JSON
+with `fixed` as a number and no `findings` still parses as a review with no findings.
+`close` refuses with exit 4 while the latest review of a required kind has a `high`
+finding with status `open`. The gate runs with or without `strict.reviewIntegrity`.
+`--ack-warnings`, `--ack-open`, `--ack-fixes`, and `--waive-review` do not pass it.
+`--abandon` does. To close, fix the finding or set it to `rejected` with evidence in a new review.
 An older review JSON may also carry `tests`. The CLI reads that key, ignores
 its value, and never writes it in a new review JSON. Any other unknown key
 still fails the parse.
