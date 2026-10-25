@@ -512,6 +512,10 @@ test("atry review done refuses a finding id missing from the Markdown and record
     expect(done.code).toBe(2);
     expect(done.stderr).toContain("30-self-review/01.json:findings[0].id");
     expect(await readFile(join(run, "events.jsonl"), "utf8")).toBe(before);
+    await writeFile(join(run, "30-self-review", "01.md"), "# self\n\n- F10: x is null\n");
+    const prefix = await runCli(["review", "done", run, "self"], dir);
+    expect(prefix.code).toBe(2);
+    expect(prefix.stderr).toContain("30-self-review/01.json:findings[0].id");
     await writeFile(join(run, "30-self-review", "01.md"), "# self\n\n- F1: x is null\n");
     const ok = await runCli(["review", "done", run, "self"], dir);
     expect(ok.code, ok.stderr).toBe(0);
