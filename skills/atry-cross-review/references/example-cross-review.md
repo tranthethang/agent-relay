@@ -14,6 +14,10 @@
   - a. Keep the short line. Use `--json` when the title matters.
   - b. Append the title. The line grows by one field.
 
+## Acceptance
+
+- T1: met
+
 `40-cross-review/01.json`:
 
 { "schema": 1, "kind": "cross", "tool": "cursor", "model": "opus", "findings": [ { "id": "F1", "severity": "high", "file": "src/cli/commands.ts", "line": 38, "status": "fixed", "evidence": "The command printed undefined for a missing run argument." }, { "id": "F2", "severity": "low", "file": null, "line": null, "status": "rejected", "evidence": "A closed run exits 0 in the command output." } ], "open": [ { "q": "Should the quiet line keep the run title?", "a": "Keep the short line.", "b": "Append the title." } ] }

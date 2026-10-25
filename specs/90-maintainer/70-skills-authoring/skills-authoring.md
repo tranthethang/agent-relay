@@ -75,15 +75,15 @@ nearest integer. The total row is the sum of the stage rows.
 The table below is a snapshot. The command is the source. Run the command
 after you edit a skill, and replace the rows with its output.
 
-| stage        | references                                                                                                                | chars | tokens |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md, references/file-conventions.md                                                                     |  8648 |   2162 |
-| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                     | 10887 |   2722 |
-| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                    | 13799 |   3450 |
-| self-review  | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-review.md       | 16001 |   4000 |
-| cross-review | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-cross-review.md | 16128 |   4032 |
-| distill      | references/file-conventions.md                                                                                            |  4987 |   1247 |
-| total        |                                                                                                                           | 70450 |  17613 |
+| stage        | references                                                                                                                                                | chars | tokens |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: | -----: |
+| brainstorm   | references/writing.md, references/file-conventions.md                                                                                                     |  8648 |   2162 |
+| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                                                     | 10887 |   2722 |
+| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                                                    | 13799 |   3450 |
+| self-review  | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-review.md       | 17699 |   4425 |
+| cross-review | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-cross-review.md | 17724 |   4431 |
+| distill      | references/file-conventions.md                                                                                                                            |  4987 |   1247 |
+| total        |                                                                                                                                                           | 73744 |  18437 |
 
 `test/skill-tokens.test.ts` reads `maxTokens` from `evals/scenarios.json`. It
 fails when a stage reaches `maxTokens` minus 50. It also fails when the total

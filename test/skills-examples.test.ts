@@ -23,12 +23,12 @@ const examples: Example[] = [
   {
     skill: "atry-self-review",
     file: "references/example-review.md",
-    headings: ["## Findings"],
+    headings: ["## Findings", "## Acceptance"],
   },
   {
     skill: "atry-cross-review",
     file: "references/example-cross-review.md",
-    headings: ["## Findings"],
+    headings: ["## Findings", "## Acceptance"],
   },
 ];
 
@@ -87,6 +87,19 @@ test("each review example parses with the findings schema and names each id in t
     expect(review.findings.map((finding) => finding.status).sort()).toEqual(["fixed", "rejected"]);
     for (const finding of review.findings) {
       expect(text).toContain(`- ${finding.id}: `);
+    }
+    // The `review done` Acceptance check: one valid line per task, and known finding ids.
+    const section = text.slice(
+      text.indexOf("## Acceptance\n"),
+      text.indexOf("`", text.indexOf("## Acceptance\n")),
+    );
+    const lines = section.split("\n").filter((line) => line.startsWith("- "));
+    expect(lines.length).toBeGreaterThan(0);
+    const ids = new Set(review.findings.map((finding) => finding.id));
+    for (const line of lines) {
+      const match = /^- (T[1-9]\d*): (met|unmet(?: F[1-9]\d*)+)$/.exec(line);
+      expect(match, line).not.toBeNull();
+      for (const id of match?.[2].split(" ").slice(1) ?? []) expect(ids.has(id), line).toBe(true);
     }
   }
 });
