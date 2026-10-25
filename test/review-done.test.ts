@@ -24,7 +24,7 @@ test("atry review done validates the latest JSON and records head and size", asy
           kind: "self",
           tool: "codex",
           model: "gpt-5.4",
-          fixed: 1,
+          findings: [],
           open: [],
         })
       }\n`,
@@ -176,7 +176,7 @@ test("atry review done refuses a tool changed after review new", async () => {
           kind: "self",
           tool: "codex",
           model: "m1",
-          fixed: 0,
+          findings: [],
           open: [],
         })
       }\n`,
@@ -205,7 +205,7 @@ test("atry review done requires column-zero question cards to match open items",
           kind: "self",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [],
         })
       }\n`,
@@ -221,7 +221,7 @@ test("atry review done requires column-zero question cards to match open items",
           kind: "self",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [{ q: "Column-zero card", need: "one open item" }],
         })
       }\n`,
@@ -304,7 +304,7 @@ test("atry close reads the completed review, not a later unfinished scaffold", a
           kind: "self",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [{ q: "Keep it?", need: "usage data" }],
         })
       }\n`,
@@ -338,7 +338,7 @@ test("atry review done names the invalid field and a missing review", async () =
           kind: "cross",
           tool: "cursor",
           model: "unknown",
-          fixed: 0,
+          findings: [],
           open: [],
         })
       }\n`,
@@ -478,5 +478,42 @@ test("atry review done refuses when the review stage changed during tests", asyn
     const events = await selfReviewEvents(run);
     expect(events.filter((event) => event.action === "started")).toHaveLength(2);
     expect(events.some((event) => event.action === "completed")).toBe(false);
+  });
+});
+
+test("atry review done refuses a finding id missing from the Markdown and records no event", async () => {
+  await withTempGitRepo(async (dir) => {
+    await gitCommit(dir);
+    const run = await createRun(dir, "review-finding-id");
+    await reachReview(run, dir);
+    await runCli(["review", "new", run, "self", "--tool", "cursor"], dir);
+    await writeFile(
+      join(run, "30-self-review", "01.json"),
+      `${
+        JSON.stringify({
+          schema: 1,
+          kind: "self",
+          tool: "cursor",
+          model: "unknown",
+          findings: [{
+            id: "F1",
+            severity: "high",
+            file: null,
+            line: null,
+            status: "open",
+            evidence: "x",
+          }],
+          open: [],
+        })
+      }\n`,
+    );
+    const before = await readFile(join(run, "events.jsonl"), "utf8");
+    const done = await runCli(["review", "done", run, "self"], dir);
+    expect(done.code).toBe(2);
+    expect(done.stderr).toContain("30-self-review/01.json:findings[0].id");
+    expect(await readFile(join(run, "events.jsonl"), "utf8")).toBe(before);
+    await writeFile(join(run, "30-self-review", "01.md"), "# self\n\n- F1: x is null\n");
+    const ok = await runCli(["review", "done", run, "self"], dir);
+    expect(ok.code, ok.stderr).toBe(0);
   });
 });

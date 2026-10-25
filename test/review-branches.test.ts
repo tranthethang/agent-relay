@@ -78,7 +78,7 @@ function useEvents(events: EventLine[], lifecycle = "reviewing"): void {
 }
 
 function reviewBody(kind: "self" | "cross", model: string, open: unknown[] = []): string {
-  return `${JSON.stringify({ schema: 1, kind, tool: "cursor", model, fixed: 0, open })}\n`;
+  return `${JSON.stringify({ schema: 1, kind, tool: "cursor", model, findings: [], open })}\n`;
 }
 
 async function writeReview(
@@ -248,7 +248,7 @@ test("readReviewDocument maps invalid JSON and root errors, and rethrows read er
 });
 
 test("diversityWarnings flags a cross tool that matches the self-review tool", () => {
-  const review = { schema: 1, kind: "cross", tool: "cursor", model: "m", fixed: 0, open: [] };
+  const review = { schema: 1, kind: "cross", tool: "cursor", model: "m", findings: [], open: [] };
   expect(diversityWarnings(review as never, undefined, { tool: "cursor" })).toEqual([
     "cross tool matches self-review tool",
   ]);
@@ -371,7 +371,14 @@ test("readReviewDocument names the failing field", async () => {
 });
 
 test("diversityWarnings flags a matching vendor with known models", () => {
-  const review = { schema: 1, kind: "cross", tool: "codex", model: "gpt-5.5", fixed: 0, open: [] };
+  const review = {
+    schema: 1,
+    kind: "cross",
+    tool: "codex",
+    model: "gpt-5.5",
+    findings: [],
+    open: [],
+  };
   expect(diversityWarnings(review as never, { model: "gpt-4o" }, undefined)).toContain(
     "cross model vendor matches implement model",
   );
