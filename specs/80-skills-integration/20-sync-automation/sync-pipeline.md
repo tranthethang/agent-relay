@@ -13,7 +13,23 @@ graph TD
     Script --> SelfReview[skills/atry-self-review/references/]
     Script --> CrossReview[skills/atry-cross-review/references/]
     Script --> Distill[skills/atry-distill/references/]
+    Floor[skillMinimumVersion in scripts/maint/next-version.ts] --> Script
+    Script --> SkillMd[skills/*/SKILL.md]
+    Script --> Smoke[.github/actions/smoke/action.yml]
+    Script --> Scenarios[evals/scenarios.json]
 ```
+
+## CLI Floor
+
+`skillMinimumVersion` in `scripts/maint/next-version.ts` is the only place that holds the skill CLI floor.
+`npm run sync` writes it into three targets:
+
+- The `requires-atry` line in each of the six `skills/*/SKILL.md` files.
+- The `atry preflight --requires` line in `.github/actions/smoke/action.yml`.
+- Each floor string and each `installed` value in `evals/scenarios.json`.
+
+`npm run sync:check` fails on drift in any of them.
+To bump the floor, edit `skillMinimumVersion` and run `npm run sync`.
 
 ## CI Verification
 
