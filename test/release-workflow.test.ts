@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
+import { skillMinimumRange } from "../scripts/maint/next-version.ts";
 
 test("release workflow computes X.M.Z and publishes from main", () => {
   const yaml = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
@@ -69,7 +70,7 @@ test("smoke action checks the CLI version, preflight, and the six bundles", () =
   expect(yaml).toContain("using: composite");
   const order = [
     "atry version",
-    "atry preflight --requires \">=0.10.7\"",
+    `atry preflight --requires "${skillMinimumRange}"`,
     "atry skills install --tool claude-code",
     "atry skills status --dir",
     "install.bundles.length !== 6",

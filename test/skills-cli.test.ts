@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import { skillMinimumVersion } from "../scripts/maint/next-version.ts";
 import { registerSkills } from "../src/cli/skills.js";
 import {
   bundledSkillNames,
@@ -142,7 +143,7 @@ test("a higher requires-atry floor makes status exit 1 and print the exact insta
     const result = await runCli(["skills", "status", "--dir", dir], dir);
     expect(result.code).toBe(1);
     expect(result.stdout).toContain("atry-plan: mismatch");
-    expect(result.stdout).toContain("npm i -g @tranthethang/agent-relay@0.10.7");
+    expect(result.stdout).toContain(`npm i -g @tranthethang/agent-relay@${skillMinimumVersion}`);
     expect(result.stdout).not.toContain("@latest");
   });
 });
@@ -156,7 +157,9 @@ test("status reports stale for old content and for a changed reference file", as
     const old = await runCli(["skills", "status", "--dir", dir], dir);
     expect(old.code).toBe(1);
     expect(old.stdout).toContain("atry-plan: stale");
-    expect(old.stdout).toContain("install: npm i -g @tranthethang/agent-relay@0.10.7");
+    expect(old.stdout).toContain(
+      `install: npm i -g @tranthethang/agent-relay@${skillMinimumVersion}`,
+    );
 
     expect((await install(dir)).code).toBe(0);
     const reference = join(dir, "atry-plan", "references", "file-conventions.md");
@@ -352,6 +355,8 @@ test("CLI uses isolated home defaults for install and status", async () => {
     const none = await isolated(["skills", "status"], emptyHome);
     expect(none.code).toBe(1);
     expect(none.stdout).toContain("dirs: none");
-    expect(none.stdout).toContain("install: npm i -g @tranthethang/agent-relay@0.10.7");
+    expect(none.stdout).toContain(
+      `install: npm i -g @tranthethang/agent-relay@${skillMinimumVersion}`,
+    );
   });
 });

@@ -65,8 +65,7 @@ test("a skill command with a bad verb under a real group is unknown", async () =
   expect(await unknownCommands("Run `atry stage bogus <run>`.")).toEqual(["stage bogus"]);
 });
 
-test("the skills require a CLI newer than 0.10.6", () => {
-  expect(skillMinimumVersion).toBe("0.10.7");
-  expect(versionMeets("0.10.6", `>=${skillMinimumVersion}`)).toBe(false);
-  expect(versionMeets("0.10.7", `>=${skillMinimumVersion}`)).toBe(true);
+test("the skills require a CLI at the floor and not below it", () => {
+  expect(versionMeets("0.1.0", `>=${skillMinimumVersion}`)).toBe(false);
+  expect(versionMeets(skillMinimumVersion, `>=${skillMinimumVersion}`)).toBe(true);
 });

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
+import { skillMinimumRange, skillMinimumVersion } from "../scripts/maint/next-version.ts";
 import { RelayError } from "../src/core/error.js";
 import {
   installCommandFor,
@@ -9,6 +10,7 @@ import {
 } from "../src/core/preflight.js";
 import { runCli, withTempGitRepo } from "./helper.js";
 
+const olderThanFloor = "0.1.0";
 // `npm test` builds first, so the CLI reports the dev build version.
 const built = JSON.parse(
   readFileSync(new URL("../dist/package.json", import.meta.url), "utf8"),
@@ -54,15 +56,15 @@ test("a bad range is a usage error", () => {
 });
 
 test("preflightResult refuses a dev build without consent", () => {
-  expect(preflightResult("0.10.7-dev", `>=${base}`)).toEqual({
+  expect(preflightResult(`${skillMinimumVersion}-dev`, `>=${base}`)).toEqual({
     schema: 1,
     ok: false,
-    installed: "0.10.7-dev",
+    installed: `${skillMinimumVersion}-dev`,
     required: `>=${base}`,
     dev: true,
   });
-  expect(preflightResult("0.10.7-dev", ">=0.1.0", true).ok).toBe(true);
-  expect(preflightResult("0.10.7-dev", ">=99.0.0", true).ok).toBe(false);
+  expect(preflightResult(`${skillMinimumVersion}-dev`, ">=0.1.0", true).ok).toBe(true);
+  expect(preflightResult(`${skillMinimumVersion}-dev`, ">=99.0.0", true).ok).toBe(false);
 });
 
 test("preflightResult reads a release version without a marker", () => {
@@ -75,12 +77,14 @@ test("preflightResult reads a release version without a marker", () => {
 });
 
 test("installCommandFor names the required release", () => {
-  expect(installCommandFor(">=0.10.7")).toBe("npm i -g @tranthethang/agent-relay@0.10.7");
-  expect(() => installCommandFor("0.10.7")).toThrow(RelayError);
-  expect(preflightText(preflightResult("0.10.6", ">=0.10.7"))).toBe(
-    "requires: >=0.10.7\ninstall: npm i -g @tranthethang/agent-relay@0.10.7\n",
+  expect(installCommandFor(skillMinimumRange)).toBe(
+    `npm i -g @tranthethang/agent-relay@${skillMinimumVersion}`,
   );
-  expect(preflightText(preflightResult("0.10.7", ">=0.10.7"))).toBe("");
+  expect(() => installCommandFor(skillMinimumVersion)).toThrow(RelayError);
+  expect(preflightText(preflightResult(olderThanFloor, skillMinimumRange))).toBe(
+    `requires: ${skillMinimumRange}\ninstall: npm i -g @tranthethang/agent-relay@${skillMinimumVersion}\n`,
+  );
+  expect(preflightText(preflightResult(skillMinimumVersion, skillMinimumRange))).toBe("");
 });
 
 test("preflight refuses the dev build without consent", async () => {

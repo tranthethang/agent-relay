@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { skillNames } from "./skill-text.js";
+import { skillMinimumVersion, skillNames } from "./skill-text.js";
 
 const repo = new URL("..", import.meta.url);
 const script = ["--experimental-strip-types", "scripts/maint/sync-references.ts"];
@@ -544,7 +544,7 @@ test("sync writes a new floor into skills, the smoke action, and scenarios", () 
     );
     const scenarios = readFileSync(join(root, "evals/scenarios.json"), "utf8");
     expect(scenarios).toContain("\"installed\": \"9.9.9\"");
-    expect(scenarios).not.toContain("0.10.7");
+    expect(scenarios).not.toContain(skillMinimumVersion);
     expect(runSync(["--check", "--root", root], repo).status).toBe(0);
   } finally {
     rmSync(root, { recursive: true, force: true });

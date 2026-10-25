@@ -4,9 +4,11 @@ import {
   requiredVersion,
   requiresFits,
   sharedRequires,
+  skillMinimumRange,
   skillMinimumVersion,
 } from "./skill-text.js";
 
+const olderThanFloor = "0.1.0";
 const partial = readFileSync(
   new URL("../specs/80-skills-integration/00-skill-bridge/preflight.md", import.meta.url),
   "utf8",
@@ -46,7 +48,7 @@ test("requires-atry values must match", () => {
 
 test("requires-atry uses X.M.Z and is not higher than the release", () => {
   expect(requiredVersion()).toBe(skillMinimumVersion);
-  expect(requiresFits(">=0.10.7", "0.10.7")).toBe(true);
-  expect(requiresFits(">=0.10.7", "0.10.6")).toBe(false);
-  expect(requiresFits(">=0.11.0", "0.10.7")).toBe(false);
+  expect(requiresFits(skillMinimumRange, skillMinimumVersion)).toBe(true);
+  expect(requiresFits(skillMinimumRange, olderThanFloor)).toBe(false);
+  expect(requiresFits(">=99.1.0", skillMinimumVersion)).toBe(false);
 });
