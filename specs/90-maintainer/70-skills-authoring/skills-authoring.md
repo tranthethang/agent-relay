@@ -77,13 +77,13 @@ after you edit a skill, and replace the rows with its output.
 
 | stage        | references                                                                                                                | chars | tokens |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md, references/file-conventions.md                                                                     |  8403 |   2101 |
-| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                     | 10523 |   2631 |
-| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                    | 13427 |   3357 |
+| brainstorm   | references/writing.md, references/file-conventions.md                                                                     |  8648 |   2162 |
+| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                     | 10887 |   2722 |
+| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                    | 13799 |   3450 |
 | self-review  | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-review.md       | 16001 |   4000 |
 | cross-review | references/writing.md, references/reviewer-conduct.md, references/file-conventions.md, references/example-cross-review.md | 16128 |   4032 |
-| distill      | references/file-conventions.md                                                                                            |  4729 |   1182 |
-| total        |                                                                                                                           | 69211 |  17303 |
+| distill      | references/file-conventions.md                                                                                            |  4987 |   1247 |
+| total        |                                                                                                                           | 70450 |  17613 |
 
 `test/skill-tokens.test.ts` reads `maxTokens` from `evals/scenarios.json`. It
 fails when a stage reaches `maxTokens` minus 50. It also fails when the total

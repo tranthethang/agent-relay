@@ -32,6 +32,7 @@ Use one of these tool names: `cursor`, `claude-code`, `cowork`, `codex`, `antigr
 
 Count the goals and the tasks before you create a run.
 Stop when the draft has more than one goal.
+Why: Two goals in one run mix two reviews, so one goal can block the close of the other.
 Read `strict.plan` from the policy at the run base.
 When it is `true`, stop when the draft has more than eight tasks and ask the user to split the work or pick one plan.
 When it is `false`, `plan done` and `plan amend` allow more than eight tasks and print a warning.
@@ -55,6 +56,7 @@ Continue only after the user chooses.
 
 Use a slug of lowercase letters and single hyphens.
 `run new` records `base` from git HEAD. Do not invent a ref.
+Why: The scope check and the diff size start at `base`, so a wrong ref hides or adds changes.
 Stop when a command fails. Show the field path to the user.
 
 ## Overview file
@@ -71,7 +73,9 @@ Keep `schema` as `1`.
 Each task object has `title`, `deps`, and `files`.
 `deps` lists earlier ids such as `T1`. Use `[]` when a task has no dependency.
 `files` lists the repo paths that the task will edit.
+Why: `claim` and the scope check read `files`, so a missing path shows up as an extra edit.
 Use at most eight tasks.
+Why: A longer task list is hard to review in one run and often holds more than one goal.
 
 ## Amend
 

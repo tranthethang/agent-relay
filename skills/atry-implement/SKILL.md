@@ -64,9 +64,11 @@ Add `--model <model>` to a `stage` command when you know the model.
 6. Change only the files listed for that task. Edit them in the claim result's
    `worktree.path` when it has one. Use `run.worktree.path` only when no task
    worktree exists.
+   Why: An edit outside `files` escapes the plan review and shows up as a scope warning.
 7. Fill `20-implement/<task>.md` with the edit tool. Read `references/example-implement.md` first.
 8. Record the files, the assumptions, and the risks in that file.
 9. Run `git status` in the tree you edited. Commit there before `atry task done`.
+   Why: `integrate` merges commits, so an uncommitted edit in a task worktree never reaches the run branch.
 10. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.
 11. When `task done` refuses, read the paths in the message. A refused run names
     the dirty worktree; commit there and retry.
@@ -81,10 +83,12 @@ Add `--model <model>` to a `stage` command when you know the model.
 `atry task start` does not create a task worktree. Use `atry claim` when the run
 uses a task worktree. A task worktree must be committed before `atry task done`.
 Do not invent a meaning the plan does not state. Skip that task and record the reason.
+Why: A guessed meaning gives code that no reviewer can check against the plan.
 A stale lock can move with `atry steal <run> <task> --session <tag> --ttl <minutes>`.
 
 ## Rules
 
 Do not edit files outside the plan.
 Do not hand-edit `events.jsonl` or `run.json`.
+Why: `atry` rebuilds run state from `events.jsonl`, so a hand edit can corrupt the run history.
 Do not run `atry close`.

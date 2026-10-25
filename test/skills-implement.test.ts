@@ -55,3 +55,10 @@ function loopSection(skill: string): number {
   const block = skill.indexOf("<!-- BEGIN LOOP -->");
   return skill.slice(start, block).split("\n").filter((line) => line.trim() !== "").length;
 }
+
+test("implement rules that are not obvious carry a Why line", () => {
+  expect(text).toMatch(/worktree exists\.\n {3}Why: An edit outside `files`/);
+  expect(text).toMatch(/Commit there before `atry task done`\.\n {3}Why: /);
+  expect(text).toMatch(/Skip that task and record the reason\.\nWhy: /);
+  expect(text).toMatch(/Do not hand-edit `events\.jsonl` or `run\.json`\.\nWhy: /);
+});

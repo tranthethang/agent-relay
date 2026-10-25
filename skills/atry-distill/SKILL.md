@@ -29,9 +29,13 @@ A claim result with `worktree.path` takes precedence over `run.worktree.path`.
 1. Call `atry context <run> --json` when the user names a run.
 2. Run `atry distill <run>`.
 3. Tell the user the manifest path and the file count.
+4. When the run is not closed, tell the user that a later stage makes the manifest stale.
+   Why: A manifest from an open run misses the files that later stages write.
 
 Stop when the command fails. Show the field path to the user.
 
 ## Non-goals
 
-Do not write a summary. Do not edit the manifest by hand. Do not run `atry close`.
+Do not write a summary. Do not run `atry close`.
+Do not edit the manifest by hand.
+Why: A hand edit makes the manifest disagree with the run files that `atry distill` read.
