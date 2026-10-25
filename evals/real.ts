@@ -721,6 +721,56 @@ async function highFindingGate(check: Check, ctx: Context): Promise<void> {
   );
 }
 
+// A review without a line for each task that is not skipped is refused. The line lets it pass.
+async function acceptanceGate(check: Check, ctx: Context): Promise<void> {
+  const run = await newRun(check, ctx, "real-acceptance");
+  await writePlan(check, ctx, run, [["notes.txt"], ["other.txt"]]);
+  await approveAndImplement(check, ctx, run);
+  for (
+    const [args, label] of [
+      [["task", "start", run, "T1"], "task start T1"],
+      [["task", "done", run, "T1"], "task done T1"],
+      [["task", "skip", run, "T2", "--reason", "eval fixture"], "task skip T2"],
+      [["stage", "done", run, "implement", "--tool", "cursor"], "stage done implement"],
+    ] as const
+  ) {
+    expectExit(check, await cli(check, ctx, [...args]), 0, label);
+  }
+  const started = await cli(check, ctx, [
+    "review",
+    "new",
+    run,
+    "self",
+    "--tool",
+    "cursor",
+    "--json",
+  ]);
+  expectExit(check, started, 0, "review new self");
+  const pair = parseJson(check, started, "review new self");
+  await writeReviewPair(check, pair, "self", undefined);
+  const events = join(run, "events.jsonl");
+  const before = await readFile(events, "utf8");
+  const refused = await cli(check, ctx, ["review", "done", run, "self"]);
+  expectExit(check, refused, 2, "review done without a T1 line");
+  expectText(
+    check,
+    refused,
+    "30-self-review/01.json:## Acceptance:T1",
+    "review done without a T1 line",
+  );
+  if (await readFile(events, "utf8") !== before) {
+    check.failures.push("review done without a T1 line: events.jsonl changed");
+  }
+  const markdown = textField(check, pair, "markdown", "review new self");
+  await write(markdown, `${await readFile(markdown, "utf8")}\n- T1: met\n`);
+  expectExit(
+    check,
+    await cli(check, ctx, ["review", "done", run, "self"]),
+    0,
+    "review done with a T1 line",
+  );
+}
+
 const scenarios: Scenario[] = [
   {
     name: "real-plan-gate",
@@ -751,6 +801,11 @@ const scenarios: Scenario[] = [
     name: "real-high-finding-gate",
     summary: "An open high finding refuses close until a later review sets it fixed.",
     run: highFindingGate,
+  },
+  {
+    name: "real-acceptance-gate",
+    summary: "Review done refuses a missing Acceptance task line, then passes with it.",
+    run: acceptanceGate,
   },
 ];
 

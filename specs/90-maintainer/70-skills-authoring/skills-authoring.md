@@ -40,6 +40,27 @@ The skill text calls `atry` verbs. It does not tell the agent to run files under
 After you edit a skill, install it again with `npx skills add` if you dogfood
 from a global skill directory.
 
+## Rationale lines
+
+Follow a rule whose purpose is not obvious with one line that starts with
+`Why:`. The line names the failure that the rule prevents, in 25 words or
+fewer. Do not add a `Why:` line to a plain procedure step. Under a numbered
+step, indent the line three spaces so it stays in that item.
+`test/skills-writing.test.ts` checks the word count of each `Why:` line in a
+`SKILL.md`. When a stage passes the token budget, shorten other text, not the
+rationale.
+
+## Review checklist
+
+`skills/atry-self-review/references/review-checklist.md` is the canonical
+checklist for both review skills. `npm run sync` copies it to cross-review,
+the same as `reviewer-conduct.md`, through `REVIEW_TEMPLATES` in
+`scripts/maint/sync-references.ts`. Edit the self-review copy only.
+The checklist has seven one-line items: Acceptance, tests, edge cases and
+error paths, input handling and secrets, locks and concurrency, spec and doc
+drift, and scope. Each review skill names it, so it counts toward the token
+budget of both review stages.
+
 ## Examples
 
 Each stage skill that fills a file names one example under `references/`.
@@ -64,7 +85,8 @@ over that line, so check the count after you add one.
 
 `test/skills-examples.test.ts` checks that each skill names its example, that
 the file exists, that the headings are present, and that a review example has
-one card and one `open` item.
+one card and one `open` item. A review example also needs an `## Acceptance`
+section whose lines pass the `review done` format and finding id check.
 
 ## Token snapshot
 

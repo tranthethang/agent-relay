@@ -121,6 +121,23 @@ plan is not approved or is no longer complete. Close checks the required
 reviews for its policy, the latest completed review tree against the current
 code tree, open questions, and changes made during the latest review.
 
+### Review done gates
+
+`atry review done` checks the latest review pair before it records an event.
+Each refusal below exits 2, records no event, and prints the field path.
+`<review>` is the review path in the run, such as `30-self-review/01`.
+
+| Refusal                                                             | Field                              |
+| ------------------------------------------------------------------- | ---------------------------------- |
+| The question card count differs from the JSON `open` count          | `<review>.json:open`               |
+| The `## Acceptance` section is missing                              | `<review>.json:## Acceptance`      |
+| A task that is not skipped has no valid line, or more than one line | `<review>.json:## Acceptance:T<n>` |
+| An `unmet` line names an id that is not in the JSON `findings`      | `<review>.json:## Acceptance:T<n>` |
+| A finding id is missing from the review markdown                    | `<review>.json:findings[<i>].id`   |
+
+A valid Acceptance line is `- T<n>: met` or `- T<n>: unmet F<k>`.
+`review-pairs.md` describes the section in full.
+
 ### Close gates
 
 With `strict.reviewIntegrity` false (the default) and `--via` set, `close`
