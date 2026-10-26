@@ -640,6 +640,21 @@ function latestCompletedReview(events: readonly EventLine[]): EventLine | undefi
   return undefined;
 }
 
+// The close gate and `atry status` both read the review this event names. An unfinished
+// scaffold has no `completed` event, so it never counts.
+export function latestCompletedWithRef(
+  events: readonly EventLine[],
+  stage: "self-review" | "cross-review",
+): (EventLine & { ref: string }) | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.stage === stage && event.action === "completed" && event.ref !== undefined) {
+      return { ...event, ref: event.ref };
+    }
+  }
+  return undefined;
+}
+
 export async function readReviewAt(
   runDir: string,
   stage: EventLine["stage"],

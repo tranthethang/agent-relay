@@ -47,11 +47,18 @@ export function formatVersion(parts: VersionParts): string {
   return `${parts.x}.${parts.m}.${parts.z}`;
 }
 
-export function compareVersion(left: VersionParts, right: VersionParts): number {
-  if (left.x !== right.x) return left.x < right.x ? -1 : 1;
-  if (left.m !== right.m) return left.m < right.m ? -1 : 1;
-  if (left.z !== right.z) return left.z < right.z ? -1 : 1;
+function cmpPart(left: number, right: number): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
   return 0;
+}
+
+export function compareVersion(left: VersionParts, right: VersionParts): number {
+  let order = cmpPart(left.x, right.x);
+  if (order !== 0) return order;
+  order = cmpPart(left.m, right.m);
+  if (order !== 0) return order;
+  return cmpPart(left.z, right.z);
 }
 
 export function monthInHoChiMinh(now: Date): number {
@@ -119,7 +126,13 @@ function highestVersion(parsed: readonly VersionParts[]): VersionParts {
   if (first === undefined) {
     throw new RelayError("validation", "tag list is empty", "version");
   }
-  return parsed.reduce((best, item) => compareVersion(item, best) > 0 ? item : best, first);
+  let best = first;
+  for (const item of parsed.slice(1)) {
+    if (compareVersion(item, best) > 0) {
+      best = item;
+    }
+  }
+  return best;
 }
 
 function candidate(parsed: VersionParts[], month: number, major: boolean): VersionParts {

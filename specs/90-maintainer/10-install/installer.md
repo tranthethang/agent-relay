@@ -14,7 +14,7 @@ npx skills add tranthethang/agent-relay -g --copy
 
 The npm tarball holds `dist/atry.js` and `skills/`. `atry skills install`
 copies the six bundles from that tarball into one tool directory, so the CLI
-and the six bundles come from one version: `0.10.7`. `--dir <path>` replaces
+and the six bundles come from one version. `--dir <path>` replaces
 the tool path. It runs on every install: a missing bundle is `installed`, a
 bundle whose canonical files changed is `updated`, and an identical bundle is
 `unchanged`. The copy overwrites `SKILL.md` and `references/` and keeps extra
@@ -56,7 +56,7 @@ Code and Kiro get their own copies.
 ## Install deadlocks and stale bundles
 
 - An `@latest` tag that still points at an older release cannot satisfy a
-  bundle floor of `>=0.10.7`. Install `@0.10.7` by name. Do not lower
+  bundle floor. Install the version that `atry preflight` prints, by name. Do not lower
   `requires-atry` to clear the error.
 - A stale bundle has a floor that fits and content that differs. Run
   `atry skills install --tool <tool>` again. The copy updates `SKILL.md` and
@@ -88,7 +88,7 @@ real home directory.
 ## Dev build
 
 `npm run build` writes `dist/atry.js` and `dist/package.json`. Because
-`package.json` in git stays at `0.0.0`, the build writes `0.10.7-dev` there.
+`package.json` in git stays at `0.0.0`, the build writes a `-dev` version there.
 `node dist/atry.js version` prints that value and a `dev build` marker.
 `node dist/atry.js preflight` refuses a dev build and prints the install
 command, unless `ATRY_DEV=1` is set or `--allow-dev` is passed. The `atry`

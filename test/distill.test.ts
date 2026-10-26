@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -238,6 +239,55 @@ test("atry distill reads head from run.worktree.path when it is set", async () =
       await distillRun(run);
       expect((await readHeader(run)).head).toMatch(/^[0-9a-f]{40,64}$/);
     });
+  });
+});
+
+async function setWorktree(run: string, path: string, branch: string): Promise<void> {
+  const file = join(run, "run.json");
+  const json = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
+  json.worktree = { path, branch };
+  await writeFile(file, `${JSON.stringify(json)}\n`);
+}
+
+test("atry distill takes closedAt from the abandoned event when no closed event exists", async () => {
+  await withTempDir(async (dir) => {
+    const started = {
+      ts: "2026-10-24T01:00:00Z",
+      stage: "plan",
+      action: "started",
+      tool: "cursor",
+    };
+    const abandoned = await syntheticRun(dir, [
+      started,
+      { ts: "2026-10-24T05:00:00Z", stage: "run", action: "abandoned" },
+    ], false);
+    await distillRun(abandoned);
+    expect((await readHeader(abandoned)).closedAt).toBe("2026-10-24T05:00:00Z");
+    const both = await syntheticRun(dir, [
+      started,
+      { ts: "2026-10-24T05:00:00Z", stage: "run", action: "abandoned" },
+      { ts: "2026-10-24T06:00:00Z", stage: "run", action: "closed" },
+    ], true);
+    await distillRun(both);
+    expect((await readHeader(both)).closedAt).toBe("2026-10-24T06:00:00Z");
+  });
+});
+
+test("atry distill falls back to the worktree branch head, then to null", async () => {
+  await withTempGitRepo(async (repo) => {
+    await gitCommit(repo);
+    execFileSync("git", ["branch", "work"], { cwd: repo });
+    const expected = execFileSync("git", ["rev-parse", "work"], { cwd: repo }).toString().trim();
+    const run = await syntheticRun(repo, [
+      { ts: "2026-10-24T01:00:00Z", stage: "plan", action: "started", tool: "cursor" },
+    ], false);
+    const gone = join(repo, "gone-worktree");
+    await setWorktree(run, gone, "work");
+    await distillRun(run);
+    expect((await readHeader(run)).head).toBe(expected);
+    await setWorktree(run, gone, "missing-branch");
+    await distillRun(run);
+    expect((await readHeader(run)).head).toBeNull();
   });
 });
 

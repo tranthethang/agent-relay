@@ -4,6 +4,7 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
+import { skillMinimumRange, skillMinimumVersion } from "../scripts/maint/next-version.ts";
 import {
   doctorReport,
   doctorText,
@@ -18,6 +19,7 @@ import {
 import type { SkillsStatusResult } from "../src/core/skills.js";
 import { cliPath, type CliResult, withTempDir, withTempGitRepo } from "./helper.js";
 
+const olderThanFloor = "0.1.0";
 const skillsRoot = fileURLToPath(new URL("../skills", import.meta.url));
 const builtVersion = (JSON.parse(
   readFileSync(new URL("../dist/package.json", import.meta.url), "utf8"),
@@ -52,13 +54,18 @@ function pathEnv(dir: string): NodeJS.ProcessEnv {
 function statusOf(status: "ok" | "stale" | "missing" | "mismatch"): SkillsStatusResult {
   return {
     schema: 1,
-    installed: "0.10.7",
-    required: ">=0.10.7",
+    installed: skillMinimumVersion,
+    required: skillMinimumRange,
     ok: status === "ok",
     dirs: [
       {
         dir: "/skills",
-        bundles: [{ name: "atry-plan", path: "/skills/atry-plan", status, required: ">=0.10.7" }],
+        bundles: [{
+          name: "atry-plan",
+          path: "/skills/atry-plan",
+          status,
+          required: skillMinimumRange,
+        }],
       },
     ],
   };
@@ -70,7 +77,7 @@ test("node and version checks accept the supported range", () => {
   expect(nodeCheck("21.9.0").ok).toBe(false);
   expect(nodeCheck("nope").ok).toBe(false);
   expect(versionCheck("0.0.0").ok).toBe(true);
-  expect(versionCheck("0.10.7-dev").ok).toBe(true);
+  expect(versionCheck(`${skillMinimumVersion}-dev`).ok).toBe(true);
   expect(versionCheck("1.2").ok).toBe(false);
   expect(versionCheck("").ok).toBe(false);
 });
@@ -180,10 +187,10 @@ test("doctorReport fails a closed check and passes a healthy checkout", async ()
       env: { PATH: bin },
       platform: "linux",
       nodeVersion: "22.0.0",
-      cliVersion: "0.10.7",
+      cliVersion: skillMinimumVersion,
       skillsRoot,
       installedSkills: () => statusOf("ok"),
-      pathVersion: async () => "0.10.7\n",
+      pathVersion: async () => `${skillMinimumVersion}\n`,
     });
     expect(healthy.ok).toBe(true);
     expect(healthy.checks.map((check) => check.name)).toEqual([
@@ -198,17 +205,19 @@ test("doctorReport fails a closed check and passes a healthy checkout", async ()
     ]);
     expect(doctorText(healthy)).toContain("node: ok v22.0.0");
     expect(doctorText(healthy)).toContain("skills: ok bundled: 6");
-    expect(doctorText(healthy)).toContain("path-version: ok path 0.10.7, running 0.10.7");
+    expect(doctorText(healthy)).toContain(
+      `path-version: ok path ${skillMinimumVersion}, running ${skillMinimumVersion}`,
+    );
 
     const stale = await doctorReport({
       cwd: dir,
       env: { PATH: bin },
       platform: "linux",
       nodeVersion: "22.0.0",
-      cliVersion: "0.10.7",
+      cliVersion: skillMinimumVersion,
       skillsRoot,
       installedSkills: () => statusOf("stale"),
-      pathVersion: async () => "0.10.7\n",
+      pathVersion: async () => `${skillMinimumVersion}\n`,
     });
     expect(stale.ok).toBe(false);
     expect(doctorText(stale)).toContain("installed-skills: fail atry-plan stale");
@@ -218,23 +227,25 @@ test("doctorReport fails a closed check and passes a healthy checkout", async ()
       env: { PATH: bin },
       platform: "linux",
       nodeVersion: "22.0.0",
-      cliVersion: "0.10.7",
+      cliVersion: skillMinimumVersion,
       skillsRoot,
       installedSkills: () => statusOf("ok"),
-      pathVersion: async () => "0.10.6\n",
+      pathVersion: async () => `${olderThanFloor}\n`,
     });
     expect(older.ok).toBe(false);
-    expect(doctorText(older)).toContain("path-version: fail PATH atry is 0.10.6, running 0.10.7");
+    expect(doctorText(older)).toContain(
+      `path-version: fail PATH atry is ${olderThanFloor}, running ${skillMinimumVersion}`,
+    );
 
     const noDirs = await doctorReport({
       cwd: dir,
       env: { PATH: bin },
       platform: "linux",
       nodeVersion: "22.0.0",
-      cliVersion: "0.10.7",
+      cliVersion: skillMinimumVersion,
       skillsRoot,
       installedSkills: () => ({ ...statusOf("ok"), dirs: [] }),
-      pathVersion: async () => "0.10.7\n",
+      pathVersion: async () => `${skillMinimumVersion}\n`,
     });
     expect(doctorText(noDirs)).toContain("installed-skills: fail no tool skill directory");
 

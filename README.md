@@ -31,7 +31,7 @@ whatever tool you open.
 
 ## Quick start
 
-Node.js 22 or newer. This release is `0.10.7`.
+Node.js 22 or newer. Run `atry version` to see the installed release.
 
 ```bash
 npm i -g @tranthethang/agent-relay@latest

@@ -24,10 +24,10 @@ export async function gitRoot(cwd: string): Promise<string> {
   }
 }
 
-export async function gitHead(cwd: string): Promise<string> {
+export async function gitHead(cwd: string, ref = "HEAD"): Promise<string> {
   let head: string;
   try {
-    head = (await git(cwd, ["rev-parse", "HEAD"])).trim();
+    head = (await git(cwd, ["rev-parse", ref])).trim();
   } catch {
     throw new RelayError("validation", "git HEAD not found", "base");
   }

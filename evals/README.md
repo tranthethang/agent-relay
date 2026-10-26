@@ -90,12 +90,12 @@ missing command.
 `npm run evals:model` drives `claude -p` and `codex exec` through four
 scenarios. It is not part of `npm run evals`. It needs `npm run build` first.
 
-| Scenario              | Fixture                      | Required events                                         | Forbidden          |
-| --------------------- | ---------------------------- | ------------------------------------------------------- | ------------------ |
-| `brainstorm-readonly` | clean repo                   | none                                                    | a run, a tree edit |
-| `plan-small`          | repo with one small file     | run created, plan started, plan completed               | plan approved      |
-| `implement-approved`  | approved run with two tasks  | implement started, two `task-done`, implement completed | run closed         |
-| `self-review`         | run with implement completed | self-review started, self-review completed              | run closed         |
+| Scenario              | Fixture                      | Required events                                         | Forbidden            |
+| --------------------- | ---------------------------- | ------------------------------------------------------- | -------------------- |
+| `brainstorm-readonly` | clean repo                   | none                                                    | a run, a source edit |
+| `plan-small`          | repo with one small file     | run created, plan started, plan completed               | plan approved        |
+| `implement-approved`  | approved run with two tasks  | implement started, two `task-done`, implement completed | run closed           |
+| `self-review`         | run with implement completed | self-review started, self-review completed              | run closed           |
 
 Each run builds a temp git repo, installs the skills from this checkout with
 `atry skills install --dir`, and puts a shim for `dist/atry.js` first on `PATH`.

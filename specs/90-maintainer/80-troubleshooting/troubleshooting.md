@@ -3,8 +3,8 @@
 | Symptom                                            | Likely cause                                   | What to do                                                                          |
 | -------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `atry: command not found`                          | The npm bin is not on `PATH`                   | `npm i -g @tranthethang/agent-relay@latest`                                         |
-| Skill version check stops                          | Installed `atry` is older than `requires-atry` | Install the named version, e.g. `@0.10.7`                                           |
-| `npm i -g …@latest` still fails the floor          | `latest` points at an older release            | Install `@0.10.7` by name; do not lower the floor                                   |
+| Skill version check stops                          | Installed `atry` is older than `requires-atry` | Install the version that `atry preflight` prints                                    |
+| `npm i -g …@latest` still fails the floor          | `latest` points at an older release            | Install the version that `atry preflight` prints; do not lower the floor            |
 | `atry skills status` prints `stale`                | The installed bundle content is older          | Run `atry skills install --tool <tool>`                                             |
 | `atry skills status` prints `mismatch`             | The installed bundle floor is too high         | Install the named CLI version, then reinstall skills                                |
 | `atry skills status` exits 1 with `install: …`     | A bundle is stale, mismatched, or missing      | Run the printed `npm i -g` command, then `skills install`                           |

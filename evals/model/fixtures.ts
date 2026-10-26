@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +26,7 @@ export const scenarioFileSchema = z.object({
     fixture: z.enum(fixtureKinds),
     required: z.array(pair),
     forbidden: z.array(pair),
-    fileCheck: z.enum(["none", "clean-tree"]),
+    fileCheck: z.enum(["none", "clean-tree", "brainstorm-notes"]),
   })).min(1),
 });
 
@@ -155,13 +155,51 @@ export async function createFixture(kind: FixtureKind): Promise<Fixture> {
   }
 }
 
+// The eval runs with --experimental-strip-types and cannot import `src/`, so it checks
+// `open.json` with its own small schema.
+const brainstormOpenSchema = z.object({ schema: z.literal(1), open: z.array(z.unknown()) });
+
+const brainstormDirPattern = /^\d{8}-[a-z0-9]+(-[a-z0-9]+)*$/;
+
+async function brainstormNotesFailures(repo: string): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await readdir(join(repo, ".agent-relay", "brainstorms"));
+  } catch {
+    names = [];
+  }
+  const dirs = names.filter((name) => brainstormDirPattern.test(name));
+  if (dirs.length !== 1) {
+    return [`expected one brainstorm directory, found ${dirs.length}`];
+  }
+  const rel = join(".agent-relay", "brainstorms", dirs[0] ?? "", "open.json");
+  try {
+    brainstormOpenSchema.parse(JSON.parse(await readFile(join(repo, rel), "utf8")));
+  } catch {
+    return [`${rel} is missing or is not a valid open.json`];
+  }
+  return [];
+}
+
 export async function fileCheckFailures(
   fixture: Pick<Fixture, "repo" | "env">,
   fileCheck: Scenario["fileCheck"],
 ): Promise<string[]> {
   if (fileCheck === "none") return [];
-  const status = await exec("git", ["status", "--porcelain"], fixture.repo, fixture.env);
-  return status.trim() === "" ? [] : [`tree is not clean:\n${status.trimEnd()}`];
+  if (fileCheck === "clean-tree") {
+    const status = await exec("git", ["status", "--porcelain"], fixture.repo, fixture.env);
+    return status.trim() === "" ? [] : [`tree is not clean:\n${status.trimEnd()}`];
+  }
+  const outside = await exec(
+    "git",
+    ["status", "--porcelain", "--", ".", ":(exclude).agent-relay"],
+    fixture.repo,
+    fixture.env,
+  );
+  const failures = outside.trim() === ""
+    ? []
+    : [`tree is not clean outside .agent-relay:\n${outside.trimEnd()}`];
+  return [...failures, ...await brainstormNotesFailures(fixture.repo)];
 }
 
 export function scenarioPrompt(scenario: Scenario, runPath: string): string {

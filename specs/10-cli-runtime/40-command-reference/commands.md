@@ -86,7 +86,7 @@ from the running CLI.
 A missing policy file passes and reports `default`.
 
 `atry status <run>` ends with `findings: <open> open, <highOpen> high open`, counted from
-the latest review of each kind. The JSON detail adds `findings: { open, highOpen }`.
+the latest completed review of each kind. A started review without `review done` does not count. The JSON detail adds `findings: { open, highOpen }`.
 
 ### Next and previews
 

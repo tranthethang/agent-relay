@@ -7,7 +7,7 @@
   ],
   "smallChange": 20,
   "strict": {
-    "scope": false,
+    "scope": true,
     "plan": false,
     "reviewIntegrity": false
   },

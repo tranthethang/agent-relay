@@ -1,5 +1,5 @@
 import { mkdir, readFile, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { rebuildRun } from "./cache.js";
 import { findRelayDir, listRunNames } from "./discover.js";
 import { RelayError } from "./error.js";
@@ -89,9 +89,10 @@ export async function hookCheck(inputText: string): Promise<HookDecision | null>
 }
 
 // A path outside the root, or the root itself, is not under it.
+// A name such as `..cache` is under the root, so only `..` and `..<sep>` mean outside.
 async function underRoot(root: string, path: string): Promise<boolean> {
   const rel = relative(await realpath(root), await realExisting(path));
-  return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel);
+  return rel.length > 0 && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 // Real path of the nearest existing ancestor, with the missing tail joined back.
