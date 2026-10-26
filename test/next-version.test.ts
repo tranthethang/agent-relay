@@ -3,7 +3,25 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+
+const gitExec = vi.hoisted(() => ({
+  mode: "passthrough" as "passthrough" | "throw-string",
+}));
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    execFileSync: (...args: Parameters<typeof actual.execFileSync>) => {
+      if (gitExec.mode === "throw-string") {
+        throw "git unavailable";
+      }
+      return actual.execFileSync(...args);
+    },
+  };
+});
+
 import {
   assertRequires,
   compareVersion,
@@ -180,6 +198,12 @@ function loadNext(id: number): Promise<unknown> {
     case 14:
       // @ts-expect-error The query reloads this CLI entry.
       return import("../scripts/maint/next-version.ts?cli=14");
+    case 15:
+      // @ts-expect-error The query reloads this CLI entry.
+      return import("../scripts/maint/next-version.ts?cli=15");
+    case 16:
+      // @ts-expect-error The query reloads this CLI entry.
+      return import("../scripts/maint/next-version.ts?cli=16");
     default:
       throw new Error(`missing next-version import case ${id}`);
   }
@@ -252,6 +276,21 @@ test("the command fails on invalid arguments", async () => {
     expect(january.status).not.toBe(0);
     expect(january.stderr).toContain("major: true");
   });
+
+  const sparseArg = await runNext([undefined as unknown as string]);
+  expect(sparseArg.status).not.toBe(0);
+  expect(sparseArg.stderr).toContain("unknown argument");
+});
+
+test("the command reports a non-error git failure", async () => {
+  gitExec.mode = "throw-string";
+  try {
+    const result = await runNext(["--now", "2026-10-17T12:00:00.000Z"]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("next version failed\n");
+  } finally {
+    gitExec.mode = "passthrough";
+  }
 });
 
 test("compareVersion, parseScheme, parseTag, and monthInHoChiMinh handle all branches", () => {
@@ -279,6 +318,45 @@ test("compareVersion, parseScheme, parseTag, and monthInHoChiMinh handle all bra
   expect(compareVersion({ x: 0, m: 1, z: 1 }, { x: 0, m: 1, z: 1 })).toBe(0);
 
   expect(() => monthInHoChiMinh(new Date("invalid"))).toThrow(/now is not a date/);
+  expect(monthInHoChiMinh(october)).toBe(10);
+});
+
+test("monthInHoChiMinh rejects formatter output outside 1 to 12", () => {
+  class MockDateTimeFormat {
+    formatToParts() {
+      return [{ type: "month", value: "13" }];
+    }
+  }
+  const spy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function() {
+    return new MockDateTimeFormat() as unknown as Intl.DateTimeFormat;
+  });
+  try {
+    expect(() => monthInHoChiMinh(october)).toThrow(/month is outside 1 to 12/);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test("monthInHoChiMinh rejects formatter output with no month part", () => {
+  class MockDateTimeFormat {
+    formatToParts() {
+      return [{ type: "day", value: "1" }];
+    }
+  }
+  const spy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function() {
+    return new MockDateTimeFormat() as unknown as Intl.DateTimeFormat;
+  });
+  try {
+    expect(() => monthInHoChiMinh(october)).toThrow(/month is outside 1 to 12/);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+test("nextVersion picks the highest tag when tags are out of order", () => {
+  expect(
+    nextVersion({ tags: ["v0.10.1", "v0.10.8", "v0.10.3"], now: october, major: false }).version,
+  ).toBe("0.10.9");
 });
 
 test("nextVersion throws when version would not be higher than the highest tag", () => {
