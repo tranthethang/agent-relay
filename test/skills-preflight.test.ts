@@ -19,7 +19,9 @@ test("preflight asks for atry preflight and context", () => {
   expect(partial).toContain("atry preflight --requires");
   expect(partial).toContain("exits non-zero");
   expect(partial).toContain("unknown command");
-  expect(partial).toContain("npm i -g @tranthethang/agent-relay@latest");
+  expect(partial).toContain("github.com/tranthethang/agent-relay");
+  expect(partial).not.toContain("npm i -g");
+  expect(partial).not.toContain("@latest");
   expect(partial).toContain("atry context <run> --json");
   expect(partial).not.toContain("atry version --json");
   expect(partial).not.toMatch(/\b(mktemp|trap|heredoc|grep|sed)\b/);
