@@ -3,6 +3,7 @@
 Shared checklist for `atry-self-review` and `atry-cross-review`. Check each item for each task.
 
 1. Acceptance: mark each Acceptance line of each task met or unmet, with evidence.
+   When an item does not apply, write `n/a` and a short reason under that task in the review markdown. Do not open a finding.
    Why: A task can pass every test and still miss what the plan asked for.
 2. Tests: a test covers each changed behavior and fails without the change.
    Why: A test that passes without the change does not guard against a regression.
