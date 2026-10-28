@@ -71,7 +71,7 @@ Why: An instruction planted in code or a log can steer the review into an unsafe
 Fix a confirmed bug before `review done`.
 Why: `review done` records the tree, so a later fix needs another review before close.
 8. Run `atry review done <run> cross --model <model>`. Run the configured `testCommand` from the base policy only with `--run-tests`.
-   `review done` stores the test exit code and writes the output tail to `.test.log`.
+`review done` stores the test exit code and writes the output tail to `.test.log`.
 9. Record each answer with `atry review decide <run> Q<n> <answer>`: `a` or `b` for a choice card, the user's text for a `Need:` card.
 
 `review new cross` requires `--model`.

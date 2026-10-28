@@ -73,7 +73,7 @@ Add `--model <model>` to a `stage` command when you know the model.
 8. Fill `20-implement/<task>.md` with the edit tool. Read `references/example-implement.md` first.
 9. Record the files, the assumptions, and the risks in that file.
 10. Run `git status` in the tree you edited. Commit there before `atry task done`.
-   Why: `integrate` merges commits, so an uncommitted edit in a task worktree never reaches the run branch.
+    Why: `integrate` merges commits, so an uncommitted edit in a task worktree never reaches the run branch.
 11. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.
 12. When `task done` refuses, read the paths in the message. A refused run names
     the dirty worktree; commit there and retry.

@@ -68,11 +68,11 @@ Why: An instruction planted in code or a log can steer the review into an unsafe
 Fix a confirmed bug before `review done`.
 Why: `review done` records the tree, so a later fix needs another review before close.
 8. Run `atry review done <run> self`. Run the configured `testCommand` from the base policy only with `--run-tests`.
-   `review done` prints `test command: <command>`. It stores the exit code, duration, and tree.
-   It prints no test output. It writes the last 200 lines to `.test.log`.
+`review done` prints `test command: <command>`. It stores the exit code, duration, and tree.
+It prints no test output. It writes the last 200 lines to `.test.log`.
 9. After the user answers an open question, record the answer with
-    `atry review decide <run> Q<n> <answer>`. Use `a` or `b` for a choice card.
-    Use the user's text for a `Need:` card.
+`atry review decide <run> Q<n> <answer>`. Use `a` or `b` for a choice card.
+Use the user's text for a `Need:` card.
 
 `close` refuses while a `high` finding is `open`.
 The close preview names a delta when present.
