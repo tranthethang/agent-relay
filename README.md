@@ -33,6 +33,8 @@ whatever tool you open.
 
 Node.js 22 or newer. Run `atry version` to see the installed release.
 
+The GitHub repository `tranthethang/agent-relay` and the npm package `@tranthethang/agent-relay` are the same project.
+
 ```bash
 npm i -g @tranthethang/agent-relay@latest
 atry skills install --tool claude-code
