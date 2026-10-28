@@ -448,7 +448,7 @@ async function assertFindingIds(
   const markdown = await readFile(join(runDir, markdownRel), "utf8");
   review.value.findings.forEach((finding, index) => {
     // `F1` must not match inside `F10`.
-    if (!new RegExp(`\\b${finding.id}(?!\\d)`).test(markdown)) {
+    if (!new RegExp(String.raw`\b${finding.id}(?!\d)`).test(markdown)) {
       throw new RelayError(
         "validation",
         `finding ${finding.id} is missing from the review Markdown`,

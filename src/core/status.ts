@@ -194,6 +194,20 @@ export async function statusDetail(runDir: string, nowMs: number): Promise<Statu
   return detail;
 }
 
+function openFindingCounts(findings: readonly { status: string; severity: string }[]): {
+  open: number;
+  highOpen: number;
+} {
+  let open = 0;
+  let highOpen = 0;
+  for (const finding of findings) {
+    if (finding.status !== "open") continue;
+    open += 1;
+    if (finding.severity === "high") highOpen += 1;
+  }
+  return { open, highOpen };
+}
+
 // Counts come from the latest completed review of each kind, found through the event `ref`
 // as the close gate does. An unreadable review counts as zero; `statusReviews` already
 // reports it.
@@ -213,11 +227,9 @@ async function latestFindingCounts(
       if (error instanceof RelayError) continue;
       throw error;
     }
-    for (const finding of review.findings) {
-      if (finding.status !== "open") continue;
-      counts.open += 1;
-      if (finding.severity === "high") counts.highOpen += 1;
-    }
+    const added = openFindingCounts(review.findings);
+    counts.open += added.open;
+    counts.highOpen += added.highOpen;
   }
   return counts;
 }
