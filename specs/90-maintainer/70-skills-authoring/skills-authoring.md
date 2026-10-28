@@ -99,13 +99,13 @@ after you edit a skill, and replace the rows with its output.
 
 | stage        | references                                                                                                                                                | chars | tokens |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md, references/file-conventions.md                                                                                                     |  9063 |   2266 |
-| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                                                     | 11594 |   2899 |
-| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                                                    | 14809 |   3702 |
-| self-review  | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-review.md       | 18649 |   4662 |
-| cross-review | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-cross-review.md | 18744 |   4686 |
-| distill      | references/file-conventions.md                                                                                                                            |  4987 |   1247 |
-| total        |                                                                                                                                                           | 77846 |  19462 |
+| brainstorm   | references/writing.md, references/file-conventions.md                                                                                                     |  9095 |   2274 |
+| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                                                     | 11626 |   2907 |
+| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                                                    | 14841 |   3710 |
+| self-review  | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-review.md       | 18681 |   4670 |
+| cross-review | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-cross-review.md | 18776 |   4694 |
+| distill      | references/file-conventions.md                                                                                                                            |  5019 |   1255 |
+| total        |                                                                                                                                                           | 78038 |  19510 |
 
 `test/skill-tokens.test.ts` reads `maxTokens` from `evals/scenarios.json`. It
 fails when a stage reaches `maxTokens` minus 50. It also fails when the total
