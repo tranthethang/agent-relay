@@ -58,26 +58,28 @@ Add `--model <model>` to a `stage` command when you know the model.
 
 1. Run `atry list <run>`.
 2. Pick one pending task. Skip a task that shows `blocked:`.
-3. When several sessions share the run, run `atry claim <run> <task> --session <tag>`.
-4. When the claim fails, pick a different task or stop.
-5. When you work alone, run `atry task start <run> <task>`.
-6. Change only the files listed for that task. Edit them in the claim result's
+3. When the run uses task worktrees, run `atry claim <run> <task> --session <tag>`.
+   Use a session tag when you work alone.
+4. When several sessions share the run and the run has no task worktrees, run `atry claim <run> <task> --session <tag>`.
+5. When the claim fails, pick a different task or stop.
+6. When you work alone and the run has no task worktrees, run `atry task start <run> <task>`.
+7. Change only the files listed for that task. Edit them in the claim result's
    `worktree.path` when it has one. Use `run.worktree.path` only when no task
    worktree exists.
    Why: An edit outside `files` escapes the plan review and shows up as a scope warning.
-7. Fill `20-implement/<task>.md` with the edit tool. Read `references/example-implement.md` first.
-8. Record the files, the assumptions, and the risks in that file.
-9. Run `git status` in the tree you edited. Commit there before `atry task done`.
+8. Fill `20-implement/<task>.md` with the edit tool. Read `references/example-implement.md` first.
+9. Record the files, the assumptions, and the risks in that file.
+10. Run `git status` in the tree you edited. Commit there before `atry task done`.
    Why: `integrate` merges commits, so an uncommitted edit in a task worktree never reaches the run branch.
-10. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.
-11. When `task done` refuses, read the paths in the message. A refused run names
+11. Run `atry task done <run> <task>`. Add `--session <tag>` when you hold a claim.
+12. When `task done` refuses, read the paths in the message. A refused run names
     the dirty worktree; commit there and retry.
-12. When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.
+13. When `strict.scope` is true, ask the user before you pass `--allow-extra <reason>`.
     When it is false, continue after the warning and check the recorded extras.
-13. Put that reason in the task report.
-14. When a task is not feasible, run `atry task skip <run> <task> --reason <text>`.
-15. Add `--session <tag>` to `task skip` when you hold a claim.
-16. Run `atry release <run> <task> --session <tag>` only when you stop without done or skip.
+14. Put that reason in the task report.
+15. When a task is not feasible, run `atry task skip <run> <task> --reason <text>`.
+16. Add `--session <tag>` to `task skip` when you hold a claim.
+17. Run `atry release <run> <task> --session <tag>` only when you stop without done or skip.
 
 `task done` and `task skip` drop the claim lock. Do not call `release` after them.
 `atry task start` does not create a task worktree. Use `atry claim` when the run
