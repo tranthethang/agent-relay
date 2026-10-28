@@ -44,8 +44,10 @@ Write each open question as one card. Use the same shape in brainstorm notes and
 
 ```markdown
 - Q1: <question>
-  - a. <smaller change>
-  - b. <durable change>
+  - a. <smaller change summary>
+    <one-line explanation for a>
+  - b. <durable change summary> Recommended.
+    <one-line explanation for b>
 - Q2: <question>
   - Need: <the data or check that is missing>
 ```
@@ -56,9 +58,11 @@ Rules:
 - Indent the option lines by two spaces, so they do not match a line that starts at column 0 with `- `.
 - When the evidence supports two real options, give exactly two. Use `a` for the smaller change. Use `b` for the durable change. Do not add `c`.
 - When the evidence does not support two real options, do not invent them. Write one `Need:` line instead. Say what data, file, or decision is missing.
-- Keep each option to one line. Put the reason in the question line, not in the options.
+- Keep each option summary on the `- a.` or `- b.` line to one sentence.
+- Add one explanation line under each option. Indent that line four spaces.
+- When evidence leans to one option, append ` Recommended.` to that option summary line. When evidence is tied, say so in the question line and label neither option.
 - The user replies with `1a`, `2b`, or a free-text answer to a `Need:` line.
 - Copy each card into the scaffold `open` array.
-- A choice card uses `q`, `a`, and `b`.
+- A choice card uses `q`, `a`, and `b`. Put each option summary in `a` and `b`, including ` Recommended.` when the markdown shows it.
 - A need card uses `q` and `need`.
 - Keep `schema` as `1`.

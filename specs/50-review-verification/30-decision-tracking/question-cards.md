@@ -13,8 +13,12 @@ Used when evidence supports two real alternatives (option `a` for the smaller ch
 ```markdown
 - Q1: Which hashing algorithm should we use for file manifests?
   - a. Use md5 for faster local checksums.
-  - b. Use sha256 for cryptographic verification and collision resistance.
+    md5 is enough when the manifest only detects accidental edits.
+  - b. Use sha256 for cryptographic verification and collision resistance. Recommended.
+    sha256 matches how other tools in this repo fingerprint content.
 ```
+
+Each option has one summary line (`- a.` / `- b.`) and one indented explanation line (four spaces). Append ` Recommended.` to exactly one summary when evidence leans. When options are tied, state that in the question and omit ` Recommended.` on both options.
 
 ### 2. Information Need Card
 
