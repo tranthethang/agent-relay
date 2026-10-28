@@ -39,5 +39,14 @@ One task. `deps` is empty. `files` names both edits.
 
 ## Task file
 
-`10-plan/T1.md` repeats the title, the detail, the acceptance, and the verify
-command.
+`10-plan/T1.md` repeats the title, then `## Detail`, then `## Acceptance`.
+
+## Detail
+
+Add a `--quiet` flag to the `status` command. Parse it next to the existing flags.
+Print one line with the run name and lifecycle when the flag is set.
+
+## Acceptance
+
+- `status --quiet <run>` prints one line and exits 0 for an open run.
+- The default `status` output still prints the table.

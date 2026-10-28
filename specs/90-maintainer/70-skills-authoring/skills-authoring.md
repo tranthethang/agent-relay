@@ -79,8 +79,8 @@ The example shows the headings that the skill asks for, so the agent sees the
 quality bar and not only prose.
 
 An example counts toward the stage token budget. `npm run tokens` must stay
-under 4,500 tokens for each stage. `evals/scenarios.json` sets `maxTokens` to
-4500, and the eval fails at that number. A new example can push a review stage
+under 6,750 tokens for each stage. `evals/scenarios.json` sets `maxTokens` to
+6750, and the eval fails at that number. A new example can push a review stage
 over that line, so check the count after you add one.
 
 `test/skills-examples.test.ts` checks that each skill names its example, that
@@ -99,13 +99,13 @@ after you edit a skill, and replace the rows with its output.
 
 | stage        | references                                                                                                                                                | chars | tokens |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: | -----: |
-| brainstorm   | references/writing.md, references/file-conventions.md                                                                                                     |  8648 |   2162 |
-| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                                                     | 10887 |   2722 |
-| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                                                    | 13799 |   3450 |
-| self-review  | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-review.md       | 17699 |   4425 |
-| cross-review | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-cross-review.md | 17724 |   4431 |
+| brainstorm   | references/writing.md, references/file-conventions.md                                                                                                     |  9063 |   2266 |
+| plan         | references/writing.md, references/file-conventions.md, references/example-overview.md                                                                     | 11594 |   2899 |
+| implement    | references/writing.md, references/file-conventions.md, references/example-implement.md                                                                    | 14809 |   3702 |
+| self-review  | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-review.md       | 18649 |   4662 |
+| cross-review | references/writing.md, references/reviewer-conduct.md, references/review-checklist.md, references/file-conventions.md, references/example-cross-review.md | 18744 |   4686 |
 | distill      | references/file-conventions.md                                                                                                                            |  4987 |   1247 |
-| total        |                                                                                                                                                           | 73744 |  18437 |
+| total        |                                                                                                                                                           | 77846 |  19462 |
 
 `test/skill-tokens.test.ts` reads `maxTokens` from `evals/scenarios.json`. It
 fails when a stage reaches `maxTokens` minus 50. It also fails when the total

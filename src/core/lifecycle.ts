@@ -165,8 +165,10 @@ export function approvePreviewText(result: ApprovePreview): string {
     `ready: ${ready}\n`,
   ];
   if (result.missing.length > 0) sections.push(`missing:\n${missingLines}`);
-  sections.push(`question: ${result.decision.question}\n`);
-  sections.push(`on yes: ${result.decision.onYes ?? "none"}\n`);
+  sections.push(
+    `question: ${result.decision.question}\n`,
+    `on yes: ${result.decision.onYes ?? "none"}\n`,
+  );
   return sections.join("");
 }
 
@@ -884,9 +886,10 @@ async function assertNoOpenHighFindings(
   const { required } = await reviewIntegrity(runDir, base, events);
   const open = await openHighFindings(runDir, required, events);
   if (open.length === 0) return;
+  const labels = open.map((item) => `${item.kind} ${item.id}`);
   throw new RelayError(
     "gate",
-    `close refused: open high finding: ${open.map((item) => `${item.kind} ${item.id}`).join(", ")}`,
+    `close refused: open high finding: ${labels.join(", ")}`,
     "findings",
   );
 }
