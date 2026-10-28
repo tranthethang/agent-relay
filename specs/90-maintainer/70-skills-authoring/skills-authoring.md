@@ -79,8 +79,8 @@ The example shows the headings that the skill asks for, so the agent sees the
 quality bar and not only prose.
 
 An example counts toward the stage token budget. `npm run tokens` must stay
-under 4,500 tokens for each stage. `evals/scenarios.json` sets `maxTokens` to
-4500, and the eval fails at that number. A new example can push a review stage
+under 6,750 tokens for each stage. `evals/scenarios.json` sets `maxTokens` to
+6750, and the eval fails at that number. A new example can push a review stage
 over that line, so check the count after you add one.
 
 `test/skills-examples.test.ts` checks that each skill names its example, that

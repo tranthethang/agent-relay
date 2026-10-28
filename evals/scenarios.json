@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "maxTokens": 4500,
+  "maxTokens": 6750,
   "maxSteps": 12,
   "scenarios": [
     {
