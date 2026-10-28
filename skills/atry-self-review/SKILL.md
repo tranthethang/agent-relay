@@ -36,15 +36,16 @@ This skill handles `review-new` and `review-done` with `args.review` `self`, `de
 <!-- BEGIN LOOP -->
 
 1. Run `atry next <run> --json`.
-2. Stop when `actions` is empty, or when the `kind` of the recommended action is not one this skill handles.
+2. Stop when `actions` is empty.
 3. When `actions` length is greater than one, list each action `command` with its `reason`. Mark the action whose `command` equals `recommendation` with `Recommended.`. Stop until the developer picks one action. Use that action for the steps below.
-4. Read every path in the chosen action `read` array, or in top-level `read` when the action has no `read` field.
-5. Replace `<tool>` and `<model>` in its `command`. Change no other token.
-6. When the chosen action has `needsHuman` false, run the command. Then go to step 1.
-7. When the chosen action has `needsHuman` true and the command ends in `--preview`, run it with `--json` and read `decision`.
-8. Show `decision.question`, or the action `question` when the command has no preview. Ask the developer to answer `y` or `n`. A `yes` token in the skill call counts as `y`.
-9. On `y`, run `decision.onYes`. Run `decision.onYesArg` for a `yes` token. Run the action `command` when it has no preview. Stop when the field is `null`. Then go to step 1.
-10. On `n`, stop and record no event.
+4. When the chosen action's `kind` is not one this skill handles, stop.
+5. Read every path in the chosen action `read` array, or in top-level `read` when the action has no `read` field.
+6. Replace `<tool>` and `<model>` in its `command`. Change no other token.
+7. When the chosen action has `needsHuman` false, run the command. Then go to step 1.
+8. When the chosen action has `needsHuman` true and the command ends in `--preview`, run it with `--json` and read `decision`.
+9. Show `decision.question`, or the action `question` when the command has no preview. Ask the developer to answer `y` or `n`. A `yes` token in the skill call counts as `y`.
+10. On `y`, run `decision.onYes`. Run `decision.onYesArg` for a `yes` token. Run the action `command` when it has no preview. Stop when the field is `null`. Then go to step 1.
+11. On `n`, stop and record no event.
 
 <!-- END LOOP -->
 
@@ -69,7 +70,7 @@ Why: `review done` records the tree, so a later fix needs another review before 
 8. Run `atry review done <run> self`. Run the configured `testCommand` from the base policy only with `--run-tests`.
    `review done` prints `test command: <command>`. It stores the exit code, duration, and tree.
    It prints no test output. It writes the last 200 lines to `.test.log`.
-10. After the user answers an open question, record the answer with
+9. After the user answers an open question, record the answer with
     `atry review decide <run> Q<n> <answer>`. Use `a` or `b` for a choice card.
     Use the user's text for a `Need:` card.
 
