@@ -24,6 +24,10 @@ test("preflight asks for atry preflight and context", () => {
   expect(partial).not.toContain("@latest");
   expect(partial).toContain("atry context <run> --json");
   expect(partial).not.toContain("atry version --json");
+  expect(partial).toContain("Copy the `requires-atry` front matter value into `--requires`");
+  expect(partial).toContain("Do not pass a skill name or subcommand");
+  expect(partial).toContain("Treat the preflight exit code as the only version check");
+  expect(partial).toContain("Do not run `atry --version`");
   expect(partial).not.toMatch(/\b(mktemp|trap|heredoc|grep|sed)\b/);
   expect(partial).not.toContain("```");
   expect(partial).not.toContain("verify.sh");
