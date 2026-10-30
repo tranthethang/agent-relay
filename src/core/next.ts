@@ -209,7 +209,14 @@ function nextReviewingActions(
   );
   if (currentReview !== undefined) return [recommendation];
   if (reviews === undefined) return [recommendation];
-  const missing = reviews.required.filter((kind) => !reviews.done.includes(kind));
+  let missing = reviews.required.filter((kind) => !reviews.done.includes(kind));
+  if (
+    missing.includes("cross")
+    && reviews.required.includes("self")
+    && lastStageAction(events, "self-review") !== "completed"
+  ) {
+    missing = missing.filter((kind) => kind !== "cross");
+  }
   const commands = missing.map((kind) => `atry review new ${id} ${kind}`);
   const close = `atry close ${id} --preview`;
   if (commands.length === 0) {

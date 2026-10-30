@@ -18,6 +18,10 @@ This stage reviews the plan, the implement files, and the latest self-review. It
 <!-- BEGIN PREFLIGHT -->
 
 Run `atry preflight --requires "<requires-atry>"` before any other command in this skill.
+Copy the `requires-atry` front matter value into `--requires`, for example `>=0.10.7`.
+Pass a `>=X.Y.Z` range only. Do not pass a skill name or subcommand such as `brainstorm`.
+Treat the preflight exit code as the only version check. Do not compare version strings in prose.
+Do not run `atry --version`. Run subcommand `atry version` only when the user needs the printed version.
 Stop when that command exits non-zero. A dev build needs `--allow-dev` or `ATRY_DEV=1`; do not use a dev build for a real run.
 When `atry` reports an unknown command, stop and tell the user to update `atry` from the README of `github.com/tranthethang/agent-relay`.
 When this skill names a run, call `atry context <run> --json` first.
@@ -40,14 +44,14 @@ This skill handles `review-new` and `review-done` with `args.review` `cross`, `d
 
 1. Run `atry next <run> --json`.
 2. Stop when `actions` is empty.
-3. When `actions` length is greater than one, list each action `command` with its `reason`. Mark the action whose `command` equals `recommendation` with `Recommended.`. Stop until the developer picks one action. Use that action for the steps below.
-4. When the chosen action's `kind` is not one this skill handles, stop.
-5. Read every path in the chosen action `read` array, or in top-level `read` when the action has no `read` field.
-6. Replace `<tool>` and `<model>` in its `command`. Change no other token.
-7. When the chosen action has `needsHuman` false, run the command. Then go to step 1.
-8. When the chosen action has `needsHuman` true and the command ends in `--preview`, run it with `--json` and read `decision`.
-9. Show `decision.question`, or the action `question` when the command has no preview. Ask the developer to answer `y` or `n`. A `yes` token in the skill call counts as `y`.
-10. On `y`, run `decision.onYes`. Run `decision.onYesArg` for a `yes` token. Run the action `command` when it has no preview. Stop when the field is `null`. Then go to step 1.
+3. When the user invoked this skill by name, find the action whose `command` equals `recommendation`. If this skill handles that action's `kind`, choose it and skip step 4.
+4. When one action remains, choose it. When several actions remain, list each `command` with its `reason`. Do not label an action by stage name only. Mark the recommended action with `Recommended.`. Stop until the developer picks one. Choose that action.
+5. When the chosen action's `kind` is not one this skill handles, stop.
+6. Read every path in the chosen action `read` array, or in top-level `read` when the action has no `read` field.
+7. Replace `<tool>` and `<model>` in its `command`. Change no other token.
+8. When the chosen action has `needsHuman` false, run the command. Then go to step 1.
+9. When the chosen action needs a human and its command ends in `--preview`, run it with `--json`. Read `decision`. Show `decision.question`, or show the action `question` when the command has no preview. Ask the developer for `y` or `n`. A `yes` token in the skill call counts as `y`.
+10. On `y`, run `decision.onYes`. Run `decision.onYesArg` for a `yes` token. When the action has no preview, run its `command`. When the field is `null`, stop. Otherwise, go to step 1.
 11. On `n`, stop and record no event.
 
 <!-- END LOOP -->
