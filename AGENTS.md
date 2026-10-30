@@ -29,6 +29,14 @@ the version installed on this machine:
 not the tools you run. Changes there take effect only after a build and a new
 install.
 
+When an `atry-*` skill runs preflight, pass the skill front matter
+`requires-atry` value to `atry preflight --requires` (for example `>=0.10.7`).
+Use a `>=X.Y.Z` range only. Do not pass a skill name or subcommand. Treat the
+preflight exit code as the version gate. Do not use `atry --version` for that
+check; use subcommand `atry version` only when you need the printed version.
+Background for run `20261030-preflight-requires-wording`:
+`.agent-relay/brainstorms/20261030-preflight-requires-wording/notes.md`.
+
 ## Hard constraints
 
 - Node.js 22 or newer for the CLI and the tests.
