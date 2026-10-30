@@ -236,6 +236,15 @@ test("nextActions lists eligible tasks and review or close choices", () => {
     done: [],
   })).toEqual([
     "atry review new 1792208725 self",
+    "atry close 1792208725 --preview",
+  ]);
+
+  const selfDoneEvents = [...reviewingEvents, ev("self-review", "completed")];
+  const selfDone = reduceEvents(selfDoneEvents);
+  expect(nextActions("1792208725", selfDone, selfDoneEvents, "atry review new 1792208725 cross", {
+    required: ["self", "cross"],
+    done: ["self"],
+  })).toEqual([
     "atry review new 1792208725 cross",
     "atry close 1792208725 --preview",
   ]);
