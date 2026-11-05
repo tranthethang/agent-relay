@@ -47,14 +47,16 @@ Continue only after the user chooses.
 
 1. Run `atry run new --slug <slug> --title <title>`.
 2. Add `--from <brainstorm>` when brainstorm notes already exist.
-3. Run `atry stage start <run> plan --tool <tool>`.
-4. Add `--model <model>` when you know the model.
-5. Run `atry plan new <run>`.
-6. Fill `10-plan/overview.md` with the edit tool.
-7. Fill `10-plan/tasks.input.json` with the edit tool.
-8. Run `atry plan done <run>`.
-9. Fill the `## Detail` and `## Acceptance` sections in each `10-plan/T<n>.md` file that `plan done` creates. Approval needs both to hold text.
-10. Do not run `atry stage done` for plan. `plan done` records the completed event.
+3. When `--from` is set, read `notes.md` in that brainstorm directory.
+4. When `--from` is set, read `open.json` in that brainstorm directory.
+5. Run `atry stage start <run> plan --tool <tool>`.
+6. Add `--model <model>` when you know the model.
+7. Run `atry plan new <run>`.
+8. Fill `10-plan/overview.md` with the edit tool.
+9. Fill `10-plan/tasks.input.json` with the edit tool.
+10. Run `atry plan done <run>`.
+11. Fill the `## Detail` and `## Acceptance` sections in each `10-plan/T<n>.md` file that `plan done` creates. Approval needs both to hold text.
+12. Do not run `atry stage done` for plan. `plan done` records the completed event.
 
 `plan done` refuses a task list with zero tasks.
 
@@ -68,6 +70,12 @@ Stop when a command fails. Show the field path to the user.
 Write Goal, Non-goals, Decisions, Constraints, and Flow under `10-plan/overview.md`.
 Read `references/example-overview.md` before you write that file.
 Put settled choices under Decisions.
+When the run used `--from`, copy settled brainstorm choices into `## Decisions`.
+When the run used `--from`, resolve every `open.json` entry in overview prose before `plan done`.
+Do not cite the brainstorm path alone without decision text under `## Decisions`.
+Refuse `plan done` when an open card lacks a matching overview decision.
+Why: Plan approval must trace choices to brainstorm notes, not only to a directory path.
+This skill does not add a CLI gate for those rules.
 Put limits that apply only to this run under Constraints.
 Add Flow only when the change alters a runtime flow.
 

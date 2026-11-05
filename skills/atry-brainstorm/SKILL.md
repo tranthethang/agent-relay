@@ -75,6 +75,9 @@ Stop when the command fails. Show the field path to the user.
 
 ## Handoff
 
+When brainstorm notes exist, state the brainstorm directory path.
+Tell the user to start `/atry-plan` with `atry run new --from <brainstorm>`.
+Tell the user that plan must read `notes.md` and `open.json` in that directory.
 When the user names the next skill, summarize what is resolved and what is open.
 Then stop. Do not start that skill in the same turn.
 Why: The user reads the summary and starts the next skill, so no edit begins before that check.
