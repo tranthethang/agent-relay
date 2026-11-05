@@ -28,4 +28,16 @@ test("plan rules that are not obvious carry a Why line", () => {
   expect(text).toMatch(/Use at most eight tasks\.\nWhy: /);
   expect(text).toMatch(/`files` lists the repo paths that the task will edit\.\nWhy: /);
   expect(text).toMatch(/Do not invent a ref\.\nWhy: /);
+  expect(text).toMatch(
+    /Refuse `plan done` when an open card lacks a matching overview decision\.\nWhy: /,
+  );
+});
+
+test("plan reads brainstorm notes and lifts decisions", () => {
+  expect(text).toContain("read `notes.md` in that brainstorm directory");
+  expect(text).toContain("read `open.json` in that brainstorm directory");
+  expect(text).toContain("copy settled brainstorm choices into `## Decisions`");
+  expect(text).toContain("resolve every `open.json` entry in overview prose before `plan done`");
+  expect(text).toContain("Refuse `plan done` when an open card lacks a matching overview decision");
+  expect(text).toContain("This skill does not add a CLI gate for those rules.");
 });

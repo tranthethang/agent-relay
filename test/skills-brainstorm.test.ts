@@ -9,8 +9,13 @@ test("brainstorm stays read-only until the user allows notes", () => {
   expect(text).toContain("atry brainstorm new --slug <slug>");
   expect(text).toContain("atry brainstorm done <dir>");
   expect(text).toContain("stays read-only");
-  expect(text).not.toContain("atry run new");
   expect(assertNoShellSnippet(text)).toBeUndefined();
+});
+
+test("brainstorm handoff tells plan to consume notes", () => {
+  expect(text).toContain("atry run new --from <brainstorm>");
+  expect(text).toContain("read `notes.md` and `open.json`");
+  expect(text).toContain("Do not start that skill in the same turn.");
 });
 
 test("brainstorm rules that are not obvious carry a Why line", () => {
